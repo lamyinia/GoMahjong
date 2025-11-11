@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # etcd 服务
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.9
+    container_name: gomahjong-etcd
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    environment:
+      - ETCD_NAME=etcd0
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_ADVERTISE_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_INITIAL_CLUSTER=etcd0=http://0.0.0.0:2380
+      - ETCD_INITIAL_CLUSTER_STATE=new
+      - ETCD_INITIAL_CLUSTER_TOKEN=etcd-cluster
+    volumes:
+      - etcd-data:/etcd-data
+    command:
+      - /usr/local/bin/etcd
+      - --data-dir=/etcd-data
+      - --name=etcd0
+      - --initial-advertise-peer-urls=http://0.0.0.0:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --advertise-client-urls=http://0.0.0.0:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-cluster=etcd0=http://0.0.0.0:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=etcd-cluster
+
+  # MongoDB 服务
+  mongodb:
+    image: mongo:7.0
+    container_name: gomahjong-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+      - MONGO_INITDB_DATABASE=test
+    volumes:
+      - mongodb-data:/data/db
+      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+
+  # Redis 服务
+  redis:
+    image: redis:7.2-alpine
+    container_name: gomahjong-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  etcd-data:
+  mongodb-data:
+  redis-data:
