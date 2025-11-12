@@ -1,7 +1,7 @@
 httpPort: 8081
 wsPort: 8082
 metricPort: 9091
-appName: GoMahjong
+appName: GoMahjong-player-service
 log:
   level: info
   path: ./logs
@@ -15,6 +15,8 @@ etcd:
     version: 0.0.1
     weight: 10
     ttl: 30
+  rwTimeout: 3
+  dialTimeout: 3
 database:
   mongo:
     url: mongodb://localhost:27017

@@ -67,17 +67,23 @@ func NewRedis() *RedisManager {
 	}
 }
 
-func (r *RedisManager) Close() {
+func (r *RedisManager) Close() error {
+	if r.Cli == nil && r.ClusterCli == nil {
+		return nil
+	}
 	if r.Cli != nil {
 		if err := r.Cli.Close(); err != nil {
 			log.Error("redis 关闭出错: %v", err)
+			return err
 		}
 	}
 	if r.ClusterCli != nil {
 		if err := r.ClusterCli.Close(); err != nil {
 			log.Error("redisCluster 关闭出错: %v", err)
+			return err
 		}
 	}
+	return nil
 }
 
 func (r *RedisManager) Set(ctx context.Context, key, value string, expiration time.Duration) error {
@@ -86,6 +92,26 @@ func (r *RedisManager) Set(ctx context.Context, key, value string, expiration ti
 	}
 	if r.ClusterCli != nil {
 		return r.ClusterCli.Set(ctx, key, value, expiration).Err()
+	}
+	return nil
+}
+
+func (r *RedisManager) Get(ctx context.Context, key string) *redis.StringCmd {
+	if r.Cli != nil {
+		return r.Cli.Get(ctx, key)
+	}
+	if r.ClusterCli != nil {
+		return r.ClusterCli.Get(ctx, key)
+	}
+	return nil
+}
+
+func (r *RedisManager) Del(ctx context.Context, keys ...string) error {
+	if r.Cli != nil {
+		return r.Cli.Del(ctx, keys...).Err()
+	}
+	if r.ClusterCli != nil {
+		return r.ClusterCli.Del(ctx, keys...).Err()
 	}
 	return nil
 }

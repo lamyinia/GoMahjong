@@ -50,9 +50,9 @@ func NewMongo() *MongoManager {
 	return m
 }
 
-func (m *MongoManager) Close() {
-	err := m.Cli.Disconnect(context.TODO())
-	if err != nil {
-		log.Error("mongodb 关闭出错")
+func (m *MongoManager) Close() error {
+	if m == nil {
+		return nil
 	}
+	return m.Cli.Disconnect(context.TODO())
 }

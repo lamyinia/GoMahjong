@@ -5,10 +5,10 @@ import (
 	"common/log"
 	"common/metrics"
 	"context"
-	"core/app"
 	"flag"
 	"fmt"
 	"os"
+	"player/app"
 )
 
 // 加载配置 -> 启动监控 -> 启动 grpc 服务

@@ -55,7 +55,7 @@ type ServiceConf struct {
 
 type Domain struct {
 	Name        string `mapstructure:"name"`
-	LoadBalance string `mapstructure:"loadBalance"`
+	LoadBalance bool   `mapstructure:"loadBalance"`
 }
 
 type JwtConf struct {

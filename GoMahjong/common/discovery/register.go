@@ -10,6 +10,10 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+/*
+	etcd 注册器，grpc 服务端注册到 etcd，以供其它 grpc 客户端发现
+*/
+
 type Register struct {
 	etcdCli     *clientv3.Client
 	leaseID     clientv3.LeaseID
