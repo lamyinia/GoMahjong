@@ -17,10 +17,7 @@ type AuthService struct {
 }
 
 // NewAuthService 创建认证服务
-func NewAuthService(
-	userRepo repository.UserRepository,
-	redis *database.RedisManager,
-) *AuthService {
+func NewAuthService(userRepo repository.UserRepository, redis *database.RedisManager) *AuthService {
 	return &AuthService{
 		userRepo: userRepo,
 		redis:    redis,

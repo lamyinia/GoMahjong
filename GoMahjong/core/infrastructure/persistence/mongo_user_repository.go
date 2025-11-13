@@ -23,7 +23,7 @@ func NewMongoUserRepository(mongo *database.MongoManager) repository.UserReposit
 	return &MongoUserRepository{mongo: mongo}
 }
 
-// Save 保存用户
+// Save 保存用户，依赖于 mongodb 的 findAndModify 生成 UserID, IdentifyID
 func (r *MongoUserRepository) Save(ctx context.Context, user *entity.User) error {
 	collection := r.mongo.Db.Collection("users")
 

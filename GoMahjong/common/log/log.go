@@ -18,45 +18,49 @@ func InitLog(appName string) {
 
 	if config.Conf.Log.Level == "info" {
 		logger.SetLevel(log.InfoLevel)
+	} else if config.Conf.Log.Level == "debug" {
+		logger.SetLevel(log.DebugLevel)
+	} else {
+		logger.SetLevel(log.WarnLevel)
 	}
 }
 
 func Fatal(format string, args ...any) {
 	if len(args) == 0 {
-		logger.Fatal(format)
+		logger.Fatalf(format)
 	} else {
-		logger.Fatal(format, args...)
+		logger.Fatalf(format, args...)
 	}
 }
 
 func Info(format string, args ...any) {
 	if len(args) == 0 {
-		logger.Info(format)
+		logger.Infof(format)
 	} else {
-		logger.Info(format, args...)
+		logger.Infof(format, args...)
 	}
 }
 
 func Warn(format string, args ...any) {
 	if len(args) == 0 {
-		logger.Warn(format)
+		logger.Warnf(format)
 	} else {
-		logger.Warn(format, args...)
+		logger.Warnf(format, args...)
 	}
 }
 
 func Error(format string, args ...any) {
 	if len(args) == 0 {
-		logger.Error(format)
+		logger.Errorf(format)
 	} else {
-		logger.Error(format, args...)
+		logger.Errorf(format, args...)
 	}
 }
 
 func Debug(format string, args ...any) {
 	if len(args) == 0 {
-		logger.Debug(format)
+		logger.Debugf(format)
 	} else {
-		logger.Debug(format, args...)
+		logger.Debugf(format, args...)
 	}
 }

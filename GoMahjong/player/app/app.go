@@ -5,7 +5,7 @@ import (
 	"common/discovery"
 	"common/log"
 	"context"
-	"core/infrastructure"
+	"core/container"
 	"net"
 	"os"
 	"os/signal"
@@ -20,13 +20,13 @@ import (
 
 // Run 1.启用数据库。2.启动 grpc 服务，优雅启停。 3.启用 Etcd。
 func Run(ctx context.Context) error {
-	// 1. 初始化依赖注入容器
-	container := infrastructure.New()
-	if container == nil {
-		log.Fatal("依赖注入容器初始化失败")
+	// 1. 初始化 player 服务专用容器
+	playerContainer := container.NewPlayerContainer()
+	if playerContainer == nil {
+		log.Fatal("player 容器初始化失败")
 		return nil
 	}
-	defer container.Close()
+	defer playerContainer.Close()
 
 	// 2. 创建 gRPC 服务器
 	server := grpc.NewServer()
@@ -53,8 +53,8 @@ func Run(ctx context.Context) error {
 		// 注册 gRPC 服务
 		log.Info("注册 UserService...")
 		authService := service.NewAuthService(
-			container.GetUserRepository(),
-			container.GetRedis(),
+			playerContainer.GetUserRepository(),
+			playerContainer.GetRedis(),
 		)
 		authHandler := grpchandler.NewAuthHandler(authService)
 		pb.RegisterUserServiceServer(server, authHandler)

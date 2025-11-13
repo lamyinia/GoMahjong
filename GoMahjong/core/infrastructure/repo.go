@@ -1,64 +1,18 @@
 package infrastructure
 
 import (
-	"common/database"
 	"common/log"
-	"core/domain/repository"
-	"core/infrastructure/persistence"
+	"core/container"
 )
 
-// Container 是依赖注入容器
-type Container struct {
-	mongo          *database.MongoManager
-	redis          *database.RedisManager
-	userRepository repository.UserRepository
-}
+// Container 是依赖注入容器（已弃用，保留用于向后兼容）
+// 新代码应该使用 core/container 中的服务特定容器
+// 例如：container.NewPlayerContainer()、container.NewHallContainer() 等
+type Container = container.PlayerContainer
 
-// New 创建容器并初始化所有依赖
+// New 创建容器并初始化所有依赖（已弃用，保留用于向后兼容）
+// 推荐使用：container.NewPlayerContainer()
 func New() *Container {
-	mongo := database.NewMongo()
-	redis := database.NewRedis()
-
-	if mongo == nil || redis == nil {
-		log.Fatal("数据库初始化失败")
-		return nil
-	}
-
-	log.Info("mongodb、redis 数据库服务启动成功")
-
-	// 创建仓储实现
-	userRepo := persistence.NewMongoUserRepository(mongo)
-
-	return &Container{
-		mongo:          mongo,
-		redis:          redis,
-		userRepository: userRepo,
-	}
-}
-
-// GetUserRepository 获取用户仓储
-func (c *Container) GetUserRepository() repository.UserRepository {
-	return c.userRepository
-}
-
-// GetRedis 获取 Redis 管理器
-func (c *Container) GetRedis() *database.RedisManager {
-	return c.redis
-}
-
-// GetMongo 获取 Mongo 管理器
-func (c *Container) GetMongo() *database.MongoManager {
-	return c.mongo
-}
-
-// Close 关闭所有资源
-func (c *Container) Close() {
-	e1 := c.mongo.Close()
-	e2 := c.redis.Close()
-	if e1 != nil {
-		log.Error("mongo 关闭失败: %v", e1)
-	}
-	if e2 != nil {
-		log.Error("redis 关闭失败: %v", e2)
-	}
+	log.Warn("使用已弃用的 infrastructure.New()，建议改用 container.NewPlayerContainer()")
+	return container.NewPlayerContainer()
 }

@@ -23,10 +23,10 @@ func main() {
 	config.InitConfig(configPath)
 
 	log.InitLog(config.Conf.AppName)
-	log.Info("配置文件路径: ", configPath)
+	log.Info("配置文件: %+v", config.Conf)
 
 	go func() {
-		log.Info("启动监控..., URL: http://localhost:" + fmt.Sprintf("%d", config.Conf.MetricPort) + "/debug/statsviz/")
+		log.Info("启动监控..., URL: http://localhost:%d/debug/statsviz/", config.Conf.MetricPort)
 		err := metrics.Serve(fmt.Sprintf("0.0.0.0:%d", config.Conf.MetricPort))
 		if err != nil {
 			panic(err)
