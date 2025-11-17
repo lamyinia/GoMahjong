@@ -3,6 +3,7 @@ package app
 import (
 	"common/log"
 	"context"
+	"framework/conn"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,13 +13,13 @@ import (
 func Run(ctx context.Context) error {
 
 	go func() {
-
+		connector := conn.NewConnector()
+		connector.Run("connector-001", 5000)
 	}()
 
 	stop := func() {
 		_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-
 	}
 
 	c := make(chan os.Signal, 1)

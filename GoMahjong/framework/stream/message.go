@@ -13,8 +13,8 @@ type SessionData struct {
 type Message struct {
 	ConnID      string
 	Body        *protocal.Message
-	Src         string
-	Dest        string
+	Source      string
+	Destination string
 	Router      string
 	UserID      string
 	ConnectorID string
