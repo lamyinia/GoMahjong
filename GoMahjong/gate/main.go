@@ -11,7 +11,7 @@ import (
 	"os"
 )
 
-var configFile = flag.String("config", "resource/application.yml", "config file")
+var configFile = flag.String("resource", "resource/application.yml", "resource file")
 
 func main() {
 	flag.Parse()

@@ -5,10 +5,11 @@ import (
 	"common/discovery"
 	"common/log"
 	"fmt"
+	"player/pb"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/resolver"
-	"player/pb"
 )
 
 var (
@@ -23,9 +24,10 @@ func Init() {
 	log.Info(fmt.Sprintf("rpc 发现服务，%#v", userDomain))
 }
 
+// client 结构体指针，大小 8 字节
 func initClient(name string, loadBalance bool, client interface{}) {
-	//找服务的地址
-	addr := fmt.Sprintf("etcd:///%s", name)
+	// 找服务的地址
+	addr := fmt.Sprintf("etcd://%s", name)
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials())}
 	if loadBalance {
@@ -35,6 +37,7 @@ func initClient(name string, loadBalance bool, client interface{}) {
 	if err != nil {
 		log.Fatal(fmt.Sprintf("rpc 连接 etcd 失败:%v", err))
 	}
+	// 指针被装进接口，类型断言提取出来，地址信息完全保留
 	switch c := client.(type) {
 	case *pb.UserServiceClient:
 		*c = pb.NewUserServiceClient(conn)

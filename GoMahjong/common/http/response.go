@@ -22,13 +22,13 @@ const (
 
 // 预定义的响应消息
 const (
-	MsgSuccess      = "success"
-	MsgError        = "error"
-	MsgInvalidParam = "invalid parameters"
-	MsgUnauthorized = "unauthorized"
-	MsgForbidden    = "forbidden"
-	MsgNotFound     = "not found"
-	MsgServerError  = "internal server error"
+	MessageSuccess      = "success"
+	MessageError        = "error"
+	MessageInvalidParam = "invalid parameters"
+	MessageUnauthorized = "unauthorized"
+	MessageForbidden    = "forbidden"
+	MessageNotFound     = "not found"
+	MessageServerError  = "internal server error"
 )
 
 // NewResponse 创建响应
@@ -44,7 +44,7 @@ func NewResponse(code int, message string, data interface{}) *Response {
 
 // Success 成功响应
 func (c *Context) Success(data interface{}) {
-	c.JSON(http.StatusOK, NewResponse(CodeSuccess, MsgSuccess, data))
+	c.JSON(http.StatusOK, NewResponse(CodeSuccess, MessageSuccess, data))
 }
 
 // SuccessWithMessage 成功响应（自定义消息）
@@ -65,7 +65,7 @@ func (c *Context) ErrorWithCode(code int, message string) {
 // BadRequest 400 错误请求
 func (c *Context) BadRequest(message string) {
 	if message == "" {
-		message = MsgInvalidParam
+		message = MessageInvalidParam
 	}
 	c.JSON(http.StatusBadRequest, NewResponse(CodeInvalidParam, message, nil))
 }
@@ -73,7 +73,7 @@ func (c *Context) BadRequest(message string) {
 // Unauthorized 401 未授权
 func (c *Context) Unauthorized(message string) {
 	if message == "" {
-		message = MsgUnauthorized
+		message = MessageUnauthorized
 	}
 	c.JSON(http.StatusUnauthorized, NewResponse(CodeUnauthorized, message, nil))
 }
@@ -81,7 +81,7 @@ func (c *Context) Unauthorized(message string) {
 // Forbidden 403 禁止访问
 func (c *Context) Forbidden(message string) {
 	if message == "" {
-		message = MsgForbidden
+		message = MessageForbidden
 	}
 	c.JSON(http.StatusForbidden, NewResponse(CodeForbidden, message, nil))
 }
@@ -89,7 +89,7 @@ func (c *Context) Forbidden(message string) {
 // NotFound 404 资源不存在
 func (c *Context) NotFound(message string) {
 	if message == "" {
-		message = MsgNotFound
+		message = MessageNotFound
 	}
 	c.JSON(http.StatusNotFound, NewResponse(CodeNotFound, message, nil))
 }
@@ -97,7 +97,7 @@ func (c *Context) NotFound(message string) {
 // InternalServerError 500 服务器内部错误
 func (c *Context) InternalServerError(message string) {
 	if message == "" {
-		message = MsgServerError
+		message = MessageServerError
 	}
 	c.JSON(http.StatusInternalServerError, NewResponse(CodeServerError, message, nil))
 }
@@ -123,5 +123,5 @@ func NewPageResponse(list interface{}, total int64, page, size int) *PageRespons
 // SuccessWithPage 分页成功响应
 func (c *Context) SuccessWithPage(list interface{}, total int64, page, size int) {
 	pageResp := NewPageResponse(list, total, page, size)
-	c.JSON(http.StatusOK, NewResponse(CodeSuccess, MsgSuccess, pageResp))
+	c.JSON(http.StatusOK, NewResponse(CodeSuccess, MessageSuccess, pageResp))
 }

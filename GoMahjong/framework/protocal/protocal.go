@@ -39,7 +39,7 @@ const (
 // 掩码定义用来操作flag(1byte)
 const (
 	RouteCompressMask = 0x01 // 启用路由压缩 00000001
-	MsgHeadLength     = 0x02 // 消息头的长度 00000010
+	MessageHeadLength = 0x02 // 消息头的长度 00000010
 	TypeMask          = 0x07 // 获取消息类型 00000111
 	GZIPMask          = 0x10 // data compressed gzip mark
 	ErrorMask         = 0x20 // 响应错误标识 00100000
@@ -51,7 +51,7 @@ const (
 )
 
 const (
-	msgFlagBytes = 1
+	messageFlagBytes = 1
 )
 
 type Packet struct {
@@ -136,12 +136,12 @@ func Decode(payload []byte) (*Packet, error) {
 func MessageEncode(m *Message) ([]byte, error) {
 	code, compressed := routes[m.Route]
 	buf := make([]byte, 0)
-	buf = encodeMsgFlag(m.Type, compressed, buf)
-	if msgHasId(m.Type) {
-		buf = encodeMsgId(m, buf)
+	buf = encodeMessageFlag(m.Type, compressed, buf)
+	if messageHasID(m.Type) {
+		buf = encodeMessageID(m, buf)
 	}
-	if msgHasRoute(m.Type) {
-		buf = encodeMsgRoute(code, compressed, m.Route, buf)
+	if messageHasRoute(m.Type) {
+		buf = encodeMessageRoute(code, compressed, m.Route, buf)
 	}
 	if m.Data != nil {
 		buf = append(buf, m.Data...)
@@ -229,15 +229,15 @@ func MessageDecode(body []byte) (Message, error) {
 	return m, nil
 }
 
-func msgHasRoute(t MessageType) bool {
+func messageHasRoute(t MessageType) bool {
 	return t == Request || t == Notify || t == Push
 }
 
-func msgHasId(messageType MessageType) bool {
+func messageHasID(messageType MessageType) bool {
 	return messageType == Request || messageType == Response
 }
 
-func encodeMsgId(m *Message, buf []byte) []byte {
+func encodeMessageID(m *Message, buf []byte) []byte {
 	id := m.ID
 	for {
 		b := byte(id % 128)
@@ -252,7 +252,7 @@ func encodeMsgId(m *Message, buf []byte) []byte {
 	return buf
 }
 
-func encodeMsgFlag(t MessageType, compressed bool, buf []byte) []byte {
+func encodeMessageFlag(t MessageType, compressed bool, buf []byte) []byte {
 
 	flag := byte(t) << 1
 	if compressed {
@@ -261,7 +261,7 @@ func encodeMsgFlag(t MessageType, compressed bool, buf []byte) []byte {
 	return append(buf, flag)
 }
 
-func encodeMsgRoute(code uint16, compressed bool, route string, buf []byte) []byte {
+func encodeMessageRoute(code uint16, compressed bool, route string, buf []byte) []byte {
 	if compressed {
 		buf = append(buf, byte((code>>8)&0xFF))
 		buf = append(buf, byte(code&0xFF))

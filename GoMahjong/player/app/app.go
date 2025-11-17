@@ -32,7 +32,7 @@ func Run(ctx context.Context) error {
 	server := grpc.NewServer()
 
 	// 3. 创建服务发现注册器
-	register := discovery.NewRegister()
+	registry := discovery.NewRegistry()
 
 	// 4. 启动 gRPC 服务（异步）
 	go func() {
@@ -45,7 +45,7 @@ func Run(ctx context.Context) error {
 		}
 
 		// 注册到 etcd
-		err = register.Register(config.Conf.EtcdConf)
+		err = registry.Register(config.Conf.EtcdConf)
 		if err != nil {
 			log.Fatal("etcd 注册失败: %v", err)
 		}
@@ -70,7 +70,7 @@ func Run(ctx context.Context) error {
 		log.Info("正在关闭 player 服务...")
 		time.Sleep(2 * time.Second)
 		server.Stop()
-		register.Close()
+		registry.Close()
 		log.Info("player 服务已关闭")
 	}
 

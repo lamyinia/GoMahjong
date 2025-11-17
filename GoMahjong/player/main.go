@@ -14,7 +14,7 @@ import (
 // 加载配置 -> 启动监控 -> 启动 grpc 服务
 // 阿里云代理 go env -w GOPROXY=https://mirrors.aliyun.com/goproxy/,direct
 // 查看兼容的版本 go list -m -versions github.com/arl/statsviz
-var configFile = flag.String("config", "config/application.yml", "config file")
+var configFile = flag.String("config", "resource/application.yml", "resource file")
 
 func main() {
 	flag.Parse()
