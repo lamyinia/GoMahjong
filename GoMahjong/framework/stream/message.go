@@ -15,7 +15,7 @@ type Message struct {
 	Body        *protocal.Message
 	Source      string
 	Destination string
-	Router      string
+	Route       string
 	UserID      string
 	ConnectorID string
 	SessionData *SessionData

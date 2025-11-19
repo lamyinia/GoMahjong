@@ -1,6 +1,5 @@
 package node
 
-import "framework/stream"
+type LogicFunc func(message []byte) any
 
-type HandlerFunc func(message *stream.Message) any
-type LogicHandler map[string]HandlerFunc
+type LogicHandler map[string]LogicFunc

@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+/*
+	处理单个 gorilla/websocket 的连接生命周期、读写事件、心跳
+*/
+
 type Connection interface {
 	GetSession() *Session
 	SendMessage(buf []byte) error
@@ -47,6 +51,7 @@ func (con *LongConnection) Run() {
 	con.Conn.SetPongHandler(con.PongHandler)
 }
 
+// websocket.Conn.WriteMessage
 func (con *LongConnection) writeMessage() {
 	con.pingTicker = time.NewTicker(pingInterval)
 	defer func() {
@@ -91,6 +96,7 @@ func (con *LongConnection) readMessage() {
 		log.Info("客户端[%s] 读时间停止", con.ConnID)
 		con.manager.removeClient(con)
 	}()
+
 	con.Conn.SetReadLimit(maxMessageSize)
 	if err := con.Conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
 		log.Error("SetReadDeadline err:%v", err)

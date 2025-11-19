@@ -2,13 +2,17 @@ package conn
 
 import (
 	"common/log"
+	"errors"
 	"framework/node"
+	"framework/protocal"
 	"framework/stream"
 	"github.com/gorilla/websocket"
 	"hash/fnv"
 	"net/http"
 	"runtime"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 var (
@@ -26,26 +30,41 @@ var (
 
 type CheckOriginHandler func(r *http.Request) bool
 
+type PacketTypeHandler func(packet *protocal.Packet, c Connection) error
+
 type ClientBucket struct {
 	sync.RWMutex
 	clients map[string]Connection
 }
 
 type Manager struct {
-	topic string
+	dataLock           sync.RWMutex // 仅用于保护data字段
+	websocketUpgrade   *websocket.Upgrader
+	topic              string
+	CheckOriginHandler CheckOriginHandler
+	data               map[string]any
 
 	clientBuckets  []*ClientBucket
 	ClientReadChan chan *MessagePack
+	clientWorkers  []chan *MessagePack
+	clientHandlers map[protocal.PackageType]PacketTypeHandler
+	bucketMask     uint32
+	workerCount    int
 
 	MiddleReadChan chan []byte
-	MiddleWorker   *node.NatsWorker
-
+	MiddleWorker   *node.NatsClient
 	MiddlePushChan chan *stream.Message
 
-	bucketMask  uint32
-	workerCount int
+	ConnectorHandlers LogicHandler
 
-	ConnectorHandlers node.LogicHandler
+	maxConnectionCount int
+	connSemaphore      chan struct{}
+	stats              struct {
+		messageProcessed   int64
+		messageErrors      int64
+		avgProcessingTime  int64
+		currentConnections int32
+	}
 }
 
 func NewManager() *Manager {
@@ -54,17 +73,33 @@ func NewManager() *Manager {
 	workerCount := runtime.NumCPU() * 2
 
 	m := &Manager{
-		ClientReadChan: make(chan *MessagePack, 2048),
-		MiddleReadChan: make(chan []byte, 2048),
-		MiddlePushChan: make(chan *stream.Message, 2048),
-		bucketMask:     bucketMask,
-		workerCount:    workerCount,
+		ClientReadChan:     make(chan *MessagePack, 2048),
+		clientHandlers:     make(map[protocal.PackageType]PacketTypeHandler),
+		MiddleReadChan:     make(chan []byte, 2048),
+		MiddlePushChan:     make(chan *stream.Message, 2048),
+		data:               make(map[string]any),
+		bucketMask:         bucketMask,
+		workerCount:        workerCount,
+		maxConnectionCount: 100000,
+		connSemaphore:      make(chan struct{}, 100000),
 	}
 
+	// 初始化客户端分片
 	m.clientBuckets = make([]*ClientBucket, bucketCount)
 	for i := range bucketCount {
 		m.clientBuckets[i] = NewClientBucket()
 	}
+
+	// 初始化客户端工作池
+	m.clientWorkers = make([]chan *MessagePack, workerCount)
+	for i := range workerCount {
+		m.clientWorkers[i] = make(chan *MessagePack, 256)
+	}
+
+	m.CheckOriginHandler = func(r *http.Request) bool {
+		return true
+	}
+
 	return m
 }
 
@@ -103,7 +138,17 @@ func (m *Manager) Close() {
 }
 
 func (m *Manager) clientWorkerRoutine(workerID int) {
+	for message := range m.clientWorkers[workerID] {
+		startTime := time.Now()
 
+		m.dealPack(message)
+
+		processingTime := time.Since(startTime).Milliseconds()
+		atomic.AddInt64(&m.stats.messageProcessed, 1)
+		oldAvg := atomic.LoadInt64(&m.stats.avgProcessingTime)
+		newAvg := (oldAvg*9 + processingTime) / 10
+		atomic.StoreInt64(&m.stats.avgProcessingTime, newAvg)
+	}
 }
 
 func (m *Manager) clientReadRoutine() {
@@ -120,6 +165,45 @@ func (m *Manager) middleWorkerPushRoutine() {
 
 func (m *Manager) monitorPerformance() {
 
+}
+
+func (m *Manager) dealPack(messagePack *MessagePack) {
+	packet, err := protocal.Decode(messagePack.Body)
+	if err != nil {
+		atomic.AddInt64(&m.stats.messageErrors, 1)
+		log.Error("解码错误, pack: %#v, err: %#v", packet, err)
+		return
+	}
+	if err := m.doEvent(packet, messagePack.ConnID); err != nil {
+		atomic.AddInt64(&m.stats.messageErrors, 1)
+		log.Error("事件处理错误, pack: %#v, err: %#v", packet, err)
+		return
+	}
+}
+
+func (m *Manager) doEvent(packet *protocal.Packet, connID string) error {
+	bucket := m.getBucket(connID)
+
+	bucket.RLock()
+	conn, ok := bucket.clients[connID]
+	bucket.RUnlock()
+
+	if !ok {
+		return errors.New("找不到客户端桶")
+	}
+
+	handler, ok := m.clientHandlers[packet.Type]
+	if !ok {
+		return errors.New("找不到处理器")
+	}
+
+	return handler(packet, conn)
+}
+
+func (m *Manager) getBucket(cid string) *ClientBucket {
+	hash := fnv32(cid)
+	index := hash & m.bucketMask
+	return m.clientBuckets[index]
 }
 
 func fnv32(key string) uint32 {

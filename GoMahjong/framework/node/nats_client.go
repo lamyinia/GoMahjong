@@ -11,25 +11,25 @@ type Client interface {
 	Close() error
 }
 
-// NatsWorker 不能及时发现 nats 服务关闭
-type NatsWorker struct {
+// NatsClient 不能及时发现 nats 服务关闭
+type NatsClient struct {
 	topic    string
 	conn     *nats.Conn
 	readChan chan []byte
 }
 
-func NewNatsClient(topic string, readChan chan []byte) *NatsWorker {
-	return &NatsWorker{
+func NewNatsClient(topic string, readChan chan []byte) *NatsClient {
+	return &NatsClient{
 		topic:    topic,
 		readChan: readChan,
 	}
 }
 
-func (nc *NatsWorker) IsConnected() bool {
+func (nc *NatsClient) IsConnected() bool {
 	return nc.conn != nil && nc.conn.IsConnected()
 }
 
-func (nc *NatsWorker) Run(url string) error {
+func (nc *NatsClient) Run(url string) error {
 	log.Info("nats 服务正在启动, url:%s", url)
 	var err error
 	nc.conn, err = nats.Connect(url)
@@ -37,22 +37,22 @@ func (nc *NatsWorker) Run(url string) error {
 		log.Error("nats 连接错误,err:%v", err)
 		return err
 	}
-	go nc.sub()
+	go nc.Subscribe()
 
 	log.Info("nats 服务启动成功, url:%s", url)
 	return nil
 }
 
-func (nc *NatsWorker) sub() {
-	_, err := nc.conn.Subscribe(nc.topic, func(msg *nats.Msg) {
-		nc.readChan <- msg.Data
+func (nc *NatsClient) Subscribe() {
+	_, err := nc.conn.Subscribe(nc.topic, func(message *nats.Msg) {
+		nc.readChan <- message.Data
 	})
 	if err != nil {
 		log.Error("nats sub err:%v", err)
 	}
 }
 
-func (nc *NatsWorker) Close() error {
+func (nc *NatsClient) Close() error {
 	if nc.conn == nil {
 		return nil
 	}
@@ -63,7 +63,7 @@ func (nc *NatsWorker) Close() error {
 	return nil
 }
 
-func (nc *NatsWorker) SendMessage(subject string, data []byte) error {
+func (nc *NatsClient) SendMessage(subject string, data []byte) error {
 	if !nc.IsConnected() {
 		return ErrNotConnected
 	}

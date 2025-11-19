@@ -4,22 +4,44 @@ import (
 	"common/config"
 	"common/log"
 	"common/metrics"
-	"connector/app"
 	"context"
 	"flag"
 	"fmt"
+	"github.com/spf13/cobra"
+	"hall/app"
 	"os"
 )
 
 var configFile = flag.String("resource", "resource/application.yml", "resource file")
+var rootCmd = &cobra.Command{
+	Use:     "hall",
+	Short:   "hall 大厅相关的处理",
+	Long:    `hall 大厅相关的处理`,
+	Run:     func(cmd *cobra.Command, args []string) {},
+	PostRun: func(cmd *cobra.Command, args []string) {},
+}
+var (
+	batchServerConfigFile string
+	batchGameConfigFile   string
+	uniqueTopic           string
+)
+
+func init() {
+	rootCmd.Flags().StringVar(&uniqueTopic, "uniqueTopic", "", "subscribed topic and identifier of server required")
+	_ = rootCmd.MarkFlagRequired("uniqueTopic")
+}
 
 func main() {
-	flag.Parse()
+	log.InitLog(config.Conf.AppName)
+
+	if err := rootCmd.Execute(); err != nil {
+		log.Error("error happen: %#v", err)
+		os.Exit(1)
+	}
 
 	configPath := *configFile
 	config.InitConfig(configPath)
 
-	log.InitLog(config.Conf.AppName)
 	log.Info(fmt.Sprintf("配置文件: %+v", config.Conf))
 
 	go func() {
