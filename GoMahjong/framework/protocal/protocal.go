@@ -60,6 +60,14 @@ type Packet struct {
 	Body any
 }
 
+func (p Packet) ParseBody() *Message {
+	if p.Type == Data {
+		body := p.Body.(Message)
+		return &body
+	}
+	return nil
+}
+
 type HandshakeBody struct {
 	Sys Sys `json:"sys"`
 }
@@ -87,7 +95,7 @@ type Message struct {
 	Error           bool        // response error
 }
 
-func Encode(packageType PackageType, body []byte) ([]byte, error) {
+func Wrap(packageType PackageType, body []byte) ([]byte, error) {
 	if packageType == None {
 		return nil, errors.New("encode unsupported packageType")
 	}

@@ -9,21 +9,21 @@ import (
 type NatsWorker struct {
 	NatsCli   Client
 	readChan  chan []byte
-	writeChan chan *stream.Message
+	writeChan chan *stream.ServicePacket
 	handlers  LogicHandler
 }
 
-func newWorker() *NatsWorker {
+func NewNatsWorker() *NatsWorker {
 	return &NatsWorker{
 		readChan:  make(chan []byte, 1024),
-		writeChan: make(chan *stream.Message, 1024),
+		writeChan: make(chan *stream.ServicePacket, 1024),
 		handlers:  make(LogicHandler),
 	}
 }
 
-func (worker *NatsWorker) Run(topic string) error {
+func (worker *NatsWorker) Run(url string, topic string) error {
 	worker.NatsCli = NewNatsClient(topic, worker.readChan)
-	worker.NatsCli.Run("nats://localhost:4222")
+	worker.NatsCli.Run(url)
 
 	go worker.readChanMessage()
 	go worker.writeChanMessage()
@@ -34,22 +34,22 @@ func (worker *NatsWorker) readChanMessage() {
 	for {
 		select {
 		case rawMessage := <-worker.readChan:
-			var message stream.Message
-			json.Unmarshal(rawMessage, message)
-			route := message.Route
+			var packet stream.ServicePacket
+			json.Unmarshal(rawMessage, packet)
+			route := packet.Route
 			if handler := worker.handlers[route]; handler != nil {
 				go func() {
-					body := message.Body
+					body := packet.Body
 					result := handler(body.Data)
 					if result != nil {
 						dataResp, _ := json.Marshal(result)
 						body.Data = dataResp
-						messageResp := &stream.Message{
-							Source:      message.Destination,
-							Destination: message.Source,
+						messageResp := &stream.ServicePacket{
+							Source:      packet.Destination,
+							Destination: packet.Source,
 							Body:        body,
-							UserID:      message.UserID,
-							ConnID:      message.ConnID,
+							UserID:      packet.UserID,
+							ConnID:      packet.ConnID,
 						}
 						worker.writeChan <- messageResp
 					}

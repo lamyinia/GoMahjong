@@ -11,7 +11,7 @@ type PushData struct {
 }
 
 type PushMessage struct {
-	PushData PushData   `json:"pushData"`
-	Users    []PushUser `json:"users"`
-	Message  *Message   `json:"message"`
+	PushData PushData       `json:"pushData"`
+	Users    []PushUser     `json:"users"`
+	Message  *ServicePacket `json:"message"`
 }

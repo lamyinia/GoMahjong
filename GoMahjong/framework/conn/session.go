@@ -6,11 +6,12 @@ import (
 
 type Session struct {
 	sync.RWMutex
-	ConnID  string                 // 连接 ID
-	UserID  string                 // 用户 ID
-	data    map[string]interface{} // 单连接数据（仅当前连接可见）
-	all     map[string]interface{} // 全局共享数据（所有连接可见）
-	manager *Manager
+	ConnID      string // 连接 ID
+	UserID      string // 用户 ID
+	GamingTopic string
+	data        map[string]interface{} // 单连接数据（仅当前连接可见）
+	all         map[string]interface{} // 全局共享数据（所有连接可见）
+	manager     *Manager
 }
 
 func NewSession(connID string, manager *Manager) *Session {
@@ -38,6 +39,32 @@ func (s *Session) SetAll(data map[string]any) {
 	for k, v := range data {
 		s.all[k] = v
 	}
+}
+
+func (s *Session) SetUserID(userID string) {
+	s.Lock()
+	s.UserID = userID
+	s.Unlock()
+}
+
+func (s *Session) GetUserID() string {
+	s.RLock()
+	defer s.RUnlock()
+	return s.UserID
+}
+
+func (s *Session) SetGamingTopic(gamingTopic string) {
+	s.RLock()
+	s.GamingTopic = gamingTopic
+	s.Unlock()
+}
+
+func (s *Session) GetGamingTopic() string {
+	return s.GamingTopic
+}
+
+func (s *Session) DeleteGamingTopic() {
+	s.GamingTopic = ""
 }
 
 func (s *Session) Close() {

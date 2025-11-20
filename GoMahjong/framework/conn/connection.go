@@ -91,9 +91,10 @@ func (con *LongConnection) writeMessage() {
 	}
 }
 
+// 读取客户端消息，打包成 MessagePack
 func (con *LongConnection) readMessage() {
 	defer func() {
-		log.Info("客户端[%s] 读时间停止", con.ConnID)
+		log.Info("客户端[%s] 读事件停止", con.ConnID)
 		con.manager.removeClient(con)
 	}()
 

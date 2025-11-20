@@ -1,8 +1,8 @@
 package log
 
 import (
-	"common/config"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -10,18 +10,27 @@ import (
 
 var logger *log.Logger
 
-func InitLog(appName string) {
+func InitLog(appName string, logLevel string) {
 	logger = log.New(os.Stderr)
 	logger.SetPrefix(appName)
 	logger.SetReportTimestamp(true)
 	logger.SetTimeFormat(time.DateTime)
 
-	if config.Conf.Log.Level == "info" {
-		logger.SetLevel(log.InfoLevel)
-	} else if config.Conf.Log.Level == "debug" {
+	// 默认为 info 级别
+	if logLevel == "" {
+		logLevel = "info"
+	}
+
+	logLevel = strings.ToLower(logLevel)
+	switch logLevel {
+	case "debug":
 		logger.SetLevel(log.DebugLevel)
-	} else {
+	case "warn":
 		logger.SetLevel(log.WarnLevel)
+	case "error":
+		logger.SetLevel(log.ErrorLevel)
+	default:
+		logger.SetLevel(log.InfoLevel)
 	}
 }
 

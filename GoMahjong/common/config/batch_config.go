@@ -1,9 +1,9 @@
 package config
 
 import (
-	"common/log"
 	"encoding/json"
 	"fmt"
+	"github.com/charmbracelet/log"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 	"io"
@@ -78,7 +78,7 @@ func readServersConfig(configFile string) {
 	v.SetConfigFile(configFile)
 	v.WatchConfig()
 	v.OnConfigChange(func(in fsnotify.Event) {
-		log.Info("Configs 配置文件被修改")
+		fmt.Println("Configs 配置文件被修改")
 		err := v.Unmarshal(&configs)
 		if err != nil {
 			panic(fmt.Errorf("configs 解析 json 错误, err:%v \n", err))

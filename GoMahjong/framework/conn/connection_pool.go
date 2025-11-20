@@ -78,3 +78,7 @@ func (po *LongConnectionPool) Put(longConn *LongConnection) {
 	longConn.reset()
 	po.pool.Put(longConn)
 }
+
+func takeLongConnection(conn *websocket.Conn, manager *Manager) *LongConnection {
+	return GetLongConnectionPool().Get(conn, manager)
+}

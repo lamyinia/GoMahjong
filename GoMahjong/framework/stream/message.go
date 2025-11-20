@@ -10,7 +10,7 @@ type SessionData struct {
 	AllData    map[string]any //所有cid 都需要保存
 }
 
-type Message struct {
+type ServicePacket struct {
 	ConnID      string
 	Body        *protocal.Message
 	Source      string

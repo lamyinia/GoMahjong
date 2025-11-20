@@ -2,7 +2,6 @@ package conn
 
 import (
 	"common/log"
-	"framework/node"
 )
 
 /*
@@ -34,11 +33,11 @@ func (connector *Connector) Run(topic string, maxConn int) {
 	if !connector.isRunning {
 		log.Info("connector 组件正在配置")
 		connector.manager = NewManager()
-		connector.manager.ConnectorHandlers = connector.handlers
+		connector.manager.LocalHandlers = connector.handlers
 
-		connector.manager.MiddleWorker = node.NewNatsClient(topic, connector.manager.MiddleReadChan)
 		// TODO 使用集群配置文件的 url
-		connector.manager.MiddleWorker.Run("nats://localhost:4222")
+		// connector.manager.MiddleWorker.RegisterHandlers(nil)
+		connector.manager.MiddleWorker.Run("nats://localhost:4222", topic)
 
 		addr := "localhost:8082"
 		connector.manager.Run(addr)

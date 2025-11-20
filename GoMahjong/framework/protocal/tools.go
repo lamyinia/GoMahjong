@@ -9,7 +9,7 @@ var bytesPool = sync.Pool{
 	},
 }
 
-// IntToBytes Encode packet data length to bytes(Big end)
+// IntToBytes encode packet data length to bytes(Big end)
 // 优化: 使用对象池减少内存分配
 func IntToBytes(n int) []byte {
 	buf := bytesPool.Get().([]byte)

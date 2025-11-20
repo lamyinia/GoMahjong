@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 )
@@ -59,8 +60,9 @@ type Domain struct {
 }
 
 type JwtConf struct {
-	Secret string `mapstructure:"secret"`
-	Expire int    `mapstructure:"expire"`
+	Secret        string `mapstructure:"secret"`
+	Expire        int    `mapstructure:"expire"`
+	AllowTestPath bool   `mapstructure:"allowTestPath"`
 }
 
 type DatabaseConf struct {
