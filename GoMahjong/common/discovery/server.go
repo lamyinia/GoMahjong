@@ -8,18 +8,20 @@ import (
 )
 
 type Server struct {
-	Name    string `json:"name"`
-	Addr    string `json:"addr"`
-	Weight  int    `json:"weight"`
-	Version string `json:"version"`
-	Ttl     int    `json:"ttl"`
+	Name    string  `json:"name"`
+	Addr    string  `json:"addr"`
+	Weight  int     `json:"weight"`
+	Version string  `json:"version"`
+	Ttl     int     `json:"ttl"`
+	Load    float64 `json:"load"` // 负载评分，值越小表示负载越低，客户端计算综合评分后上报
 }
 
 func (s Server) buildKey() string {
 	if len(s.Version) == 0 {
 		return fmt.Sprintf("%s/%s", s.Name, s.Addr)
 	}
-	return fmt.Sprintf("%s/%s/%s", s.Name, s.Addr, s.Version)
+	// 格式：name/version/addr，例如：game/v1/127.0.0.1:8080
+	return fmt.Sprintf("%s/%s/%s", s.Name, s.Version, s.Addr)
 }
 
 func ParseValue(v []byte) (Server, error) {

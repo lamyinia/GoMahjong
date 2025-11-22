@@ -3,6 +3,7 @@ package node
 import (
 	"common/log"
 	"encoding/json"
+	"fmt"
 	"framework/stream"
 )
 
@@ -21,6 +22,9 @@ func NewNatsWorker() *NatsWorker {
 	}
 }
 
+// Run
+// url nats 服务的地址
+// topic 本地订阅的 nats 服务的频道
 func (worker *NatsWorker) Run(url string, topic string) error {
 	worker.NatsCli = NewNatsClient(topic, worker.readChan)
 	worker.NatsCli.Run(url)
@@ -42,7 +46,7 @@ func (worker *NatsWorker) readChanMessage() {
 					body := packet.Body
 					result := handler(body.Data)
 					if result != nil {
-						dataResp, _ := json.Marshal(result)
+						dataResp, _ := json.Marshal(&result)
 						body.Data = dataResp
 						messageResp := &stream.ServicePacket{
 							Source:      packet.Destination,
@@ -82,4 +86,15 @@ func (worker *NatsWorker) Close() {
 
 func (worker *NatsWorker) RegisterHandlers(handlers LogicHandler) {
 	worker.handlers = handlers
+}
+
+// PushMessage 主动推送消息
+// 将消息写入 writeChan，由 writeChanMessage goroutine 自动发送
+func (worker *NatsWorker) PushMessage(packet *stream.ServicePacket) error {
+	select {
+	case worker.writeChan <- packet:
+		return nil
+	default:
+		return fmt.Errorf("推送消息失败：writeChan 已满")
+	}
 }

@@ -60,6 +60,7 @@ func (con *LongConnection) writeMessage() {
 				close(con.WriteChan)
 			})
 		}
+		con.manager.removeClient(con)
 	}()
 
 	for {

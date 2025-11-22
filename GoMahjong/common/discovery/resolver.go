@@ -5,11 +5,18 @@ import (
 	"common/log"
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc/attributes"
 	"google.golang.org/grpc/resolver"
-	"time"
 )
+
+/*
+	grpc 和 gin 组合使用的服务
+	srvAddrList 会把服务器信息装载到内存
+*/
 
 type Resolver struct {
 	conf        config.EtcdConf
@@ -67,9 +74,9 @@ func (r *Resolver) watch() {
 		select {
 		case <-r.closeCh:
 			r.Close()
-		case res, ok := <-r.watchCh:
+		case info, ok := <-r.watchCh:
 			if ok {
-				r.update(res.Events)
+				r.update(info.Events)
 			}
 		case <-ticker.C:
 			if err := r.sync(); err != nil {
@@ -85,6 +92,8 @@ func (r *Resolver) sync() error {
 	defer cancel()
 
 	// 示例：user/v1/xxx:2222
+	// 使用 WithPrefix() 获取所有匹配的键，但需要精确过滤以避免误选
+	// 例如：如果 r.key = "user/v1"，不应该匹配到 "user/v10"
 	res, err := r.etcdCli.Get(ctx, r.key, clientv3.WithPrefix())
 	if err != nil {
 		log.Error("sync() grpc 客户端获取 etcd 错误")
@@ -93,8 +102,20 @@ func (r *Resolver) sync() error {
 	log.Info(fmt.Sprintf("sync() etcd 客户端同步结果：%+v", res))
 
 	r.srvAddrList = []resolver.Address{}
-	for _, v := range res.Kvs {
-		server, err := ParseValue(v.Value)
+	for _, kv := range res.Kvs {
+		// 精确匹配：确保 key 以 r.key + "/" 开头，避免前缀误选
+		// 例如：r.key = "user/v1" 时，只匹配 "user/v1/" 开头的键，不匹配 "user/v10/"
+		keyStr := string(kv.Key)
+		expectedPrefix := r.key + "/"
+		if !strings.HasPrefix(keyStr, expectedPrefix) {
+			// 如果 key 正好等于 r.key（不应该发生，但防御性检查）
+			if keyStr != r.key {
+				log.Warn(fmt.Sprintf("sync() 跳过不匹配的键: %s (期望前缀: %s)", keyStr, expectedPrefix))
+				continue
+			}
+		}
+
+		server, err := ParseValue(kv.Value)
 		if err != nil {
 			log.Error(fmt.Sprintf("sync() grpc 客户端解析 etcd 失败, name=%s,err:%v", r.key, err))
 			continue
@@ -123,31 +144,49 @@ func (r *Resolver) sync() error {
 // 增量同步
 func (r *Resolver) update(events []*clientv3.Event) {
 	for _, ev := range events {
+		keyStr := string(ev.Kv.Key)
+		expectedPrefix := r.key + "/"
+
+		// 精确匹配：确保 key 以 r.key + "/" 开头，避免前缀误选，防御性检查
+		if !strings.HasPrefix(keyStr, expectedPrefix) {
+			if keyStr != r.key {
+				log.Warn(fmt.Sprintf("update() 跳过不匹配的键: %s (期望前缀: %s)", keyStr, expectedPrefix))
+				continue
+			}
+		}
+
 		switch ev.Type {
 		case clientv3.EventTypePut:
 			server, err := ParseValue(ev.Kv.Value)
 			if err != nil {
 				log.Error(fmt.Sprintf("update() grpc 客户端 update(EventTypePut) parse etcd 失败, name=%s,err:%v", r.key, err))
+				continue
 			}
 			addr := resolver.Address{
 				Addr:       server.Addr,
 				Attributes: attributes.New("weight", server.Weight),
 			}
-			if !exist(r.srvAddrList, addr) {
+			// 如果服务已存在，更新它；否则添加新服务
+			if idx := findIndex(r.srvAddrList, addr); idx >= 0 {
+				// 更新现有服务
+				r.srvAddrList[idx] = addr
+			} else {
+				// 添加新服务
 				r.srvAddrList = append(r.srvAddrList, addr)
-				err = r.clientConn.UpdateState(resolver.State{
-					Addresses: r.srvAddrList,
-				})
-				if err != nil {
-					log.Error(fmt.Sprintf("update() grpc 客户端 update(EventTypePut) UpdateState 失败, name=%s,err:%v", r.key, err))
-				}
+			}
+			err = r.clientConn.UpdateState(resolver.State{
+				Addresses: r.srvAddrList,
+			})
+			if err != nil {
+				log.Error(fmt.Sprintf("update() grpc 客户端 update(EventTypePut) UpdateState 失败, name=%s,err:%v", r.key, err))
 			}
 		case clientv3.EventTypeDelete:
 			//接收到delete操作 删除r.srvAddrList其中匹配的
 			// user/v1/127.0.0.1:12000
-			server, err := ParseKey(string(ev.Kv.Key))
+			server, err := ParseKey(keyStr)
 			if err != nil {
 				log.Error(fmt.Sprintf("update() grpc 客户端 update(EventTypeDelete) parse etcd 失败, name=%s,err:%v", r.key, err))
+				continue
 			}
 			addr := resolver.Address{Addr: server.Addr}
 			//r.srvAddrList remove操作
@@ -164,13 +203,13 @@ func (r *Resolver) update(events []*clientv3.Event) {
 	}
 }
 
-func exist(list []resolver.Address, addr resolver.Address) bool {
+func findIndex(list []resolver.Address, addr resolver.Address) int {
 	for i := range list {
 		if list[i].Addr == addr.Addr {
-			return true
+			return i
 		}
 	}
-	return false
+	return -1
 }
 
 func remove(list []resolver.Address, tar resolver.Address) ([]resolver.Address, bool) {
