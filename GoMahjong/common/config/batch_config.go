@@ -3,146 +3,291 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+
 	"github.com/charmbracelet/log"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
-	"io"
-	"os"
-	"path"
 )
 
 const (
-	gameConfig = "gameConfig.json"
-	servers    = "servers.json"
+	servers = "servers.json"
 )
 
-var InjectedConfig *GlobalConfig
-
-type GameConfigValue map[string]any
-
-type GlobalConfig struct {
-	GameConfig map[string]GameConfigValue `json:"gameConfig"`
-	configs    Configs                    `json:"serversConf"`
+type NodeConfig interface {
+	Inherit()
+	GetID() string
+	GetServerType() string
 }
 
-type Configs struct {
-	Nats      NatsConfig         `json:"nats" `
-	Connector []*ConnectorConfig `json:"connector" `
-	Servers   []*ServersConfig   `json:"servers" `
-	ConfigMap map[string][]*ServersConfig
-}
+var InjectedConfig *Configs
 
-type ServersConfig struct {
+// BaseNodeConfig 所有节点配置的基类，包含通用字段
+type BaseNodeConfig struct {
 	ID               string `json:"id"`
-	UniqueTopic      string `json:"uniqueTopic"`
-	HandleTimeout    string `json:"handleTimeout"`
-	RPCTimeout       string `json:"RPCTimeout"`
+	ServerType       string `json:"serverType"`
+	HandleTimeout    int    `json:"handleTimeOut"` // 统一为 int 类型
+	RPCTimeout       int    `json:"rpcTimeOut"`    // 统一为 int 类型
 	MaxRunRoutineNum int    `json:"maxRunRoutineNum"`
 }
 
+func (b *BaseNodeConfig) Inherit() {
+	// 可以在这里设置默认值或验证
+	if b.HandleTimeout <= 0 {
+		b.HandleTimeout = 10 // 默认值
+	}
+	if b.RPCTimeout <= 0 {
+		b.RPCTimeout = 5 // 默认值
+	}
+	if b.MaxRunRoutineNum <= 0 {
+		b.MaxRunRoutineNum = 10240 // 默认值
+	}
+}
+
+func (b *BaseNodeConfig) GetID() string {
+	return b.ID
+}
+
+func (b *BaseNodeConfig) GetServerType() string {
+	return b.ServerType
+}
+
+// MarchConfig March 服务配置
+type MarchConfig struct {
+	BaseNodeConfig
+	// March 特有的配置字段可以在这里添加
+}
+
+// GameConfig Game 服务配置
+type GameConfig struct {
+	BaseNodeConfig
+	UniqueTopic string `json:"uniqueTopic"` // Game 特有的字段
+	// Game 其他特有配置字段可以在这里添加
+}
+
+// ConnectorConfig Connector 服务配置
 type ConnectorConfig struct {
-	ID         string `json:"id" `
-	Host       string `json:"host" `
-	ClientPort int    `json:"clientPort" `
-	Frontend   bool   `json:"frontend" `
-	ServerType string `json:"serverType" `
+	BaseNodeConfig
+	Host       string `json:"host"`
+	ClientPort int    `json:"clientPort"`
+	Frontend   bool   `json:"frontend"`
+	HeartTime  int    `json:"heartTime"`
+}
+
+type Configs struct {
+	Nats           NatsConfig   `json:"nats"`
+	ClusterConfigs []NodeConfig `json:"-"` // 不直接从 JSON 解析，通过解析逻辑填充
+	LocalConfig    any          `json:"-"` // 当前节点的配置，通过 SetLocalConfig 设置
 }
 
 type NatsConfig struct {
 	URL string `json:"url" mapstructure:"url"`
 }
 
-func InitGlobalConfig() {
-	configDir := "json"
-	InjectedConfig = new(GlobalConfig)
+func InitBatchConfig() {
+
+	// 尝试多个可能的配置目录路径
+	possiblePaths := []string{
+		"common/config/json",    // 从项目根目录运行
+		"../common/config/json", // 从子目录（如 march/）运行
+		"./common/config/json",  // 明确相对路径
+		"config/json",           // 如果 common 在 GOPATH 中
+	}
+
+	var configDir string
+	var err error
+	for _, p := range possiblePaths {
+		dir, err := os.ReadDir(p)
+		if err == nil {
+			// 验证是否包含 servers.json
+			found := false
+			for _, v := range dir {
+				if v.Name() == servers {
+					found = true
+					break
+				}
+			}
+			if found {
+				configDir = p
+				break
+			}
+		}
+	}
+
+	if configDir == "" {
+		// 如果所有路径都失败，尝试获取当前工作目录并构建路径
+		cwd, _ := os.Getwd()
+		log.Fatal("无法找到配置文件目录，当前工作目录: %s，尝试过的路径: %v", cwd, possiblePaths)
+		return
+	}
 
 	dir, err := os.ReadDir(configDir)
 	if err != nil {
-		log.Fatal("batch_config error happen %w", err)
+		log.Fatal("读取配置目录失败: %w", err)
 	}
 
 	for _, v := range dir {
-		configFile := path.Join(configDir, v.Name())
-		if v.Name() == gameConfig {
-			readGameConfig(configFile)
-		}
+		configFile := filepath.Join(configDir, v.Name())
 		if v.Name() == servers {
 			readServersConfig(configFile)
 		}
 	}
 }
 
-func readServersConfig(configFile string) {
-	var configs Configs
-	v := viper.New()
-	v.SetConfigFile(configFile)
-	v.WatchConfig()
-	v.OnConfigChange(func(in fsnotify.Event) {
-		fmt.Println("Configs 配置文件被修改")
-		err := v.Unmarshal(&configs)
-		if err != nil {
-			panic(fmt.Errorf("configs 解析 json 错误, err:%v \n", err))
-		}
-		InjectedConfig.configs = configs
-	})
+// serversConfigRaw 用于解析 JSON 的临时结构
+type serversConfigRaw struct {
+	Nats      NatsConfig               `json:"nats"`
+	Connector []map[string]interface{} `json:"connector"`
+	Servers   []map[string]interface{} `json:"servers"`
+}
 
-	err := v.ReadInConfig()
+func readServersConfig(configFile string) {
+	// 直接读取 JSON 文件，避免 viper 的键名转换问题
+	data, err := os.ReadFile(configFile)
 	if err != nil {
-		panic(fmt.Errorf("configs 读取配置文件出错,err:%v \n", err))
+		panic(fmt.Errorf("读取配置文件失败,err:%v", err))
 	}
 
-	InjectedConfig.configs = configs
+	var raw serversConfigRaw
+	err = json.Unmarshal(data, &raw)
+	if err != nil {
+		panic(fmt.Errorf("configs 解析 json 错误, err:%v", err))
+	}
 
-	if len(InjectedConfig.configs.Servers) > 0 {
-		if InjectedConfig.configs.ConfigMap == nil {
-			InjectedConfig.configs.ConfigMap = make(map[string][]*ServersConfig)
-		}
-		for _, v := range InjectedConfig.configs.Servers {
-			if InjectedConfig.configs.ConfigMap[v.UniqueTopic] == nil {
-				InjectedConfig.configs.ConfigMap[v.UniqueTopic] = make([]*ServersConfig, 0)
+	parseAndSetConfigs(&raw)
+
+	// 设置文件监听（如果需要热更新）
+	v := viper.New()
+	v.SetConfigFile(configFile)
+	err = v.ReadInConfig() // 需要先读取才能监听
+	if err != nil {
+		log.Warn("初始化配置文件监听失败", "error", err)
+	} else {
+		v.WatchConfig()
+		v.OnConfigChange(func(in fsnotify.Event) {
+			fmt.Println("Configs 配置文件被修改")
+			data, err := os.ReadFile(configFile)
+			if err != nil {
+				log.Warn("重新读取配置文件失败", "error", err)
+				return
 			}
-			InjectedConfig.configs.ConfigMap[v.UniqueTopic] = append(InjectedConfig.configs.ConfigMap[v.UniqueTopic], v)
-		}
+			var newRaw serversConfigRaw
+			if err := json.Unmarshal(data, &newRaw); err != nil {
+				log.Warn("重新解析配置文件失败", "error", err)
+				return
+			}
+			parseAndSetConfigs(&newRaw)
+		})
 	}
 }
 
-func readGameConfig(configFile string) {
-	file, err := os.Open(configFile)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-	data, err := io.ReadAll(file)
-	if err != nil {
-		panic(err)
-	}
-	var gc map[string]GameConfigValue
-	err = json.Unmarshal(data, &gc)
-	if err != nil {
-		panic(err)
-	}
-	InjectedConfig.GameConfig = gc
+func parseAndSetConfigs(raw *serversConfigRaw) {
 
-	/*	gc := make(map[string]GameConfigValue)
-		v := viper.New()
-		v.SetConfigFile(configFile)
-		v.WatchConfig()
-		v.OnConfigChange(func(in fsnotify.Event) {
-			log.Println("gameConfig配置文件被修改了")
-			err := v.Unmarshal(&gc)
-			if err != nil {
-				panic(fmt.Errorf("gameConfig Unmarshal change config data,err:%v \n", err))
+	configs := Configs{
+		Nats:           raw.Nats,
+		ClusterConfigs: make([]NodeConfig, 0),
+		LocalConfig:    nil,
+	}
+
+	// 解析 connector 配置
+	for _, item := range raw.Connector {
+		connector := &ConnectorConfig{}
+		if err := parseNodeConfig(item, connector); err != nil {
+			log.Warn("解析 Connector 配置失败", "error", err)
+			continue
+		}
+		connector.Inherit()
+		configs.ClusterConfigs = append(configs.ClusterConfigs, connector)
+	}
+
+	// 解析 servers 配置
+	for _, item := range raw.Servers {
+		// 检查 serverType 是否存在，并正确进行类型断言
+		serverTypeVal, exists := item["serverType"]
+		if !exists {
+			log.Warn("配置项缺少 serverType 字段", "item", item)
+			continue
+		}
+		serverType, ok := serverTypeVal.(string)
+		if !ok {
+			log.Warn("serverType 类型错误，期望 string", "serverType", serverTypeVal)
+			continue
+		}
+		var node NodeConfig
+		switch serverType {
+		case "game":
+			game := &GameConfig{}
+			if err := parseNodeConfig(item, game); err != nil {
+				log.Warn("解析 Game 配置失败", "error", err)
+				continue
 			}
-			Conf.GameConfig = gc
-		})
-		err := v.ReadInConfig()
-		if err != nil {
-			panic(fmt.Errorf("gameConfig 读取配置文件出错,err:%v \n", err))
+			game.Inherit()
+			node = game
+		case "march":
+			march := &MarchConfig{}
+			if err := parseNodeConfig(item, march); err != nil {
+				log.Warn("解析 March 配置失败", "error", err)
+				continue
+			}
+			march.Inherit()
+			node = march
+		default:
+			// 如果没有 serverType 或类型未知，尝试作为通用配置解析，暂时跳过
+			log.Warn("未知的 serverType", "serverType", serverType)
+			continue
 		}
-		log.Println("%v", v.AllKeys())
-		err = v.Unmarshal(&gc)
-		if err != nil {
-			panic(fmt.Errorf("gameConfig Unmarshal config data,err:%v \n", err))
+		if node != nil {
+			configs.ClusterConfigs = append(configs.ClusterConfigs, node)
 		}
-		Conf.GameConfig = gc*/
+	}
+
+	InjectedConfig = &configs
+}
+
+// parseNodeConfig 将 map 解析为具体的 NodeConfig 类型
+func parseNodeConfig(data map[string]interface{}, target NodeConfig) error {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("marshal 失败: %w", err)
+	}
+	return json.Unmarshal(jsonData, target)
+}
+
+// SetLocalConfig 根据 nodeID 从 clusterConfigs 中找到对应配置并设置为 localConfig
+func (c *Configs) SetLocalConfig(nodeID string) error {
+	for _, config := range c.ClusterConfigs {
+		if config.GetID() == nodeID {
+			c.LocalConfig = config
+			return nil
+		}
+	}
+	return fmt.Errorf("未找到 nodeID=%s 的配置", nodeID)
+}
+
+// GetMarchConfig 获取 MarchConfig，类型安全
+func (c *Configs) GetMarchConfig() (*MarchConfig, error) {
+	config, ok := c.LocalConfig.(*MarchConfig)
+	if !ok {
+		return nil, fmt.Errorf("localConfig 不是 MarchConfig 类型")
+	}
+	return config, nil
+}
+
+// GetGameConfig 获取 GameConfig，类型安全
+func (c *Configs) GetGameConfig() (*GameConfig, error) {
+	config, ok := c.LocalConfig.(*GameConfig)
+	if !ok {
+		return nil, fmt.Errorf("localConfig 不是 GameConfig 类型")
+	}
+	return config, nil
+}
+
+// GetConnectorConfig 获取 ConnectorConfig，类型安全
+func (c *Configs) GetConnectorConfig() (*ConnectorConfig, error) {
+	config, ok := c.LocalConfig.(*ConnectorConfig)
+	if !ok {
+		return nil, fmt.Errorf("localConfig 不是 ConnectorConfig 类型")
+	}
+	return config, nil
 }

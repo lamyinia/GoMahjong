@@ -130,14 +130,14 @@ func validateGetSMSCodeParams(in *pb.GetSMSCodeParams) error {
 
 // mapError 将应用层错误映射为 gRPC 错误
 func mapError(err error) error {
-	switch err {
-	case repository.ErrAccountAlreadyExists:
+	switch {
+	case errors.Is(err, repository.ErrAccountAlreadyExists):
 		return status.Error(codes.AlreadyExists, "account already exists")
-	case repository.ErrUserNotFound:
+	case errors.Is(err, repository.ErrUserNotFound):
 		return status.Error(codes.NotFound, "user not found")
-	case repository.ErrInvalidPassword:
+	case errors.Is(err, repository.ErrInvalidPassword):
 		return status.Error(codes.Unauthenticated, "invalid password")
-	case repository.ErrInvalidSMSCode:
+	case errors.Is(err, repository.ErrInvalidSMSCode):
 		return status.Error(codes.InvalidArgument, "invalid or expired sms code")
 	default:
 		log.Error("未知错误: %v", err)

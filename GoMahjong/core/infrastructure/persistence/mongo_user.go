@@ -6,11 +6,13 @@ import (
 	"context"
 	"core/domain/entity"
 	"core/domain/repository"
-	"core/domain/value_object"
+	"core/domain/vo"
+	"errors"
+	"time"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"time"
 )
 
 // MongoUserRepository MongoDB 用户仓储实现
@@ -32,6 +34,7 @@ func (r *MongoUserRepository) Save(ctx context.Context, user *entity.User) error
 		"account":       user.Account.String(),
 		"password_hash": user.Password.Hash(),
 		"platform":      user.Platform,
+		"ranking":       user.Ranking,
 		"created_at":    user.CreatedAt,
 		"updated_at":    user.UpdatedAt,
 		"last_login":    user.LastLogin,
@@ -56,7 +59,7 @@ func (r *MongoUserRepository) FindByAccount(ctx context.Context, account string)
 	var doc bson.M
 	err := collection.FindOne(ctx, bson.M{"account": account}).Decode(&doc)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, repository.ErrUserNotFound
 		}
 		log.Error("查询用户失败: %v", err)
@@ -78,7 +81,7 @@ func (r *MongoUserRepository) FindByID(ctx context.Context, id string) (*entity.
 	var doc bson.M
 	err = collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&doc)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, repository.ErrUserNotFound
 		}
 		log.Error("查询用户失败: %v", err)
@@ -90,11 +93,24 @@ func (r *MongoUserRepository) FindByID(ctx context.Context, id string) (*entity.
 
 // docToEntity 将 MongoDB 文档转换为聚合根
 func (r *MongoUserRepository) docToEntity(doc bson.M) *entity.User {
+	// 处理 ranking 字段（兼容旧数据，默认 0）
+	ranking := 0
+	if rankingVal, ok := doc["ranking"]; ok {
+		if rankingInt, ok := rankingVal.(int32); ok {
+			ranking = int(rankingInt)
+		} else if rankingInt, ok := rankingVal.(int64); ok {
+			ranking = int(rankingInt)
+		} else if rankingInt, ok := rankingVal.(int); ok {
+			ranking = rankingInt
+		}
+	}
+
 	return &entity.User{
 		ID:        doc["_id"].(primitive.ObjectID),
-		Account:   value_object.NewAccountFromString(doc["account"].(string)),
-		Password:  value_object.NewPasswordFromHash(doc["password_hash"].(string)),
+		Account:   vo.NewAccountFromString(doc["account"].(string)),
+		Password:  vo.NewPasswordFromHash(doc["password_hash"].(string)),
 		Platform:  doc["platform"].(int32),
+		Ranking:   ranking,
 		CreatedAt: doc["created_at"].(time.Time),
 		UpdatedAt: doc["updated_at"].(time.Time),
 		LastLogin: doc["last_login"].(time.Time),

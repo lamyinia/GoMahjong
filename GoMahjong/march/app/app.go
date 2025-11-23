@@ -3,6 +3,7 @@ package app
 import (
 	"common/log"
 	"context"
+	"core/container"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,6 +11,10 @@ import (
 )
 
 func Run(ctx context.Context) error {
+
+	marchContainer := container.NewMarchContainer()
+
+	//registery := discovery.NewRegistry()
 
 	go func() {
 
