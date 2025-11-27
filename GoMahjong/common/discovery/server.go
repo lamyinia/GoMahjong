@@ -8,20 +8,21 @@ import (
 )
 
 type Server struct {
-	Name    string  `json:"name"`
+	Domain  string  `json:"domain"`
 	Addr    string  `json:"addr"`
 	Weight  int     `json:"weight"`
 	Version string  `json:"version"`
 	Ttl     int     `json:"ttl"`
-	Load    float64 `json:"load"` // 负载评分，值越小表示负载越低，客户端计算综合评分后上报
+	Load    float64 `json:"load"`   // 负载评分，值越小表示负载越低，客户端计算综合评分后上报
+	NodeID  string  `json:"nodeID"` // 节点 ID，用于 NATS 通信（必需）
 }
 
 func (s Server) buildKey() string {
 	if len(s.Version) == 0 {
-		return fmt.Sprintf("%s/%s", s.Name, s.Addr)
+		return fmt.Sprintf("%s/%s", s.Domain, s.Addr)
 	}
 	// 格式：name/version/addr，例如：game/v1/127.0.0.1:8080
-	return fmt.Sprintf("%s/%s/%s", s.Name, s.Version, s.Addr)
+	return fmt.Sprintf("%s/%s/%s", s.Domain, s.Version, s.Addr)
 }
 
 func ParseValue(v []byte) (Server, error) {
@@ -37,13 +38,13 @@ func ParseKey(key string) (Server, error) {
 	strs := strings.Split(key, "/")
 	if len(strs) == 2 {
 		return Server{
-			Name: strs[0],
-			Addr: strs[1],
+			Domain: strs[0],
+			Addr:   strs[1],
 		}, nil
 	}
 	if len(strs) == 3 {
 		return Server{
-			Name:    strs[0],
+			Domain:  strs[0],
 			Addr:    strs[2],
 			Version: strs[1],
 		}, nil

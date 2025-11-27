@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+option go_package = "march/pb;pb";
+
+service MatchService {
+  rpc JoinQueue(JoinQueueRequest) returns (JoinQueueResponse);
+  rpc LeaveQueue(LeaveQueueRequest) returns (LeaveQueueResponse);
+  rpc QueryStatus(QueryStatusRequest) returns (QueryStatusResponse); // 便于前端轮询
+}
+
+message JoinQueueRequest {
+  string userID = 1;          // 必填，用户唯一 ID
+  string nodeID = 2;          // connector 节点 ID（如 connector-001）
+  string ranking = 3;         // 可选，如果客户端指定段位；否则由 march 查询用户信息
+  string traceID = 4;         // 可选，用于链路跟踪/日志
+}
+
+message JoinQueueResponse {
+  bool success = 1;
+  string message = 2;
+  string queueID = 3;         // 可选，用于 QueryStatus
+  int32 estimatedSeconds = 4; // 估计等待时间
+}
+
+message LeaveQueueRequest {
+  string userID = 1;
+  string queueID = 2;         // 与上面对应，也可以直接根据 userID 查询
+}
+
+message LeaveQueueResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message QueryStatusRequest {
+  string userID = 1;
+  string queueID = 2;
+}
+
+message QueryStatusResponse {
+  enum Status {
+    STATUS_UNKNOWN = 0;
+    STATUS_WAITING = 1;
+    STATUS_MATCHING = 2;
+    STATUS_SUCCESS = 3;
+    STATUS_CANCELLED = 4;
+  }
+  Status status = 1;
+  int32 position = 2;            // 排队位次，便于前端展示
+  int32 estimatedSeconds = 3;
+  string gameNodeID = 4;         // 匹配成功后返回
+}

@@ -5,7 +5,9 @@ import (
 	"common/discovery"
 	"common/log"
 	"fmt"
+	matchpb "march/pb"
 	"player/pb"
+	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -13,7 +15,8 @@ import (
 )
 
 var (
-	UserClient pb.UserServiceClient
+	UserClient  pb.UserServiceClient
+	MatchClient matchpb.MatchServiceClient
 )
 
 func Init() {
@@ -21,15 +24,23 @@ func Init() {
 	resolver.Register(r)
 	userDomain := config.Conf.Domain["user"]
 	initClient(userDomain.Name, userDomain.LoadBalance, &UserClient)
-	log.Info(fmt.Sprintf("rpc 发现服务，%#v", userDomain))
+	log.Info(fmt.Sprintf("rpc 发现 user 服务，%#v", userDomain))
+
+	marchDomain, ok := config.Conf.Domain["march"]
+	if !ok {
+		log.Fatal("rpc 初始化失败: 未配置 march domain")
+	}
+	initClient(marchDomain.Name, marchDomain.LoadBalance, &MatchClient)
+	log.Info(fmt.Sprintf("rpc 发现 march 服务，%#v", marchDomain))
 }
 
 // client 结构体指针，大小 8 字节
 func initClient(name string, loadBalance bool, client interface{}) {
-	// 找服务的地址
-	addr := fmt.Sprintf("etcd://%s", name)
+	// 找服务的地址，强制 host 为空
+	addr := fmt.Sprintf("etcd:///%s", strings.TrimPrefix(name, "/"))
 	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials())}
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
 	if loadBalance {
 		opts = append(opts, grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"LoadBalancingPolicy": "%s"}`, "round_robin")))
 	}
@@ -41,6 +52,8 @@ func initClient(name string, loadBalance bool, client interface{}) {
 	switch c := client.(type) {
 	case *pb.UserServiceClient:
 		*c = pb.NewUserServiceClient(conn)
+	case *matchpb.MatchServiceClient:
+		*c = matchpb.NewMatchServiceClient(conn)
 	default:
 		log.Fatal(fmt.Sprintf("不支持的服务类型, %#v", c))
 	}

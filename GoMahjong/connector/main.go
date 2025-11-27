@@ -15,7 +15,7 @@ import (
 var (
 	configFile string
 	logLevel   string
-	identifier string
+	nodeID     string
 )
 
 var rootCmd = &cobra.Command{
@@ -23,8 +23,10 @@ var rootCmd = &cobra.Command{
 	Short: "connector 连接器",
 	Long:  `connector 连接器`,
 	Run: func(cmd *cobra.Command, args []string) {
-		config.InitConfig(configFile)
-		log.InitLog(identifier, logLevel)
+		log.InitLog(nodeID, logLevel)
+		config.InitFixedConfig(configFile)
+		config.InitDynamicConfig(nodeID)
+
 		log.Info(fmt.Sprintf("配置文件: %+v", config.Conf))
 
 		go func() {
@@ -46,8 +48,8 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().StringVar(&configFile, "resource", "resource/application.yml", "resource file")
 	rootCmd.Flags().StringVar(&logLevel, "logLevel", "info", "log level: debug, info, warn, error")
-	rootCmd.Flags().StringVar(&identifier, "identifier", "", "subscribed topic and identifier of server required")
-	rootCmd.MarkFlagRequired("identifier")
+	rootCmd.Flags().StringVar(&nodeID, "nodeID", "", "subscribed topic and nodeID of server required")
+	rootCmd.MarkFlagRequired("nodeID")
 }
 
 func main() {

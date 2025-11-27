@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"runtime"
 	"time"
+
+	"github.com/shirou/gopsutil/v3/cpu"
 )
 
 // Monitor 监控器
@@ -68,7 +70,7 @@ func (m *Monitor) reportLoad() {
 	if err != nil {
 		log.Error(fmt.Sprintf("Monitor 上报负载信息失败: %v", err))
 	} else {
-		log.Info(fmt.Sprintf("Monitor 上报负载信息成功: Load=%.2f, Games=%d, Players=%d, CPU=%.2f%%, Mem=%.2f%%",
+		log.Debug(fmt.Sprintf("Monitor 上报负载信息成功: Load=%.2f, Games=%d, Players=%d, CPU=%.2f%%, Mem=%.2f%%",
 			load, loadInfo.GameCount, loadInfo.PlayerCount, loadInfo.CPUUsage, loadInfo.MemUsage))
 	}
 }
@@ -92,14 +94,38 @@ func (m *Monitor) collectLoadInfo() *LoadInfo {
 	}
 }
 
-// getCPUUsage 获取 CPU 使用率（简化实现）
-// 注意：这是一个简化版本，实际应该使用 gopsutil 库获取准确的 CPU 使用率
-// 这里使用一个占位实现，返回 0，后续可以扩展
+// getCPUUsage 获取 CPU 使用率
+// 使用 gopsutil 库获取系统整体 CPU 使用率（所有核心的平均值）
+// 采样间隔为 200ms，平衡准确性和性能
+// 注意：cpu.Percent() 第一次调用会立即返回，后续调用会等待采样间隔
 func (m *Monitor) getCPUUsage() float64 {
-	// TODO: 使用 gopsutil 库获取准确的 CPU 使用率
-	// 当前返回 0，表示暂不统计 CPU（不影响负载计算的其他部分）
-	// 后续可以添加: github.com/shirou/gopsutil/v3/cpu
-	return 0.0
+	// 使用 200ms 采样间隔获取 CPU 使用率
+	// false 表示获取所有 CPU 核心的平均使用率，而不是每个核心的单独值
+	// 对于负载均衡，我们关心的是系统整体 CPU 使用率
+	percentages, err := cpu.Percent(200*time.Millisecond, false)
+	if err != nil {
+		log.Error(fmt.Sprintf("Monitor 获取 CPU 使用率失败: %v", err))
+		return 0.0
+	}
+
+	// percentages 是一个切片，包含所有 CPU 核心的使用率
+	// 由于传入 false，切片中只有一个元素（所有核心的平均值）
+	if len(percentages) == 0 {
+		log.Warn("Monitor 获取 CPU 使用率返回空结果")
+		return 0.0
+	}
+
+	cpuUsage := percentages[0]
+
+	// 限制在 0-100 之间（理论上不会超出，但做防御性检查）
+	if cpuUsage > 100.0 {
+		cpuUsage = 100.0
+	}
+	if cpuUsage < 0.0 {
+		cpuUsage = 0.0
+	}
+
+	return cpuUsage
 }
 
 // getMemoryUsage 获取内存使用率

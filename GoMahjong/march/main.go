@@ -4,7 +4,9 @@ import (
 	"common/config"
 	"common/log"
 	"common/metrics"
+	"context"
 	"fmt"
+	"march/app"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -23,15 +25,9 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		log.InitLog(nodeID, logLevel)
 
-		config.InitConfig(configFile)
-		config.InitBatchConfig()
+		config.InitFixedConfig(configFile)
+		config.InitDynamicConfig(nodeID)
 		log.Info(fmt.Sprintf("配置文件: %+v", config.Conf))
-
-		// 根据 nodeID 设置本地配置
-		if err := config.InjectedConfig.Configs.SetLocalConfig(nodeID); err != nil {
-			log.Fatal(fmt.Sprintf("设置本地配置失败: %v", err))
-			os.Exit(-1)
-		}
 
 		go func() {
 			log.Info("启动监控..., URL: http://localhost:" + fmt.Sprintf("%d", config.Conf.MetricPort) + "/debug/statsviz/")
@@ -40,16 +36,12 @@ var rootCmd = &cobra.Command{
 				panic(err)
 			}
 		}()
-		lconf, _ := config.InjectedConfig.GetMarchConfig()
-		fmt.Printf("%#v", lconf)
-		for {
 
+		err := app.Run(context.Background())
+		if err != nil {
+			log.Error("发生异常: {}", err)
+			os.Exit(-1)
 		}
-		//err := app.Run(context.Background())
-		//if err != nil {
-		//	log.Error("发生异常: {}", err)
-		//	os.Exit(-1)
-		//}
 	},
 }
 

@@ -87,32 +87,66 @@ func (r *MongoUserRepository) FindByID(ctx context.Context, id string) (*entity.
 		log.Error("查询用户失败: %v", err)
 		return nil, err
 	}
-
 	return r.docToEntity(doc), nil
 }
 
 // docToEntity 将 MongoDB 文档转换为聚合根
 func (r *MongoUserRepository) docToEntity(doc bson.M) *entity.User {
-	// 处理 ranking 字段（兼容旧数据，默认 0）
-	ranking := 0
-	if rankingVal, ok := doc["ranking"]; ok {
-		if rankingInt, ok := rankingVal.(int32); ok {
-			ranking = int(rankingInt)
-		} else if rankingInt, ok := rankingVal.(int64); ok {
-			ranking = int(rankingInt)
-		} else if rankingInt, ok := rankingVal.(int); ok {
-			ranking = rankingInt
-		}
-	}
-
 	return &entity.User{
 		ID:        doc["_id"].(primitive.ObjectID),
 		Account:   vo.NewAccountFromString(doc["account"].(string)),
 		Password:  vo.NewPasswordFromHash(doc["password_hash"].(string)),
-		Platform:  doc["platform"].(int32),
-		Ranking:   ranking,
-		CreatedAt: doc["created_at"].(time.Time),
-		UpdatedAt: doc["updated_at"].(time.Time),
-		LastLogin: doc["last_login"].(time.Time),
+		Platform:  toInt32(doc["platform"]),
+		Ranking:   toInt(doc["ranking"]),
+		CreatedAt: toTime(doc["created_at"]),
+		UpdatedAt: toTime(doc["updated_at"]),
+		LastLogin: toTime(doc["last_login"]),
+	}
+}
+
+func toTime(value interface{}) time.Time {
+	switch v := value.(type) {
+	case primitive.DateTime:
+		return v.Time()
+	case primitive.Timestamp:
+		return time.Unix(int64(v.T), 0)
+	case time.Time:
+		return v
+	case *time.Time:
+		if v != nil {
+			return *v
+		}
+	default:
+	}
+	return time.Time{}
+}
+
+func toInt(value interface{}) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+func toInt32(value interface{}) int32 {
+	switch v := value.(type) {
+	case int32:
+		return v
+	case int:
+		return int32(v)
+	case int64:
+		return int32(v)
+	case float64:
+		return int32(v)
+	default:
+		return 0
 	}
 }

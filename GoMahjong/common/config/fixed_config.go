@@ -42,7 +42,7 @@ type EtcdConf struct {
 
 type RegisterServer struct {
 	Addr    string `mapstructure:"addr"`
-	Name    string `mapstructure:"name"`
+	Domain  string `mapstructure:"domain"`
 	Version string `mapstructure:"version"`
 	Weight  int    `mapstructure:"weight"`
 	Ttl     int    `mapstructure:"ttl"`
@@ -89,7 +89,7 @@ type RedisConf struct {
 	Port         int      `mapstructure:"port"`
 }
 
-func InitConfig(configFile string) {
+func InitFixedConfig(configFile string) {
 	Conf = new(Config)
 	v := viper.New()
 	v.SetConfigFile(configFile)

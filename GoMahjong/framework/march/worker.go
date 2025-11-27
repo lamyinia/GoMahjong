@@ -31,7 +31,7 @@ import (
 */
 
 const (
-	matchInterval = 2 * time.Second  // 匹配间隔：2秒
+	matchInterval = 60 * time.Second // 匹配间隔：2秒
 	maxWaitTime   = 10 * time.Minute // 队列超时：10分钟
 )
 
@@ -50,27 +50,28 @@ type MatchSuccessMessage struct {
 type Worker struct {
 	matchService  service.MatchService
 	natsWorker    *node.NatsWorker
-	serverID      string                           // 当前 march 节点 ID（用于 NATS topic）
+	NodeID        string                           // 当前 march 节点 ID（用于 NATS topic）
 	stopChan      chan struct{}                    // 停止信号
 	matchTriggers map[vo.RankingType]chan struct{} // 段位 -> 匹配触发 channel
 	wg            sync.WaitGroup                   // 等待所有 goroutine 结束
 }
 
-func NewWorker(matchService service.MatchService, serverID string) *Worker {
+func NewWorker(matchService service.MatchService, nodeID string) *Worker {
 	return &Worker{
 		matchService: matchService,
 		natsWorker:   node.NewNatsWorker(),
-		serverID:     serverID,
+		NodeID:       nodeID,
 		stopChan:     make(chan struct{}),
 	}
 }
 
+// Start 启动 nats 服务
 func (w *Worker) Start(ctx context.Context, natsURL string) error {
-	err := w.natsWorker.Run(natsURL, w.serverID)
+	err := w.natsWorker.Run(natsURL, w.NodeID)
 	if err != nil {
 		return fmt.Errorf("启动 NATS 监听失败: %v", err)
 	}
-	log.Info(fmt.Sprintf("March Worker[%s] 启动 NATS 监听成功, topic: %s", w.serverID, w.serverID))
+	log.Info(fmt.Sprintf("March Worker[%s] 启动 NATS 监听成功, topic: %s", w.NodeID, w.NodeID))
 
 	w.matchTriggers = make(map[vo.RankingType]chan struct{})
 	rankings := vo.GetAllRankings()
@@ -87,7 +88,7 @@ func (w *Worker) Start(ctx context.Context, natsURL string) error {
 
 	go w.cleanupExpiredPlayers(ctx)
 
-	log.Info(fmt.Sprintf("March Worker[%s] 启动成功", w.serverID))
+	log.Info(fmt.Sprintf("March Worker[%s] 启动成功", w.NodeID))
 	return nil
 }
 
@@ -101,7 +102,7 @@ func (w *Worker) matchLoopByRanking(ctx context.Context, ranking vo.RankingType)
 	matchTrigger := w.matchTriggers[ranking]
 	displayName := ranking.GetDisplayName()
 
-	log.Info(fmt.Sprintf("March Worker[%s] 段位 %s 匹配循环启动，间隔: %v", w.serverID, displayName, matchInterval))
+	log.Info(fmt.Sprintf("March Worker[%s] 段位 %s 匹配循环启动，间隔: %v", w.NodeID, displayName, matchInterval))
 
 	for {
 		select {
@@ -110,10 +111,10 @@ func (w *Worker) matchLoopByRanking(ctx context.Context, ranking vo.RankingType)
 		case <-ticker.C:
 			w.doMatch(ctx, ranking, displayName)
 		case <-w.stopChan:
-			log.Info(fmt.Sprintf("March Worker[%s] 段位 %s 匹配循环停止", w.serverID, displayName))
+			log.Info(fmt.Sprintf("March Worker[%s] 段位 %s 匹配循环停止", w.NodeID, displayName))
 			return
 		case <-ctx.Done():
-			log.Info(fmt.Sprintf("March Worker[%s] 段位 %s 收到上下文取消信号，停止匹配循环", w.serverID, displayName))
+			log.Info(fmt.Sprintf("March Worker[%s] 段位 %s 收到上下文取消信号，停止匹配循环", w.NodeID, displayName))
 			return
 		}
 	}
@@ -134,7 +135,6 @@ func (w *Worker) doMatch(ctx context.Context, ranking vo.RankingType, displayNam
 			// 注意：这里不 return，因为匹配已经成功，只是推送失败，可以考虑重试机制或回滚匹配
 		}
 	}
-	// 匹配失败（队列中玩家不足4人），立即返回，等待下一轮
 }
 
 // handleMatchSuccess 处理匹配成功
@@ -185,7 +185,7 @@ func (w *Worker) sendCreateRoomMessage(ctx context.Context, gameTopic string, pl
 	}
 
 	packet := &stream.ServicePacket{
-		Source:      w.serverID,
+		Source:      w.NodeID,
 		Destination: gameTopic,
 		Route:       "game.room.create",
 		Body: &protocal.Message{
@@ -205,7 +205,7 @@ func (w *Worker) sendCreateRoomMessage(ctx context.Context, gameTopic string, pl
 // pushMatchSuccessMessage 推送匹配成功消息给玩家
 func (w *Worker) pushMatchSuccessMessage(userID, connectorTopic string, msgData []byte) error {
 	packet := &stream.ServicePacket{
-		Source:      w.serverID,
+		Source:      w.NodeID,
 		Destination: connectorTopic,
 		Route:       "march.match.success",
 		UserID:      userID,
@@ -228,7 +228,7 @@ func (w *Worker) cleanupExpiredPlayers(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	log.Info(fmt.Sprintf("March Worker[%s] 过期玩家清理启动，间隔: 5分钟", w.serverID))
+	log.Info(fmt.Sprintf("March Worker[%s] 过期玩家清理启动，间隔: 5分钟", w.NodeID))
 
 	for {
 		select {
@@ -237,10 +237,10 @@ func (w *Worker) cleanupExpiredPlayers(ctx context.Context) {
 			// 这里需要 MatchService 提供清理方法，或者直接通过 Repository 清理
 			log.Debug("March Worker 执行过期玩家清理")
 		case <-w.stopChan:
-			log.Info(fmt.Sprintf("March Worker[%s] 过期玩家清理停止", w.serverID))
+			log.Info(fmt.Sprintf("March Worker[%s] 过期玩家清理停止", w.NodeID))
 			return
 		case <-ctx.Done():
-			log.Info(fmt.Sprintf("March Worker[%s] 收到上下文取消信号，停止过期玩家清理", w.serverID))
+			log.Info(fmt.Sprintf("March Worker[%s] 收到上下文取消信号，停止过期玩家清理", w.NodeID))
 			return
 		}
 	}
@@ -254,7 +254,7 @@ func (w *Worker) Close() error {
 	// 2. 关闭所有匹配触发 channel
 	for ranking, trigger := range w.matchTriggers {
 		close(trigger)
-		log.Debug(fmt.Sprintf("March Worker[%s] 关闭段位 %s 的匹配触发 channel", w.serverID, ranking.GetDisplayName()))
+		log.Debug(fmt.Sprintf("March Worker[%s] 关闭段位 %s 的匹配触发 channel", w.NodeID, ranking.GetDisplayName()))
 	}
 
 	// 3. 等待所有匹配循环 goroutine 结束
@@ -265,6 +265,6 @@ func (w *Worker) Close() error {
 		w.natsWorker.Close()
 	}
 
-	log.Info(fmt.Sprintf("March Worker[%s] 已关闭", w.serverID))
+	log.Info(fmt.Sprintf("March Worker[%s] 已关闭", w.NodeID))
 	return nil
 }

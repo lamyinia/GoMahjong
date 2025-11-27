@@ -27,7 +27,9 @@ func NewNatsWorker() *NatsWorker {
 // topic 本地订阅的 nats 服务的频道
 func (worker *NatsWorker) Run(url string, topic string) error {
 	worker.NatsCli = NewNatsClient(topic, worker.readChan)
-	worker.NatsCli.Run(url)
+	if err := worker.NatsCli.Run(url); err != nil {
+		return err
+	}
 
 	go worker.readChanMessage()
 	go worker.writeChanMessage()
@@ -39,7 +41,12 @@ func (worker *NatsWorker) readChanMessage() {
 		select {
 		case rawMessage := <-worker.readChan:
 			var packet stream.ServicePacket
-			json.Unmarshal(rawMessage, packet)
+			err := json.Unmarshal(rawMessage, packet)
+			if err != nil {
+				log.Warn("NatsWorker-节点通信 packet 解析错误: %#v", packet)
+				continue
+			}
+
 			route := packet.Route
 			if handler := worker.handlers[route]; handler != nil {
 				go func() {
@@ -58,6 +65,8 @@ func (worker *NatsWorker) readChanMessage() {
 						worker.writeChan <- messageResp
 					}
 				}()
+			} else {
+				log.Warn("NatsWorker-不支持的路由类型: %#v")
 			}
 		}
 	}

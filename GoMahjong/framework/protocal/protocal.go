@@ -12,6 +12,8 @@ import (
 	"strings"
 )
 
+// pomelo 协议的定义和相关的原语操作
+
 var (
 	routes = make(map[string]uint16)
 	codes  = make(map[uint16]string)
@@ -171,9 +173,9 @@ func MessageEncode(m *Message) ([]byte, error) {
 // ------------------------------------------
 // |   type   |  flag  |       other        |
 // |----------|--------|--------------------|
-// | request  |----000-|<stream id>|<route>|
+// | request  |----000-|<stream id>|<route> |
 // | notify   |----001-|<route>             |
-// | response |----010-|<stream id>        |
+// | response |----010-|<stream id>         |
 // | push     |----011-|<route>             |
 // ------------------------------------------
 func MessageDecode(body []byte) (Message, error) {

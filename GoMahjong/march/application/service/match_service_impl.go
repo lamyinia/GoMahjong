@@ -1,12 +1,12 @@
 package service
 
 import (
+	"common/discovery"
 	"common/log"
 	"context"
 	"core/domain/repository"
 	"core/domain/vo"
 	"fmt"
-	"framework/march"
 	"sync"
 	"time"
 )
@@ -20,7 +20,7 @@ type MatchServiceImpl struct {
 	userRepo      repository.UserRepository
 	queueRepo     repository.MarchQueueRepository
 	routerRepo    repository.UserRouterRepository
-	nodeSelector  *march.NodeSelector
+	nodeSelector  *discovery.NodeSelector
 	matchTriggers map[vo.RankingType]chan struct{} // 段位 -> 匹配触发 channel（由 Worker 创建）
 	mu            sync.RWMutex                     // 保护 matchTriggers 的并发访问
 }
@@ -29,7 +29,7 @@ func NewMatchService(
 	userRepo repository.UserRepository,
 	queueRepo repository.MarchQueueRepository,
 	routerRepo repository.UserRouterRepository,
-	nodeSelector *march.NodeSelector,
+	nodeSelector *discovery.NodeSelector,
 ) MatchService {
 	return &MatchServiceImpl{
 		userRepo:      userRepo,
@@ -48,7 +48,7 @@ func (s *MatchServiceImpl) SetMatchTriggers(matchTriggers map[vo.RankingType]cha
 	log.Info("MatchService 设置匹配触发 channel，段位数: %d", len(matchTriggers))
 }
 
-func (s *MatchServiceImpl) JoinQueue(ctx context.Context, userID, connectorTopic string) error {
+func (s *MatchServiceImpl) JoinQueue(ctx context.Context, userID, NodeID string) error {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("查询用户失败: %w", err)
@@ -65,7 +65,7 @@ func (s *MatchServiceImpl) JoinQueue(ctx context.Context, userID, connectorTopic
 	}
 
 	score := float64(time.Now().Unix())
-	if err := s.queueRepo.JoinQueue(ctx, userID, connectorTopic, ranking, score); err != nil {
+	if err := s.queueRepo.JoinQueue(ctx, userID, NodeID, ranking, score); err != nil {
 		return fmt.Errorf("加入队列失败: %w", err)
 	}
 
@@ -117,10 +117,10 @@ func (s *MatchServiceImpl) MatchByRanking(ctx context.Context, ranking vo.Rankin
 
 	// Lua 脚本已保证，如果队列中玩家不足，不会取出任何玩家，直接返回空，所以这里如果 players 为空，说明队列中玩家不足
 	if len(players) == 0 {
-		return nil, nil // 匹配失败，返回 nil
+		return nil, nil
 	}
 
-	// 防御性检查：理论上不会出现这种情况，但保留作为安全检查
+	// 防御性检查
 	if len(players) < playersPerMatch {
 		log.Warn(fmt.Sprintf("段位 %s 取出玩家数量异常: 期望 %d 人，实际 %d 人", ranking.GetDisplayName(), playersPerMatch, len(players)))
 		return nil, nil

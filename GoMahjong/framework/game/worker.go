@@ -14,7 +14,7 @@ import (
 )
 
 /*
-	1.上报 march 节点玩家数和性能分析
+	1.上报 etcd, march 节点知晓本地的玩家数和性能分析
 	2.监听来自 nats 的消息，处理逻辑
 		(1)设计房间管理对象
 		(2)设计玩家到游戏房间对象的路由，收到局内对战消息，导航到正确的游戏房间
@@ -45,12 +45,12 @@ type Worker struct {
 	MiddleWorker *node.NatsWorker
 	Monitor      *Monitor
 	Registry     *discovery.Registry
-	serverID     string // 当前 game 节点 ID（用于 NATS topic）
+	nodeID       string // 当前 game 节点 ID（用于 NATS topic）
 }
 
 // NewWorker 创建 Worker
-// serverID: 当前 game 节点 ID（用于 NATS topic 和 etcd 注册）
-func NewWorker(serverID string) *Worker {
+// nodeID: 当前 game 节点 ID（用于 NATS topic 和 etcd 注册）
+func NewWorker(nodeID string) *Worker {
 	roomManager := NewRoomManager()
 	registry := discovery.NewRegistry()
 	monitor := NewMonitor(roomManager, registry, 5*time.Second) // 5秒更新一次负载
@@ -60,7 +60,7 @@ func NewWorker(serverID string) *Worker {
 		MiddleWorker: node.NewNatsWorker(),
 		Monitor:      monitor,
 		Registry:     registry,
-		serverID:     serverID,
+		nodeID:       nodeID,
 	}
 }
 
@@ -68,27 +68,27 @@ func NewWorker(serverID string) *Worker {
 // natsURL: NATS 服务地址，如 "nats://localhost:4222"
 // etcdConf: etcd 配置
 func (w *Worker) Start(ctx context.Context, natsURL string, etcdConf config.EtcdConf) error {
-	// 1. 注册到 etcd
-	err := w.Registry.Register(etcdConf)
+	// 1. 注册到 etcd（传入 nodeID 作为 nodeID，用于 NATS 通信）
+	err := w.Registry.Register(etcdConf, w.nodeID)
 	if err != nil {
 		return fmt.Errorf("注册到 etcd 失败: %v", err)
 	}
-	log.Info(fmt.Sprintf("Game Worker[%s] 注册到 etcd 成功", w.serverID))
+	log.Info(fmt.Sprintf("Game Worker[%s] 注册到 etcd 成功", w.nodeID))
 
 	// 2. 注册消息处理器
 	w.registerHandlers()
 
 	// 3. 启动 NATS 监听
-	err = w.MiddleWorker.Run(natsURL, w.serverID)
+	err = w.MiddleWorker.Run(natsURL, w.nodeID)
 	if err != nil {
 		return fmt.Errorf("启动 NATS 监听失败: %v", err)
 	}
-	log.Info(fmt.Sprintf("Game Worker[%s] 启动 NATS 监听成功, topic: %s", w.serverID, w.serverID))
+	log.Info(fmt.Sprintf("Game Worker[%s] 启动 NATS 监听成功, topic: %s", w.nodeID, w.nodeID))
 
 	// 4. 启动 Monitor 负载上报
 	go w.Monitor.Start(ctx)
 
-	log.Info(fmt.Sprintf("Game Worker[%s] 启动成功", w.serverID))
+	log.Info(fmt.Sprintf("Game Worker[%s] 启动成功", w.nodeID))
 	return nil
 }
 
@@ -226,7 +226,7 @@ func (w *Worker) PushMessage(userID, route string, data []byte) error {
 
 	// 构建 ServicePacket
 	packet := &stream.ServicePacket{
-		Source:      w.serverID,
+		Source:      w.nodeID,
 		Destination: connectorTopic,
 		Route:       route,
 		UserID:      userID,
@@ -274,11 +274,11 @@ func (w *Worker) Close() {
 	if w.Monitor != nil {
 		w.Monitor.Stop()
 	}
-	if w.MiddleWorker != nil {
-		w.MiddleWorker.Close()
-	}
 	if w.Registry != nil {
 		w.Registry.Close()
 	}
-	log.Info(fmt.Sprintf("Game Worker[%s] 已关闭", w.serverID))
+	if w.MiddleWorker != nil {
+		w.MiddleWorker.Close()
+	}
+	log.Info(fmt.Sprintf("Game Worker[%s] 已关闭", w.nodeID))
 }

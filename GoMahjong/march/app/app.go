@@ -1,29 +1,103 @@
 package app
 
 import (
+	"common/config"
+	"common/discovery"
 	"common/log"
 	"context"
 	"core/container"
+	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	grpcserver "march/interfaces/grpc"
+	"march/pb"
+
+	"google.golang.org/grpc"
 )
 
 func Run(ctx context.Context) error {
-
 	marchContainer := container.NewMarchContainer()
+	if marchContainer == nil {
+		log.Fatal("march 容器初始化失败")
+		return nil
+	}
+	defer func() {
+		if err := marchContainer.Close(); err != nil {
+			log.Error("关闭 march 容器失败: %v", err)
+		}
+	}()
 
-	//registery := discovery.NewRegistry()
+	// 创建 grpc 注册依赖 -> 拿到监听端口 -> 注册 etcd -> 监听 grpc
+	grpcSrv := grpc.NewServer()
+	matchServer := grpcserver.NewMatchServer(marchContainer.MatchService)
+	pb.RegisterMatchServiceServer(grpcSrv, matchServer)
+
+	var (
+		registry *discovery.Registry
+		lis      net.Listener
+		err      error
+	)
+
+	lis, err = net.Listen("tcp", config.Conf.GrpcConf.Addr)
+	if err != nil {
+		log.Fatal("监听 gRPC 地址失败: %v", err)
+		return err
+	}
+
+	registry = discovery.NewRegistry()
+	if err = registry.Register(config.Conf.EtcdConf, marchContainer.NodeID); err != nil {
+		log.Fatal("march gRPC 注册 etcd 失败: %v", err)
+		return err
+	}
 
 	go func() {
+		log.Info(fmt.Sprintf("march gRPC 服务启动, addr=%s", config.Conf.GrpcConf.Addr))
+		if serveErr := grpcSrv.Serve(lis); serveErr != nil {
+			log.Error(fmt.Sprintf("march gRPC 服务退出: %v", serveErr))
+		}
+	}()
 
+	go func() {
+		err := marchContainer.MarchWorker.Start(ctx, config.InjectedConfig.Nats.URL)
+		if err != nil {
+			log.Fatal("worker 启动失败，err:%#v", err)
+		}
 	}()
 
 	stop := func() {
-		_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+		log.Info("正在关闭 march 服务...")
 
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		done := make(chan struct{})
+		go func() {
+			if grpcSrv != nil {
+				log.Info("关闭 gRPC 服务...")
+				grpcSrv.GracefulStop()
+			}
+			if lis != nil {
+				_ = lis.Close()
+			}
+			if registry != nil {
+				log.Info("注销 etcd 服务...")
+				registry.Close()
+			}
+			if err := marchContainer.Close(); err != nil {
+				log.Warn("关闭 march 容器失败: %v", err)
+			}
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			log.Info("march 服务已关闭")
+		case <-shutdownCtx.Done():
+			log.Warn("关闭 march 服务超时（5秒），defer 会确保资源最终被释放")
+		}
 	}
 
 	c := make(chan os.Signal, 1)

@@ -1,19 +1,11 @@
 package container
 
 import (
-	"common/database"
 	"common/log"
-	"core/domain/repository"
-	"core/infrastructure/persistence"
 )
 
-// GateContainer gate 服务专用容器
-// 继承 BaseContainer 的数据库连接，添加 gate 服务特定的依赖
 type GateContainer struct {
 	*BaseContainer
-	userRepository repository.UserRepository
-	// TODO: 添加 gate 服务特定的仓储
-	// sessionRepository repository.SessionRepository
 }
 
 // NewGateContainer 创建 gate 服务容器
@@ -24,29 +16,9 @@ func NewGateContainer() *GateContainer {
 		return nil
 	}
 
-	// 创建 gate 服务需要的仓储
-	userRepo := persistence.NewMongoUserRepository(base.mongo)
-
 	return &GateContainer{
-		BaseContainer:  base,
-		userRepository: userRepo,
-		// TODO: 初始化其他仓储
+		BaseContainer: base,
 	}
-}
-
-// GetUserRepository 获取用户仓储
-func (c *GateContainer) GetUserRepository() repository.UserRepository {
-	return c.userRepository
-}
-
-// GetRedis 获取 Redis 管理器（从基础容器继承）
-func (c *GateContainer) GetRedis() *database.RedisManager {
-	return c.BaseContainer.GetRedis()
-}
-
-// GetMongo 获取 Mongo 管理器（从基础容器继承）
-func (c *GateContainer) GetMongo() *database.MongoManager {
-	return c.BaseContainer.GetMongo()
 }
 
 // Close 关闭容器资源

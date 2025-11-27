@@ -56,8 +56,8 @@ type Manager struct {
 	data               map[string]any
 
 	clientBuckets     []*ClientBucket
-	ClientReadChan    chan *MessagePack
-	clientWorkers     []chan *MessagePack
+	ClientReadChan    chan *ConnectionPack
+	clientWorkers     []chan *ConnectionPack
 	clientHandlers    map[protocal.PackageType]PacketTypeHandler
 	bucketMask        uint32
 	clientWorkerCount int
@@ -84,7 +84,7 @@ func NewManager() *Manager {
 	workerCount := runtime.NumCPU() * 2
 
 	m := &Manager{
-		ClientReadChan:     make(chan *MessagePack, 2048),
+		ClientReadChan:     make(chan *ConnectionPack, 2048),
 		clientHandlers:     make(map[protocal.PackageType]PacketTypeHandler),
 		MiddleWorker:       node.NewNatsWorker(),
 		data:               make(map[string]any),
@@ -101,9 +101,9 @@ func NewManager() *Manager {
 	}
 
 	// 初始化客户端工作池
-	m.clientWorkers = make([]chan *MessagePack, workerCount)
+	m.clientWorkers = make([]chan *ConnectionPack, workerCount)
 	for i := range workerCount {
-		m.clientWorkers[i] = make(chan *MessagePack, 256)
+		m.clientWorkers[i] = make(chan *ConnectionPack, 256)
 	}
 
 	m.CheckOriginHandler = func(r *http.Request) bool {
@@ -119,7 +119,7 @@ func NewClientBucket() *ClientBucket {
 	}
 }
 
-func (m *Manager) Run(addr string) {
+func (m *Manager) Run(addr string) error {
 	log.Info("websocket manager 正在启动服务")
 	for i := range m.clientWorkerCount {
 		go m.clientWorkerRoutine(i)
@@ -129,9 +129,10 @@ func (m *Manager) Run(addr string) {
 	go m.monitorPerformance()
 	m.injectDefaultHandlers()
 
-	http.HandleFunc("/ws", m.upgradeFunc)
+	http.HandleFunc("/ws/", m.upgradeFunc) // 注意匹配子路径
 	log.Info("websocket manager 启动了 %d 个 worker 协程和 %d 个连接分片桶", m.clientWorkerCount, len(m.clientBuckets))
-	log.Fatal("connector listen serve err:%v", http.ListenAndServe(addr, nil))
+	log.Info("http 监听地址 %s", addr)
+	return http.ListenAndServe(addr, nil)
 }
 
 func (m *Manager) injectDefaultHandlers() {
@@ -160,17 +161,17 @@ func (m *Manager) upgradeFunc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var upgrader *websocket.Upgrader
+	var upgrade *websocket.Upgrader
 	if m.websocketUpgrade == nil {
-		upgrader = &websocketUpgrade
+		upgrade = &websocketUpgrade
 	} else {
-		upgrader = m.websocketUpgrade
+		upgrade = m.websocketUpgrade
 	}
 	header := w.Header()
 	header.Add("Server", "go-mahjong-soul")
 	log.Debug("WebSocket connection attempt from %s, User-Agent: %s", r.RemoteAddr, r.UserAgent())
 
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := upgrade.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error("websocket 升级失败, err:%#v", err)
 	}
@@ -191,7 +192,7 @@ func (m *Manager) addClient(client *LongConnection) {
 
 	select {
 	case m.connSemaphore <- struct{}{}:
-		bucket.RUnlock()
+		bucket.Lock()
 		bucket.clients[client.ConnID] = client
 		bucket.Unlock()
 
@@ -326,7 +327,7 @@ func (m *Manager) doPush(bye *[]byte, conn *Connection) error {
 	return (*conn).SendMessage(*bye) // 接口不能自动 (*). ?
 }
 
-func (m *Manager) dealPack(messagePack *MessagePack) {
+func (m *Manager) dealPack(messagePack *ConnectionPack) {
 	packet, err := protocal.Decode(messagePack.Body)
 	if err != nil {
 		atomic.AddInt64(&m.stats.messageErrors, 1)
@@ -374,6 +375,7 @@ func fnv32(key string) uint32 {
 // identifyUser 验证请求 URL 的 path
 func (m *Manager) identifyUser(r *http.Request) (string, string, error) {
 	if userID, ok := m.extractUserIDFromTestPath(r.URL.Path); ok {
+		// 测试白名单
 		return userID, "test-path", nil
 	}
 

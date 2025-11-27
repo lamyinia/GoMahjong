@@ -17,7 +17,7 @@ type Connection interface {
 	Close()
 }
 
-type MessagePack struct {
+type ConnectionPack struct {
 	ConnID string
 	Body   []byte
 }
@@ -35,7 +35,7 @@ type LongConnection struct {
 	ConnID        string
 	Conn          *websocket.Conn
 	manager       *Manager
-	ReadChan      chan *MessagePack
+	ReadChan      chan *ConnectionPack
 	WriteChan     chan []byte
 	Session       *Session
 	pingTicker    *time.Ticker
@@ -92,7 +92,7 @@ func (con *LongConnection) writeMessage() {
 	}
 }
 
-// 读取客户端消息，打包成 MessagePack
+// 读取客户端消息，打包成 ConnectionPack
 func (con *LongConnection) readMessage() {
 	defer func() {
 		log.Info("客户端[%s] 读事件停止", con.ConnID)
@@ -120,7 +120,7 @@ func (con *LongConnection) readMessage() {
 			log.Info("[%s] 收到二进制消息 %+v", con.ConnID, string(message))
 			if messageType == websocket.BinaryMessage {
 				select {
-				case con.ReadChan <- &MessagePack{ConnID: con.ConnID, Body: message}:
+				case con.ReadChan <- &ConnectionPack{ConnID: con.ConnID, Body: message}:
 				case <-con.closeChan:
 					log.Info("客户端[%s] 异常 while sending to channel", con.ConnID)
 					return

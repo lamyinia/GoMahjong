@@ -2,10 +2,11 @@ package conn
 
 import (
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 	"sync"
 	"sync/atomic"
+
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 )
 
 type LongConnectionPool struct {
@@ -30,7 +31,7 @@ func NewLongConnectionPool(maxSize int32) *LongConnectionPool {
 		New: func() interface{} {
 			atomic.AddInt64(&p.created, 1)
 			atomic.AddInt32(&p.count, 1)
-			return &LongConnectionPool{}
+			return &LongConnection{}
 		},
 	}
 	return p

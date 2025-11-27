@@ -27,7 +27,7 @@ var rootCmd = &cobra.Command{
 	Short: "player 玩家服务",
 	Long:  `player 玩家服务`,
 	Run: func(cmd *cobra.Command, args []string) {
-		config.InitConfig(configFile)
+		config.InitFixedConfig(configFile)
 		log.InitLog(identifier, logLevel)
 		log.Info("配置文件: %+v", config.Conf)
 

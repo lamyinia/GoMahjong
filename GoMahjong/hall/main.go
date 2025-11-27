@@ -23,7 +23,7 @@ var rootCmd = &cobra.Command{
 	Short: "hall 大厅相关的处理",
 	Long:  `hall 大厅相关的处理`,
 	Run: func(cmd *cobra.Command, args []string) {
-		config.InitConfig(configFile)
+		config.InitFixedConfig(configFile)
 		log.InitLog(identifier, logLevel)
 
 		log.Info(fmt.Sprintf("配置文件: %+v", config.Conf))

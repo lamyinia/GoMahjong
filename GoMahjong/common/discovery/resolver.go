@@ -51,8 +51,8 @@ func (r *Resolver) Build(target resolver.Target, clientConn resolver.ClientConn,
 	}
 	r.closeCh = make(chan struct{})
 
-	// 根据 key 获取 value
-	r.key = target.URL.Path
+	// 根据 key 获取 value，去掉前导 "/"
+	r.key = strings.TrimPrefix(target.URL.Path, "/")
 	if err = r.sync(); err != nil {
 		return nil, err
 	}

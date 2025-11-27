@@ -1,9 +1,13 @@
 package app
 
 import (
+	"common/config"
 	"common/log"
+	"common/rpc"
 	"context"
+	"fmt"
 	"framework/conn"
+	matchpb "march/pb"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,15 +15,32 @@ import (
 )
 
 func Run(ctx context.Context) error {
+	connectorConfig, err := config.InjectedConfig.GetConnectorConfig()
+	if err != nil {
+		log.Fatal("connectorConfig 配置文件出错")
+	}
+
+	// 初始化 RPC 客户端并检测 march gRPC 是否可达
+	rpc.Init()
+	if err := healthCheckMarch(connectorConfig.GetID()); err != nil {
+		log.Fatal("march RPC 健康检查失败: %v", err)
+	}
+	/*	err = rpcSelfTest(connectorConfig.GetID())
+		if err != nil {
+			log.Warn("rpcSelfTest: %#v", err)
+		}
+		return nil*/
+
+	connector := conn.NewConnector()
 
 	go func() {
-		connector := conn.NewConnector()
-		connector.Run("connector-001", 5000)
+		connector.Run(connectorConfig.GetID(), 5000)
 	}()
 
 	stop := func() {
 		_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		connector.Close()
 	}
 
 	c := make(chan os.Signal, 1)
@@ -44,4 +65,62 @@ func Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// healthCheckMarch 确保 march gRPC 可用
+func healthCheckMarch(connectorID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	req := &matchpb.QueryStatusRequest{
+		UserID: "health-check",
+	}
+
+	resp, err := rpc.MatchClient.QueryStatus(ctx, req)
+	if err != nil {
+		return fmt.Errorf("QueryStatus 调用失败: %w", err)
+	}
+	if resp == nil {
+		return fmt.Errorf("QueryStatus 返回为空")
+	}
+	// 如果返回未知状态，再尝试 JoinQueue + LeaveQueue，确保写入链路正常
+	if resp.GetStatus() == matchpb.QueryStatusResponse_STATUS_UNKNOWN {
+		joinReq := &matchpb.JoinQueueRequest{
+			UserID: "health-check",
+			NodeID: connectorID,
+		}
+		if _, err := rpc.MatchClient.JoinQueue(ctx, joinReq); err != nil {
+			return fmt.Errorf("JoinQueue 调用失败: %w", err)
+		}
+		// 最佳努力地移除，避免污染队列
+		_, _ = rpc.MatchClient.LeaveQueue(ctx, &matchpb.LeaveQueueRequest{
+			UserID: "health-check",
+		})
+	}
+
+	log.Info("march RPC 健康检查通过")
+	return nil
+}
+
+func rpcSelfTest(connectorID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	userID := "67473d339411b23c61f5a001"
+
+	//joinResp, err := rpc.MatchClient.JoinQueue(ctx, &matchpb.JoinQueueRequest{
+	//	UserID: userID,
+	//	NodeID: connectorID,
+	//})
+	//if err != nil || !joinResp.GetSuccess() {
+	//	return fmt.Errorf("JoinQueue 失败, resp=%+v err=%w", joinResp, err)
+	//}
+
+	leaveResp, err := rpc.MatchClient.LeaveQueue(ctx, &matchpb.LeaveQueueRequest{
+		UserID: userID,
+	})
+	if err != nil || !leaveResp.GetSuccess() {
+		return fmt.Errorf("LeaveQueue 失败, resp=%+v err=%w", leaveResp, err)
+	}
+	return nil
 }

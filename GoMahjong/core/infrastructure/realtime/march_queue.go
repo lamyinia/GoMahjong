@@ -24,8 +24,8 @@ const (
 // KEYS[1]: marchQueueKey (Sorted Set)
 // KEYS[2]: marchPlayerInfoKey (Hash)
 // ARGV[1]: count (需要取出的玩家数量)
-// 返回：字符串数组，格式为 ["userID1", "connectorTopic1", "userID2", "connectorTopic2", ...]
-// 在 Go 中解析为 map[userID]connectorTopic
+// 返回：字符串数组，格式为 ["userID1", "NodeID1", "userID2", "NodeID2", ...]
+// 在 Go 中解析为 map[userID]NodeID
 // 注意：如果队列中玩家数量不足，则不取出任何玩家，直接返回空数组
 var popPlayersScript = `
 local queueKey = KEYS[1]
@@ -51,19 +51,19 @@ for i = 1, #players, 2 do
     local userID = players[i]
     local score = players[i + 1]
     
-    -- 从 Hash 中获取 connectorTopic
-    local connectorTopic = redis.call('HGET', infoKey, userID)
-    if connectorTopic == false then
-        connectorTopic = ""
+    -- 从 Hash 中获取 NodeID
+    local NodeID = redis.call('HGET', infoKey, userID)
+    if NodeID == false then
+        NodeID = ""
     end
     
     -- 从队列中移除
     redis.call('ZREM', queueKey, userID)
     redis.call('HDEL', infoKey, userID)
     
-    -- 添加到结果数组（userID, connectorTopic 成对出现）
+    -- 添加到结果数组（userID, NodeID 成对出现）
     table.insert(result, userID)
-    table.insert(result, connectorTopic)
+    table.insert(result, NodeID)
 end
 
 return result
@@ -113,7 +113,7 @@ func (r *RedisMarchQueueRepository) getClient() (redis.Cmdable, error) {
 }
 
 // JoinQueue 加入匹配队列（按段位）
-func (r *RedisMarchQueueRepository) JoinQueue(ctx context.Context, userID, connectorTopic string, ranking vo.RankingType, score float64) error {
+func (r *RedisMarchQueueRepository) JoinQueue(ctx context.Context, userID, NodeID string, ranking vo.RankingType, score float64) error {
 	cli, err := r.getClient()
 	if err != nil {
 		return err
@@ -140,7 +140,7 @@ func (r *RedisMarchQueueRepository) JoinQueue(ctx context.Context, userID, conne
 		Member: userID,
 	})
 	// 2. 保存玩家信息到 Hash
-	pipe.HSet(ctx, playerInfoKey, userID, connectorTopic)
+	pipe.HSet(ctx, playerInfoKey, userID, NodeID)
 	// 3. 设置 Hash 过期时间（防止内存泄漏）
 	pipe.Expire(ctx, playerInfoKey, marchPlayerInfoTTL)
 
@@ -263,8 +263,8 @@ func (r *RedisMarchQueueRepository) PopPlayers(ctx context.Context, ranking vo.R
 	for i := 0; i < len(strArray); i += 2 {
 		if i+1 < len(strArray) {
 			userID := strArray[i]
-			connectorTopic := strArray[i+1]
-			resultMap[userID] = connectorTopic
+			NodeID := strArray[i+1]
+			resultMap[userID] = NodeID
 		}
 	}
 

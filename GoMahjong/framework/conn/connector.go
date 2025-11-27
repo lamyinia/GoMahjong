@@ -1,6 +1,7 @@
 package conn
 
 import (
+	"common/config"
 	"common/log"
 )
 
@@ -35,12 +36,16 @@ func (connector *Connector) Run(topic string, maxConn int) {
 		connector.manager = NewManager()
 		connector.manager.LocalHandlers = connector.handlers
 
-		// TODO 使用集群配置文件的 url
-		// connector.manager.MiddleWorker.RegisterHandlers(nil)
-		connector.manager.MiddleWorker.Run("nats://localhost:4222", topic)
+		err := connector.manager.MiddleWorker.Run(config.InjectedConfig.Nats.URL, topic)
+		if err != nil {
+			log.Fatal("nats 启动失败")
+		}
 
 		addr := "localhost:8082"
-		connector.manager.Run(addr)
+		err = connector.manager.Run(addr)
+		if err != nil {
+			log.Fatal("manager 启动失败")
+		}
 	}
 }
 

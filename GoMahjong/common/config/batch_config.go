@@ -53,20 +53,14 @@ func (b *BaseNodeConfig) GetServerType() string {
 	return b.ServerType
 }
 
-// MarchConfig March 服务配置
 type MarchConfig struct {
 	BaseNodeConfig
-	// March 特有的配置字段可以在这里添加
 }
 
-// GameConfig Game 服务配置
 type GameConfig struct {
 	BaseNodeConfig
-	UniqueTopic string `json:"uniqueTopic"` // Game 特有的字段
-	// Game 其他特有配置字段可以在这里添加
 }
 
-// ConnectorConfig Connector 服务配置
 type ConnectorConfig struct {
 	BaseNodeConfig
 	Host       string `json:"host"`
@@ -85,9 +79,8 @@ type NatsConfig struct {
 	URL string `json:"url" mapstructure:"url"`
 }
 
-func InitBatchConfig() {
+func InitDynamicConfig(nodeID string) {
 
-	// 尝试多个可能的配置目录路径
 	possiblePaths := []string{
 		"common/config/json",    // 从项目根目录运行
 		"../common/config/json", // 从子目录（如 march/）运行
@@ -100,7 +93,6 @@ func InitBatchConfig() {
 	for _, p := range possiblePaths {
 		dir, err := os.ReadDir(p)
 		if err == nil {
-			// 验证是否包含 servers.json
 			found := false
 			for _, v := range dir {
 				if v.Name() == servers {
@@ -116,7 +108,6 @@ func InitBatchConfig() {
 	}
 
 	if configDir == "" {
-		// 如果所有路径都失败，尝试获取当前工作目录并构建路径
 		cwd, _ := os.Getwd()
 		log.Fatal("无法找到配置文件目录，当前工作目录: %s，尝试过的路径: %v", cwd, possiblePaths)
 		return
@@ -133,13 +124,16 @@ func InitBatchConfig() {
 			readServersConfig(configFile)
 		}
 	}
+
+	if err := InjectedConfig.SetLocalConfig(nodeID); err != nil {
+		log.Fatal(fmt.Sprintf("设置本地配置失败: %v", err))
+		os.Exit(-1)
+	}
 }
 
-// serversConfigRaw 用于解析 JSON 的临时结构
 type serversConfigRaw struct {
-	Nats      NatsConfig               `json:"nats"`
-	Connector []map[string]interface{} `json:"connector"`
-	Servers   []map[string]interface{} `json:"servers"`
+	Nats    NatsConfig               `json:"nats"`
+	Servers []map[string]interface{} `json:"servers"`
 }
 
 func readServersConfig(configFile string) {
@@ -183,27 +177,14 @@ func readServersConfig(configFile string) {
 }
 
 func parseAndSetConfigs(raw *serversConfigRaw) {
-
 	configs := Configs{
 		Nats:           raw.Nats,
 		ClusterConfigs: make([]NodeConfig, 0),
 		LocalConfig:    nil,
 	}
 
-	// 解析 connector 配置
-	for _, item := range raw.Connector {
-		connector := &ConnectorConfig{}
-		if err := parseNodeConfig(item, connector); err != nil {
-			log.Warn("解析 Connector 配置失败", "error", err)
-			continue
-		}
-		connector.Inherit()
-		configs.ClusterConfigs = append(configs.ClusterConfigs, connector)
-	}
-
 	// 解析 servers 配置
 	for _, item := range raw.Servers {
-		// 检查 serverType 是否存在，并正确进行类型断言
 		serverTypeVal, exists := item["serverType"]
 		if !exists {
 			log.Warn("配置项缺少 serverType 字段", "item", item)
@@ -232,8 +213,15 @@ func parseAndSetConfigs(raw *serversConfigRaw) {
 			}
 			march.Inherit()
 			node = march
+		case "connector":
+			connector := &ConnectorConfig{}
+			if err := parseNodeConfig(item, connector); err != nil {
+				log.Warn("解析 connector 配置失败", "error", err)
+				continue
+			}
+			connector.Inherit()
+			node = connector
 		default:
-			// 如果没有 serverType 或类型未知，尝试作为通用配置解析，暂时跳过
 			log.Warn("未知的 serverType", "serverType", serverType)
 			continue
 		}

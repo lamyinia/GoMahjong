@@ -1,8 +1,7 @@
-package march
+package discovery
 
 import (
 	"common/config"
-	"common/discovery"
 	"common/log"
 	"context"
 	"errors"
@@ -17,30 +16,31 @@ const (
 )
 
 type NodeSelector struct {
-	seeker      *discovery.Seeker
-	gameServers []discovery.Server
-	strategy    discovery.LoadBalanceStrategy
+	seeker      *Seeker
+	gameServers []Server
+	strategy    LoadBalanceStrategy
 	mu          sync.RWMutex
 	serviceName string
 }
 
 // NewNodeSelector 创建节点选择器
 // strategy: 负载均衡策略
-func NewNodeSelector(strategy discovery.LoadBalanceStrategy) (*NodeSelector, error) {
-	seeker, err := discovery.NewSeeker(config.Conf.EtcdConf)
+func NewNodeSelector(strategy LoadBalanceStrategy) (*NodeSelector, error) {
+	seeker, err := NewSeeker(config.Conf.EtcdConf)
 	if err != nil {
 		return nil, fmt.Errorf("创建服务发现客户端失败: %v", err)
 	}
 
 	ns := &NodeSelector{
 		seeker:      seeker,
-		gameServers: make([]discovery.Server, 0),
+		gameServers: make([]Server, 0),
 		strategy:    strategy,
 		serviceName: gameServiceName,
 	}
 
 	// 立即获取一次全量列表（初始化）
 	servers, err := seeker.GetServers(gameServiceName)
+	log.Info("全量拉取游戏节点: %#v", servers)
 	if err != nil {
 		seeker.Close()
 		return nil, fmt.Errorf("初始化获取 game 节点列表失败: %v", err)
@@ -67,7 +67,6 @@ func (ns *NodeSelector) watchNodes() {
 			log.Warn("NodeSelector watch 被取消")
 			return
 		}
-		// 处理增量更新
 		ns.handleWatchEvents(watchResp.Events)
 	}
 }
@@ -82,7 +81,7 @@ func (ns *NodeSelector) handleWatchEvents(events []*clientv3.Event) {
 		switch ev.Type {
 		case clientv3.EventTypePut:
 			// 添加或更新节点
-			server, err := discovery.ParseValue(ev.Kv.Value)
+			server, err := ParseValue(ev.Kv.Value)
 			if err != nil {
 				log.Error(fmt.Sprintf("NodeSelector 解析节点信息失败, key=%s, err=%v", string(ev.Kv.Key), err))
 				continue
@@ -96,13 +95,12 @@ func (ns *NodeSelector) handleWatchEvents(events []*clientv3.Event) {
 					ns.gameServers[i] = server
 					found = true
 					updated = true
-					log.Info(fmt.Sprintf("NodeSelector 更新 game 节点: %s, Load=%.2f", server.Addr, server.Load))
+					log.Debug(fmt.Sprintf("NodeSelector 更新 game 节点: %s, Load=%.2f", server.Addr, server.Load))
 					break
 				}
 			}
 
 			if !found {
-				// 添加新节点
 				ns.gameServers = append(ns.gameServers, server)
 				updated = true
 				log.Info(fmt.Sprintf("NodeSelector 新增 game 节点: %s, Load=%.2f", server.Addr, server.Load))
@@ -110,7 +108,7 @@ func (ns *NodeSelector) handleWatchEvents(events []*clientv3.Event) {
 
 		case clientv3.EventTypeDelete:
 			// 删除节点
-			server, err := discovery.ParseKey(string(ev.Kv.Key))
+			server, err := ParseKey(string(ev.Kv.Key))
 			if err != nil {
 				log.Error(fmt.Sprintf("NodeSelector 解析删除节点 key 失败, key=%s, err=%v", string(ev.Kv.Key), err))
 				continue
@@ -131,17 +129,17 @@ func (ns *NodeSelector) handleWatchEvents(events []*clientv3.Event) {
 	}
 
 	if updated {
-		log.Info(fmt.Sprintf("NodeSelector 节点列表已更新, 当前共有 %d 个 game 节点", len(ns.gameServers)))
+		log.Debug(fmt.Sprintf("NodeSelector 节点列表已更新, 当前共有 %d 个 game 节点", len(ns.gameServers)))
 	}
 }
 
 // SelectGameNode 选择 game 节点（根据负载均衡策略）
-func (ns *NodeSelector) SelectGameNode(ctx context.Context) (*discovery.Server, error) {
+func (ns *NodeSelector) SelectGameNode(ctx context.Context) (*Server, error) {
 	ns.mu.RLock()
 	defer ns.mu.RUnlock()
 
 	// 过滤掉 Load <= 0 的节点（不健康的节点）
-	healthyServers := make([]discovery.Server, 0, len(ns.gameServers))
+	healthyServers := make([]Server, 0, len(ns.gameServers))
 	for _, server := range ns.gameServers {
 		if server.Load > 0 {
 			healthyServers = append(healthyServers, server)
@@ -153,7 +151,7 @@ func (ns *NodeSelector) SelectGameNode(ctx context.Context) (*discovery.Server, 
 	}
 
 	// 使用负载均衡策略选择节点
-	selected, err := discovery.SelectServer(healthyServers, ns.strategy)
+	selected, err := SelectServer(healthyServers, ns.strategy)
 	if err != nil {
 		return nil, fmt.Errorf("选择 game 节点失败: %v", err)
 	}
@@ -163,22 +161,22 @@ func (ns *NodeSelector) SelectGameNode(ctx context.Context) (*discovery.Server, 
 }
 
 // GetGameNodes 获取所有 game 节点列表（包括不健康的节点）
-func (ns *NodeSelector) GetGameNodes() []discovery.Server {
+func (ns *NodeSelector) GetGameNodes() []Server {
 	ns.mu.RLock()
 	defer ns.mu.RUnlock()
 
 	// 返回副本，避免外部修改
-	result := make([]discovery.Server, len(ns.gameServers))
+	result := make([]Server, len(ns.gameServers))
 	copy(result, ns.gameServers)
 	return result
 }
 
 // GetHealthyGameNodes 获取所有健康的 game 节点列表（Load > 0）
-func (ns *NodeSelector) GetHealthyGameNodes() []discovery.Server {
+func (ns *NodeSelector) GetHealthyGameNodes() []Server {
 	ns.mu.RLock()
 	defer ns.mu.RUnlock()
 
-	healthyServers := make([]discovery.Server, 0)
+	healthyServers := make([]Server, 0)
 	for _, server := range ns.gameServers {
 		if server.Load > 0 {
 			healthyServers = append(healthyServers, server)
@@ -188,7 +186,7 @@ func (ns *NodeSelector) GetHealthyGameNodes() []discovery.Server {
 }
 
 // UpdateStrategy 更新负载均衡策略
-func (ns *NodeSelector) UpdateStrategy(strategy discovery.LoadBalanceStrategy) {
+func (ns *NodeSelector) UpdateStrategy(strategy LoadBalanceStrategy) {
 	ns.mu.Lock()
 	defer ns.mu.Unlock()
 	ns.strategy = strategy
