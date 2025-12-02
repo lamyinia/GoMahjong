@@ -3,20 +3,18 @@ package march
 import (
 	"common/log"
 	"context"
-	"encoding/json"
 	"fmt"
-	"march/application/service"
+	"framework/march/application/service"
 	"sync"
 	"time"
 
 	"core/domain/vo"
 	"framework/node"
-	"framework/protocal"
-	"framework/stream"
+	pb "game/pb"
 )
 
 /*
-	进入大厅时，如果需要记录 user 的上下线状态、
+	进入大厅时，需要记录 user 的上下线状态、
 	游戏进行时，需要记录 user 和 game 节点的映射，为重连机制做保障
 */
 
@@ -35,11 +33,6 @@ const (
 	maxWaitTime   = 10 * time.Minute // 队列超时：10分钟
 )
 
-// CreateRoomMessage 发送给 game 节点的房间创建消息
-type CreateRoomMessage struct {
-	Players map[string]string `json:"players"` // userID -> connectorTopic
-}
-
 // MatchSuccessMessage 发送给玩家的匹配成功消息
 // 注意：connector 不需要知道 roomID，因为 game 节点内部会自己维护索引
 type MatchSuccessMessage struct {
@@ -50,6 +43,7 @@ type MatchSuccessMessage struct {
 type Worker struct {
 	matchService  service.MatchService
 	natsWorker    *node.NatsWorker
+	gameConnPool  *GameConnPool                    // gRPC 连接池
 	NodeID        string                           // 当前 march 节点 ID（用于 NATS topic）
 	stopChan      chan struct{}                    // 停止信号
 	matchTriggers map[vo.RankingType]chan struct{} // 段位 -> 匹配触发 channel
@@ -60,6 +54,7 @@ func NewWorker(matchService service.MatchService, nodeID string) *Worker {
 	return &Worker{
 		matchService: matchService,
 		natsWorker:   node.NewNatsWorker(),
+		gameConnPool: NewGameConnPool(),
 		NodeID:       nodeID,
 		stopChan:     make(chan struct{}),
 	}
@@ -120,9 +115,9 @@ func (w *Worker) matchLoopByRanking(ctx context.Context, ranking vo.RankingType)
 	}
 }
 
-// doMatch 执行一次匹配（按段位）
-func (w *Worker) doMatch(ctx context.Context, ranking vo.RankingType, displayName string) {
-	result, err := w.matchService.MatchByRanking(ctx, ranking)
+// doMatch 对某一种匹配队列，执行一次匹配
+func (w *Worker) doMatch(ctx context.Context, rankingType vo.RankingType, displayName string) {
+	result, err := w.matchService.MatchByRanking(ctx, rankingType)
 	if err != nil {
 		log.Error(fmt.Sprintf("March Worker 段位 %s 匹配失败: %v", displayName, err))
 		return
@@ -138,88 +133,49 @@ func (w *Worker) doMatch(ctx context.Context, ranking vo.RankingType, displayNam
 }
 
 // handleMatchSuccess 处理匹配成功
-// 1. 发送房间创建消息到 game 节点
-// 2. 推送匹配成功消息给所有玩家
+// 通过 gRPC 调用 Game 节点创建房间
 func (w *Worker) handleMatchSuccess(ctx context.Context, result *service.MatchResult) error {
-	// 1. 发送房间创建消息到 game 节点
-	gameTopic := fmt.Sprintf("game:%s", result.GameNodeID)
-	if err := w.sendCreateRoomMessage(ctx, gameTopic, result.Players); err != nil {
-		return fmt.Errorf("发送房间创建消息失败: %w", err)
+	// 通过 gRPC 调用 Game 节点创建房间
+	if err := w.callGameCreateRoom(ctx, result.GameNodeAddr, result.Players); err != nil {
+		// 这里可以考虑重新放进匹配队列，或者通知匹配异常
+		return fmt.Errorf("调用 Game 创建房间失败: %w", err)
 	}
 
-	// 2. 推送匹配成功消息给所有玩家
-	matchSuccessMsg := MatchSuccessMessage{
-		GameNodeTopic: gameTopic,
-		PlayerIDs:     make([]string, 0, len(result.Players)),
-	}
-	for userID := range result.Players {
-		matchSuccessMsg.PlayerIDs = append(matchSuccessMsg.PlayerIDs, userID)
-	}
-
-	msgData, err := json.Marshal(matchSuccessMsg)
-	if err != nil {
-		return fmt.Errorf("序列化匹配成功消息失败: %w", err)
-	}
-
-	// 向每个玩家推送匹配成功消息
-	for userID, connectorTopic := range result.Players {
-		if err := w.pushMatchSuccessMessage(userID, connectorTopic, msgData); err != nil {
-			log.Error(fmt.Sprintf("March Worker 推送匹配成功消息给玩家 %s 失败: %v", userID, err))
-			// 继续推送其他玩家，不中断
-		}
-	}
-
-	log.Info(fmt.Sprintf("March Worker 匹配成功处理完成: gameNode=%s, players=%d", result.GameNodeID, len(result.Players)))
+	log.Info(fmt.Sprintf("March Worker 匹配成功处理完成: gameNode=%s, players=%d", result.GameNodeAddr, len(result.Players)))
 	return nil
 }
 
-// sendCreateRoomMessage 发送房间创建消息到 game 节点
-func (w *Worker) sendCreateRoomMessage(ctx context.Context, gameTopic string, players map[string]string) error {
-	createRoomMsg := CreateRoomMessage{
-		Players: players,
-	}
+// callGameCreateRoom 通过 gRPC 调用 Game 节点创建房间
+func (w *Worker) callGameCreateRoom(ctx context.Context, gameNodeAddr string, players map[string]string) error {
+	// 使用立直麻将 4 人引擎（暂时硬编码，后续可配置）
+	const RIICHI_MAHJONG_4P_ENGINE = 0
 
-	msgData, err := json.Marshal(createRoomMsg)
+	// 获取 Game 节点的 gRPC 客户端
+	client, err := w.gameConnPool.GetClient(gameNodeAddr)
 	if err != nil {
-		return fmt.Errorf("序列化房间创建消息失败: %w", err)
+		return fmt.Errorf("获取 Game 客户端失败: %v", err)
 	}
 
-	packet := &stream.ServicePacket{
-		Source:      w.NodeID,
-		Destination: gameTopic,
-		Route:       "game.room.create",
-		Body: &protocal.Message{
-			Type: protocal.Notify, // 通知类型，不需要响应
-			Data: msgData,
-		},
+	// 构建 gRPC 请求
+	req := &pb.CreateRoomRequest{
+		Players:    players,
+		EngineType: int32(RIICHI_MAHJONG_4P_ENGINE),
 	}
 
-	if err := w.natsWorker.PushMessage(packet); err != nil {
-		return fmt.Errorf("推送房间创建消息失败: %w", err)
+	// 调用 Game 的 CreateRoom RPC（超时 5 秒）
+	callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	resp, err := client.CreateRoom(callCtx, req)
+	if err != nil {
+		return fmt.Errorf("调用 Game.CreateRoom RPC 失败: %v", err)
 	}
 
-	log.Info(fmt.Sprintf("March Worker 发送房间创建消息到 game 节点: %s, 玩家数: %d", gameTopic, len(players)))
-	return nil
-}
-
-// pushMatchSuccessMessage 推送匹配成功消息给玩家
-func (w *Worker) pushMatchSuccessMessage(userID, connectorTopic string, msgData []byte) error {
-	packet := &stream.ServicePacket{
-		Source:      w.NodeID,
-		Destination: connectorTopic,
-		Route:       "march.match.success",
-		UserID:      userID,
-		Body: &protocal.Message{
-			Type: protocal.Push, // 推送类型
-			Data: msgData,
-		},
+	if !resp.Success {
+		return fmt.Errorf("Game 创建房间失败: %s", resp.Message)
 	}
 
-	if err := w.natsWorker.PushMessage(packet); err != nil {
-		return fmt.Errorf("推送匹配成功消息失败: %w", err)
-	}
-
-	log.Debug(fmt.Sprintf("March Worker 推送匹配成功消息给玩家: userID=%s, connectorTopic=%s", userID, connectorTopic))
+	log.Info(fmt.Sprintf("March Worker 通过 gRPC 创建房间成功: gameNodeAddr=%s, roomID=%s, players=%d", gameNodeAddr, resp.RoomID, len(players)))
 	return nil
 }
 
@@ -260,7 +216,14 @@ func (w *Worker) Close() error {
 	// 3. 等待所有匹配循环 goroutine 结束
 	w.wg.Wait()
 
-	// 4. 关闭 NATS Worker
+	// 4. 关闭 gRPC 连接池
+	if w.gameConnPool != nil {
+		if err := w.gameConnPool.Close(); err != nil {
+			log.Error(fmt.Sprintf("March Worker[%s] 关闭 gRPC 连接池失败: %v", w.NodeID, err))
+		}
+	}
+
+	// 5. 关闭 NATS Worker
 	if w.natsWorker != nil {
 		w.natsWorker.Close()
 	}

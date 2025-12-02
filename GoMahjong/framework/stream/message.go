@@ -11,13 +11,10 @@ type SessionData struct {
 }
 
 type ServicePacket struct {
-	ConnID      string
 	Body        *protocal.Message
 	Source      string
 	Destination string
 	Route       string
-	UserID      string
-	ConnectorID string
 	SessionData *SessionData
 	SessionType SessionType
 	PushUser    []string

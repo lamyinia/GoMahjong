@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"framework/game/application/service"
 	"framework/node"
 	"framework/protocal"
 	"framework/stream"
@@ -22,11 +23,6 @@ import (
 		(4)收到断线重连通知，给请求短线重连的玩家，发送数据快照
 	3.游戏结束时，更新排名积分，持久化对战记录，删除房间实例，推送游戏结束通知
 */
-
-// CreateRoomMessage march 发送的房间创建消息
-type CreateRoomMessage struct {
-	Players map[string]string `json:"players"` // userID -> connectorTopic
-}
 
 // GameMessage connector 发送的游戏消息
 type GameMessage struct {
@@ -45,7 +41,8 @@ type Worker struct {
 	MiddleWorker *node.NatsWorker
 	Monitor      *Monitor
 	Registry     *discovery.Registry
-	nodeID       string // 当前 game 节点 ID（用于 NATS topic）
+	GameService  service.GameService // 游戏服务
+	nodeID       string              // 当前 game 节点 ID（用于 NATS topic）
 }
 
 // NewWorker 创建 Worker
@@ -55,13 +52,18 @@ func NewWorker(nodeID string) *Worker {
 	registry := discovery.NewRegistry()
 	monitor := NewMonitor(roomManager, registry, 5*time.Second) // 5秒更新一次负载
 
-	return &Worker{
+	worker := &Worker{
 		RoomManager:  roomManager,
 		MiddleWorker: node.NewNatsWorker(),
 		Monitor:      monitor,
 		Registry:     registry,
 		nodeID:       nodeID,
 	}
+
+	// 创建 GameService 并注入 Worker 引用
+	worker.GameService = service.NewGameService(roomManager, worker)
+
+	return worker
 }
 
 // Start 启动 Worker
@@ -86,7 +88,7 @@ func (w *Worker) Start(ctx context.Context, natsURL string, etcdConf config.Etcd
 	log.Info(fmt.Sprintf("Game Worker[%s] 启动 NATS 监听成功, topic: %s", w.nodeID, w.nodeID))
 
 	// 4. 启动 Monitor 负载上报
-	go w.Monitor.Start(ctx)
+	go w.Monitor.Report(ctx)
 
 	log.Info(fmt.Sprintf("Game Worker[%s] 启动成功", w.nodeID))
 	return nil
@@ -95,9 +97,6 @@ func (w *Worker) Start(ctx context.Context, natsURL string, etcdConf config.Etcd
 // registerHandlers 注册消息处理器
 func (w *Worker) registerHandlers() {
 	handlers := make(node.LogicHandler)
-
-	// 处理来自 march 的房间创建消息
-	handlers["game.room.create"] = w.handleCreateRoom
 
 	// 处理来自 connector 的游戏消息
 	handlers["game.play"] = w.handleGameMessage
@@ -111,7 +110,7 @@ func (w *Worker) registerHandlers() {
 
 // handleCreateRoom 处理房间创建消息（来自 march）
 func (w *Worker) handleCreateRoom(data []byte) interface{} {
-	var msg CreateRoomMessage
+	var msg service.CreateRoomReq
 	if err := json.Unmarshal(data, &msg); err != nil {
 		log.Error(fmt.Sprintf("Game Worker 解析房间创建消息失败: %v", err))
 		return map[string]interface{}{
@@ -120,8 +119,8 @@ func (w *Worker) handleCreateRoom(data []byte) interface{} {
 		}
 	}
 
-	// 创建房间
-	room, err := w.RoomManager.CreateRoom(msg.Players)
+	// 传递 engineType 参数
+	room, err := w.RoomManager.CreateRoom(msg.Players, msg.EngineType)
 	if err != nil {
 		log.Error(fmt.Sprintf("Game Worker 创建房间失败: %v", err))
 		return map[string]interface{}{
@@ -130,7 +129,7 @@ func (w *Worker) handleCreateRoom(data []byte) interface{} {
 		}
 	}
 
-	log.Info(fmt.Sprintf("Game Worker 创建房间成功: %s, 玩家数: %d", room.ID, len(msg.Players)))
+	log.Info(fmt.Sprintf("Game Worker 创建房间成功: %s, 玩家数: %d, 引擎类型: %d", room.ID, len(msg.Players), msg.EngineType))
 
 	return map[string]interface{}{
 		"success": true,
@@ -214,12 +213,9 @@ func (w *Worker) handleReconnect(data []byte) interface{} {
 }
 
 // PushMessage 主动推送消息给指定玩家
-// userID: 目标用户 ID
-// route: 消息路由
-// data: 消息数据
 func (w *Worker) PushMessage(userID, route string, data []byte) error {
 	// 获取玩家的 connector topic
-	connectorTopic, exists := w.RoomManager.GetPlayerConnector(userID)
+	dest, exists := w.RoomManager.GetPlayerConnector(userID)
 	if !exists {
 		return fmt.Errorf("玩家 %s 不在任何房间中或 connector topic 不存在", userID)
 	}
@@ -227,10 +223,9 @@ func (w *Worker) PushMessage(userID, route string, data []byte) error {
 	// 构建 ServicePacket
 	packet := &stream.ServicePacket{
 		Source:      w.nodeID,
-		Destination: connectorTopic,
+		Destination: dest,
 		Route:       route,
-		UserID:      userID,
-		ConnectorID: connectorTopic,
+		PushUser:    []string{userID},
 		Body: &protocal.Message{
 			Type:  protocal.Push,
 			Route: route,
@@ -244,7 +239,7 @@ func (w *Worker) PushMessage(userID, route string, data []byte) error {
 		return fmt.Errorf("推送消息失败: %v", err)
 	}
 
-	log.Info(fmt.Sprintf("Game Worker 推送消息给玩家 %s, route: %s, connector: %s", userID, route, connectorTopic))
+	log.Info(fmt.Sprintf("Game Worker 推送消息给玩家 %s, route: %s, connector: %s", userID, route, dest))
 	return nil
 }
 

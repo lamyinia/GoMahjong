@@ -1,12 +1,11 @@
 package app
 
 import (
-	"common/config"
 	"common/log"
 	"common/rpc"
 	"context"
+	"core/container"
 	"fmt"
-	"framework/conn"
 	matchpb "march/pb"
 	"os"
 	"os/signal"
@@ -15,32 +14,45 @@ import (
 )
 
 func Run(ctx context.Context) error {
-	connectorConfig, err := config.InjectedConfig.GetConnectorConfig()
-	if err != nil {
-		log.Fatal("connectorConfig 配置文件出错")
+	// 1. 创建容器（管理所有依赖）
+	connectorContainer := container.NewConnectorContainer()
+	defer connectorContainer.Close()
+
+	// 2. 从容器获取配置和 Worker
+	connectorConfig := connectorContainer.GetConnectorConfig()
+	cfg, ok := connectorConfig.(interface{ GetID() string })
+	if !ok || cfg == nil {
+		log.Fatal("connector 配置类型错误")
+		return nil
 	}
 
-	// 初始化 RPC 客户端并检测 march gRPC 是否可达
+	// 3. 初始化 RPC 客户端并检测 march gRPC 是否可达
 	rpc.Init()
-	if err := healthCheckMarch(connectorConfig.GetID()); err != nil {
+	if err := healthCheckMarch(cfg.GetID()); err != nil {
 		log.Fatal("march RPC 健康检查失败: %v", err)
 	}
-	/*	err = rpcSelfTest(connectorConfig.GetID())
-		if err != nil {
-			log.Warn("rpcSelfTest: %#v", err)
-		}
-		return nil*/
 
-	connector := conn.NewConnector()
+	// 4. 从容器获取 Worker（已注入所有依赖）
+	worker := connectorContainer.GetWorker()
+	if worker == nil {
+		log.Fatal("Worker 获取失败")
+		return nil
+	}
 
+	// 5. 启动 Worker
 	go func() {
-		connector.Run(connectorConfig.GetID(), 5000)
+		addr := "localhost:8082"
+		if err := worker.Run(cfg.GetID(), 5000, addr); err != nil {
+			log.Fatal("worker 启动失败: %v", err)
+		}
 	}()
 
+	// 6. 优雅关闭处理
 	stop := func() {
 		_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		connector.Close()
+		worker.Close()
+		log.Info("Worker 已关闭")
 	}
 
 	c := make(chan os.Signal, 1)

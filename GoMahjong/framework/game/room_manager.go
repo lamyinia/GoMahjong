@@ -25,8 +25,9 @@ func NewRoomManager() *RoomManager {
 
 // CreateRoom 创建房间并添加玩家
 // players: 玩家列表，格式为 map[userID]connectorTopic
+// engineType: 游戏引擎类型
 // 返回：房间实例和错误
-func (rm *RoomManager) CreateRoom(players map[string]string) (*Room, error) {
+func (rm *RoomManager) CreateRoom(players map[string]string, engineType int32) (*Room, error) {
 	if len(players) == 0 {
 		return nil, errors.New("玩家列表不能为空")
 	}
@@ -45,12 +46,15 @@ func (rm *RoomManager) CreateRoom(players map[string]string) (*Room, error) {
 		}
 	}
 
-	// 创建新房间
-	room := NewRoom()
+	// 创建新房间（传递 engineType）
+	room, err := NewRoom(engineType)
+	if err != nil {
+		return nil, fmt.Errorf("创建房间失败: %v", err)
+	}
 
 	// 添加玩家到房间
-	for userID, connectorTopic := range players {
-		seatIndex, err := room.AddPlayer(userID, connectorTopic)
+	for userID, connectorNodeID := range players {
+		seatIndex, err := room.AddPlayer(userID, connectorNodeID)
 		if err != nil {
 			// 如果添加失败，清理已添加的玩家
 			rm.cleanupRoom(room.ID)
@@ -59,13 +63,20 @@ func (rm *RoomManager) CreateRoom(players map[string]string) (*Room, error) {
 
 		// 更新路由映射
 		rm.playerRoom[userID] = room.ID
-		log.Info(fmt.Sprintf("RoomManager 玩家 %s 路由到房间 %s，connector: %s，座位: %d", userID, room.ID, connectorTopic, seatIndex))
+		log.Info(fmt.Sprintf("RoomManager 玩家 %s 路由到房间 %s，connector: %s，座位: %d", userID, room.ID, connectorNodeID, seatIndex))
+	}
+
+	// 初始化游戏引擎
+	playerInfos := room.GetAllPlayers()
+	if err := room.Engine.Initialize(playerInfos); err != nil {
+		rm.cleanupRoom(room.ID)
+		return nil, fmt.Errorf("初始化游戏引擎失败: %v", err)
 	}
 
 	// 保存房间
 	rm.rooms[room.ID] = room
 
-	log.Info(fmt.Sprintf("RoomManager 创建房间 %s，玩家数: %d", room.ID, len(players)))
+	log.Info(fmt.Sprintf("RoomManager 创建房间 %s，玩家数: %d，引擎类型: %d", room.ID, len(players), engineType))
 	return room, nil
 }
 

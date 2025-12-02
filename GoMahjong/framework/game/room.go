@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"framework/game/engines"
 	"sync"
 	"time"
 )
@@ -13,12 +14,12 @@ const (
 	MaxPlayers = 4 // 麻将4人游戏
 )
 
-// Room 游戏房间
-// 管理房间内的玩家和游戏状态
+// Room 游戏房间 管理房间内的玩家和游戏状态
 type Room struct {
 	ID        string                 // 房间 ID
 	Players   map[string]*PlayerInfo // playerID -> PlayerInfo
 	Status    RoomStatus             // 房间状态
+	Engine    engines.Engine         // 游戏引擎
 	Snapshot  interface{}            // 游戏快照（用于断线重连）
 	CreatedAt time.Time              // 创建时间
 	mu        sync.RWMutex           // 保护 Players 的读写锁
@@ -44,28 +45,31 @@ func GenerateRoomID() string {
 }
 
 // NewRoom 创建新房间
-func NewRoom() *Room {
+// engineType: 游戏引擎类型
+func NewRoom(engineType int32) (*Room, error) {
+	// 创建游戏引擎
+	engine, err := engines.NewEngine(engineType)
+	if err != nil {
+		return nil, fmt.Errorf("创建游戏引擎失败: %v", err)
+	}
+
 	return &Room{
 		ID:        GenerateRoomID(),
 		Players:   make(map[string]*PlayerInfo),
 		Status:    RoomStatusWaiting,
+		Engine:    engine,
 		Snapshot:  nil,
 		CreatedAt: time.Now(),
-	}
+	}, nil
 }
 
 // AddPlayer 添加玩家到房间
 // userID: 用户 ID
-// connectorTopic: connector 的 topic（用于主动推送消息）
+// connectorNodeID: connector 的 topic（用于主动推送消息）
 // 返回：座位索引和错误
-func (r *Room) AddPlayer(userID, connectorTopic string) (int, error) {
+func (r *Room) AddPlayer(userID, connectorNodeID string) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	// 检查房间是否已满
-	if len(r.Players) >= MaxPlayers {
-		return -1, fmt.Errorf("房间已满，最多 %d 人", MaxPlayers)
-	}
 
 	// 检查玩家是否已在房间中
 	if _, exists := r.Players[userID]; exists {
@@ -84,7 +88,7 @@ func (r *Room) AddPlayer(userID, connectorTopic string) (int, error) {
 	}
 
 	// 创建玩家信息
-	player := NewPlayerInfo(userID, connectorTopic, seatIndex)
+	player := NewPlayerInfo(userID, connectorNodeID, seatIndex)
 	r.Players[userID] = player
 
 	log.Info(fmt.Sprintf("Room[%s] 玩家 %s 加入房间，座位: %d", r.ID, userID, seatIndex))
@@ -120,14 +124,6 @@ func (r *Room) GetPlayerCount() int {
 	defer r.mu.RUnlock()
 
 	return len(r.Players)
-}
-
-// IsFull 检查房间是否已满
-func (r *Room) IsFull() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	return len(r.Players) >= MaxPlayers
 }
 
 // UpdateStatus 更新房间状态

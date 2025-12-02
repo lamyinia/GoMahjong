@@ -24,6 +24,25 @@ func Run(ctx context.Context) error {
 		}
 	}()
 
+	// 1. 启动 gRPC 服务
+	lis, err := net.Listen("tcp", ":8003")
+	if err != nil {
+		log.Fatal("监听 gRPC 端口失败: %v", err)
+		return err
+	}
+
+	grpcServer := grpc.NewServer()
+	gameServer := grpc.NewGameServer(gameContainer.GameWorker.GameService)
+	pb.RegisterGameServiceServer(grpcServer, gameServer)
+
+	go func() {
+		log.Info("Game gRPC 服务启动，监听 :8003")
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatal("gRPC 服务启动失败: %v", err)
+		}
+	}()
+
+	// 2. 启动 Worker（NATS 监听）
 	go func() {
 		err := gameContainer.GameWorker.Start(
 			ctx,
@@ -38,6 +57,10 @@ func Run(ctx context.Context) error {
 
 	stop := func() {
 		log.Info("正在关闭 game 服务...")
+
+		// 优雅关闭 gRPC 服务
+		grpcServer.GracefulStop()
+		log.Info("gRPC 服务已关闭")
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

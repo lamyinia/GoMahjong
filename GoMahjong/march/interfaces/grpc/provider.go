@@ -4,26 +4,26 @@ import (
 	"common/log"
 	"context"
 	"fmt"
+	"framework/march/application/service"
 	"time"
 
-	"march/application/service"
 	"march/pb"
 )
 
-// MatchServer 实现 gRPC MatchService
-type MatchServer struct {
+// MatchProvider 实现 gRPC MatchService
+type MatchProvider struct {
 	pb.UnimplementedMatchServiceServer
 	matchService service.MatchService
 }
 
-func NewMatchServer(matchService service.MatchService) *MatchServer {
-	return &MatchServer{
+func NewMatchProvider(matchService service.MatchService) *MatchProvider {
+	return &MatchProvider{
 		matchService: matchService,
 	}
 }
 
 // JoinQueue 处理玩家加入匹配队列
-func (s *MatchServer) JoinQueue(ctx context.Context, req *pb.JoinQueueRequest) (*pb.JoinQueueResponse, error) {
+func (p *MatchProvider) JoinQueue(ctx context.Context, req *pb.JoinQueueRequest) (*pb.JoinQueueResponse, error) {
 	if req.GetUserID() == "" || req.GetNodeID() == "" {
 		return &pb.JoinQueueResponse{
 			Success: false,
@@ -31,7 +31,7 @@ func (s *MatchServer) JoinQueue(ctx context.Context, req *pb.JoinQueueRequest) (
 		}, nil
 	}
 
-	if err := s.matchService.JoinQueue(ctx, req.GetUserID(), req.GetNodeID()); err != nil {
+	if err := p.matchService.JoinQueue(ctx, req.GetUserID(), req.GetNodeID()); err != nil {
 		log.Debug("进入匹配队列失败: %#v", req)
 		return &pb.JoinQueueResponse{
 			Success: false,
@@ -39,7 +39,7 @@ func (s *MatchServer) JoinQueue(ctx context.Context, req *pb.JoinQueueRequest) (
 		}, nil
 	}
 
-	queueID := fmt.Sprintf("%s:%d", req.GetUserID(), time.Now().UnixNano())
+	queueID := fmt.Sprintf("%p:%d", req.GetUserID(), time.Now().UnixNano())
 
 	return &pb.JoinQueueResponse{
 		Success:          true,
@@ -50,7 +50,7 @@ func (s *MatchServer) JoinQueue(ctx context.Context, req *pb.JoinQueueRequest) (
 }
 
 // LeaveQueue 处理玩家取消匹配
-func (s *MatchServer) LeaveQueue(ctx context.Context, req *pb.LeaveQueueRequest) (*pb.LeaveQueueResponse, error) {
+func (p *MatchProvider) LeaveQueue(ctx context.Context, req *pb.LeaveQueueRequest) (*pb.LeaveQueueResponse, error) {
 	if req.GetUserID() == "" {
 		return &pb.LeaveQueueResponse{
 			Success: false,
@@ -58,7 +58,7 @@ func (s *MatchServer) LeaveQueue(ctx context.Context, req *pb.LeaveQueueRequest)
 		}, nil
 	}
 
-	if err := s.matchService.LeaveQueue(ctx, req.GetUserID()); err != nil {
+	if err := p.matchService.LeaveQueue(ctx, req.GetUserID()); err != nil {
 		return &pb.LeaveQueueResponse{
 			Success: false,
 			Message: err.Error(),
@@ -72,7 +72,7 @@ func (s *MatchServer) LeaveQueue(ctx context.Context, req *pb.LeaveQueueRequest)
 }
 
 // QueryStatus 查询匹配状态（当前返回占位信息，后续可扩展真实数据）
-func (s *MatchServer) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*pb.QueryStatusResponse, error) {
+func (p *MatchProvider) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*pb.QueryStatusResponse, error) {
 	status := pb.QueryStatusResponse_STATUS_UNKNOWN
 	if req.GetUserID() != "" {
 		status = pb.QueryStatusResponse_STATUS_WAITING

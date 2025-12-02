@@ -44,18 +44,18 @@ func GetLongConnectionPool() *LongConnectionPool {
 	return globalWsConnectionPool
 }
 
-func (po *LongConnectionPool) Get(conn *websocket.Conn, manager *Manager) *LongConnection {
+func (po *LongConnectionPool) Get(conn *websocket.Conn, worker *Worker) *LongConnection {
 	longConn := po.pool.Get().(*LongConnection)
 	atomic.AddInt64(&po.reused, 1)
 
-	connID := fmt.Sprintf("%s-%s-%d", uuid.New().String(), manager.topic, atomic.AddUint64(&connIDBase, 1))
+	connID := fmt.Sprintf("%s-%s-%d", uuid.New().String(), worker.nodeID, atomic.AddUint64(&connIDBase, 1))
 
 	longConn.Conn = conn
-	longConn.manager = manager
+	longConn.worker = worker
 	longConn.ConnID = connID
 	longConn.WriteChan = make(chan []byte, 1024)
-	longConn.ReadChan = manager.ClientReadChan
-	longConn.Session = NewSession(connID, manager)
+	longConn.ReadChan = worker.ClientReadChan
+	longConn.Session = NewSession(connID, worker)
 	longConn.closeChan = make(chan struct{})
 
 	longConn.closeOnce = sync.Once{}
@@ -80,6 +80,6 @@ func (po *LongConnectionPool) Put(longConn *LongConnection) {
 	po.pool.Put(longConn)
 }
 
-func takeLongConnection(conn *websocket.Conn, manager *Manager) *LongConnection {
-	return GetLongConnectionPool().Get(conn, manager)
+func takeLongConnection(conn *websocket.Conn, worker *Worker) *LongConnection {
+	return GetLongConnectionPool().Get(conn, worker)
 }

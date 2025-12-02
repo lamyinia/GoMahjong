@@ -33,9 +33,9 @@ func NewMonitor(roomManager *RoomManager, registry *discovery.Registry, updateIn
 	}
 }
 
-// Start 启动监控器
+// Report 启动监控器
 // 在独立的 goroutine 中定期收集负载信息并上报
-func (m *Monitor) Start(ctx context.Context) {
+func (m *Monitor) Report(ctx context.Context) {
 	ticker := time.NewTicker(m.updateInterval)
 	defer ticker.Stop()
 

@@ -1,66 +1,208 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"log"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"framework/protocal"
 )
 
-const (
-	connectorWS = "ws://127.0.0.1:8082/ws"
-	playerCount = 4
-)
+const connectorWS = "ws://127.0.0.1:8082/ws"
 
-type TestPlayer struct {
+type TestClient struct {
 	userID string
 	conn   *websocket.Conn
+	done   chan struct{}
 }
 
+func NewTestClient(userID string) *TestClient {
+	return &TestClient{
+		userID: userID,
+		done:   make(chan struct{}),
+	}
+}
+
+func (tc *TestClient) Connect() error {
+	url := connectorWS + "/test=" + tc.userID
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		return err
+	}
+	tc.conn = conn
+
+	if err := tc.sendHandshake(); err != nil {
+		return err
+	}
+	if err := tc.sendHandshakeAck(); err != nil {
+		return err
+	}
+
+	go tc.listenLoop()
+	go tc.heartbeatLoop()
+	log.Printf("[%s] connected", tc.userID)
+	return nil
+}
+
+func (tc *TestClient) Close() {
+	select {
+	case <-tc.done:
+	default:
+		close(tc.done)
+	}
+	if tc.conn != nil {
+		_ = tc.conn.Close()
+	}
+}
+
+func (tc *TestClient) listenLoop() {
+	for {
+		if tc.conn == nil {
+			return
+		}
+		mt, msg, err := tc.conn.ReadMessage()
+		if err != nil {
+			log.Printf("[%s] read error: %v", tc.userID, err)
+			return
+		}
+		if mt == websocket.BinaryMessage {
+			packet, err := protocal.Decode(msg)
+			if err != nil {
+				log.Printf("[%s] decode error: %v", tc.userID, err)
+				continue
+			}
+			if packet.Type == protocal.Data {
+				body := packet.ParseBody()
+				log.Printf("[%s] recv route=%s payload=%s", tc.userID, body.Route, string(body.Data))
+			} else {
+				log.Printf("[%s] recv packet type=%d, detail=%#v", tc.userID, packet.Type, packet.ParseBody())
+			}
+		} else {
+			log.Printf("[%s] recv text: %s", tc.userID, string(msg))
+		}
+	}
+}
+
+func (tc *TestClient) heartbeatLoop() {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-tc.done:
+			return
+		case <-ticker.C:
+			buf, err := protocal.Wrap(protocal.Heartbeat, []byte{})
+			if err != nil {
+				log.Printf("[%s] heartbeat wrap err: %v", tc.userID, err)
+				continue
+			}
+			if tc.conn == nil {
+				return
+			}
+			if err := tc.conn.WriteMessage(websocket.BinaryMessage, buf); err != nil {
+				log.Printf("[%s] heartbeat send err: %v", tc.userID, err)
+				return
+			}
+		}
+	}
+}
+
+func (tc *TestClient) sendHandshake() error {
+	body := protocal.HandshakeBody{
+		Sys: protocal.Sys{
+			Type:         "go-client",
+			Version:      "1.0",
+			ProtoVersion: 1,
+			Heartbeat:    3,
+			Serializer:   "json",
+		},
+	}
+	data, _ := json.Marshal(body)
+	buf, err := protocal.Wrap(protocal.Handshake, data)
+	if err != nil {
+		return err
+	}
+	return tc.conn.WriteMessage(websocket.BinaryMessage, buf)
+}
+
+func (tc *TestClient) sendHandshakeAck() error {
+	buf, err := protocal.Wrap(protocal.HandshakeAck, []byte{})
+	if err != nil {
+		return err
+	}
+	return tc.conn.WriteMessage(websocket.BinaryMessage, buf)
+}
+
+func (tc *TestClient) SendRequest(route string, body any) error {
+	if tc.conn == nil {
+		return ErrNotConnected
+	}
+	payload, _ := json.Marshal(body)
+	msg := &protocal.Message{
+		Type:  protocal.Request,
+		ID:    1,
+		Route: route,
+		Data:  payload,
+	}
+	return tc.sendMessage(msg)
+}
+
+func (tc *TestClient) sendMessage(msg *protocal.Message) error {
+	body, err := protocal.MessageEncode(msg)
+	if err != nil {
+		return err
+	}
+	buf, err := protocal.Wrap(protocal.Data, body)
+	if err != nil {
+		return err
+	}
+	return tc.conn.WriteMessage(websocket.BinaryMessage, buf)
+}
+
+var ErrNotConnected = fmt.Errorf("client not connected")
+
 func main() {
-	players := []string{"user-001"}
+	buf, _ := protocal.Wrap(protocal.Handshake, []byte{255})
+	fmt.Println(buf)
+}
+
+func test1() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+		<-sigCh
+		cancel()
+	}()
+
+	userIDs := []string{"user-001"}
 	var wg sync.WaitGroup
 
-	for _, uid := range players {
+	for _, uid := range userIDs {
+		tc := NewTestClient(uid)
 		wg.Add(1)
-		go func(id string) {
+		go func(client *TestClient) {
 			defer wg.Done()
-			runPlayer(id)
-		}(uid)
+
+			if err := client.Connect(); err != nil {
+				log.Printf("[%s] connect failed: %v", client.userID, err)
+				return
+			}
+			defer client.Close()
+			<-ctx.Done()
+		}(tc)
 	}
 
 	wg.Wait()
 	log.Println("demo finished")
-}
-
-func runPlayer(userID string) {
-	url := connectorWS + "/test=" + userID
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
-	if err != nil {
-		log.Printf("[%s] dial failed: %v\n", userID, err)
-		return
-	}
-	defer conn.Close()
-
-	// 监听推送
-	go func() {
-		for {
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				log.Printf("[%s] read error: %v\n", userID, err)
-				return
-			}
-			log.Printf("[%s] recv: %s\n", userID, string(msg))
-		}
-	}()
-
-	// 例如发送 “加入匹配” 消息
-	//joinReq := `{"route":"march.match.join","body":{}}`
-	//if err := conn.WriteMessage(websocket.TextMessage, []byte(joinReq)); err != nil {
-	//	log.Printf("[%s] send join failed: %v\n", userID, err)
-	//	return
-	//}
-
-	time.Sleep(30 * time.Second) // 演示期间保持连接
 }

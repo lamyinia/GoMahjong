@@ -25,15 +25,10 @@ func Run(ctx context.Context) error {
 		log.Fatal("march 容器初始化失败")
 		return nil
 	}
-	defer func() {
-		if err := marchContainer.Close(); err != nil {
-			log.Error("关闭 march 容器失败: %v", err)
-		}
-	}()
 
 	// 创建 grpc 注册依赖 -> 拿到监听端口 -> 注册 etcd -> 监听 grpc
 	grpcSrv := grpc.NewServer()
-	matchServer := grpcserver.NewMatchServer(marchContainer.MatchService)
+	matchServer := grpcserver.NewMatchProvider(marchContainer.MatchService)
 	pb.RegisterMatchServiceServer(grpcSrv, matchServer)
 
 	var (
@@ -64,7 +59,7 @@ func Run(ctx context.Context) error {
 	go func() {
 		err := marchContainer.MarchWorker.Start(ctx, config.InjectedConfig.Nats.URL)
 		if err != nil {
-			log.Fatal("worker 启动失败，err:%#v", err)
+			log.Fatal("match 服务启动失败，err:%#v", err)
 		}
 	}()
 

@@ -21,7 +21,7 @@ type MatchService interface {
 	// JoinQueue 加入匹配队列
 	// userID: 用户 ID
 	// connectorTopic: connector 的 topic
-	JoinQueue(ctx context.Context, userID, connectorTopic string) error
+	JoinQueue(ctx context.Context, userID, connectorNodeID string) error
 
 	// LeaveQueue 离开匹配队列
 	LeaveQueue(ctx context.Context, userID string) error
@@ -35,5 +35,5 @@ type MatchService interface {
 type MatchResult struct {
 	Players      map[string]string // userID -> connectorTopic
 	GameNodeID   string            // game 节点 ID（用于 NATS topic）
-	GameNodeAddr string            // game 节点地址（用于日志）
+	GameNodeAddr string            // game 节点地址
 }

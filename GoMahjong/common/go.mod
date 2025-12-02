@@ -7,6 +7,7 @@ module common
 require (
 	github.com/arl/statsviz v0.6.0
 	github.com/charmbracelet/log v0.4.2
+	github.com/dgraph-io/ristretto v0.1.1
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gin-gonic/gin v1.8.2
 	github.com/redis/go-redis/v9 v9.3.0

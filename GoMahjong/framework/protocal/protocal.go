@@ -97,6 +97,7 @@ type Message struct {
 	Error           bool        // response error
 }
 
+// Wrap 长度字段只能有 3 个字节，也就是说，每次最大传输的 body 是 2^24 - 1 = 16,777,215 字节 约等于 16mb
 func Wrap(packageType PackageType, body []byte) ([]byte, error) {
 	if packageType == None {
 		return nil, errors.New("encode unsupported packageType")

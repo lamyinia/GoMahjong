@@ -25,8 +25,8 @@ func NewNatsWorker() *NatsWorker {
 // Run
 // url nats 服务的地址
 // topic 本地订阅的 nats 服务的频道
-func (worker *NatsWorker) Run(url string, topic string) error {
-	worker.NatsCli = NewNatsClient(topic, worker.readChan)
+func (worker *NatsWorker) Run(url string, nodeID string) error {
+	worker.NatsCli = NewNatsClient(nodeID, worker.readChan)
 	if err := worker.NatsCli.Run(url); err != nil {
 		return err
 	}
@@ -59,8 +59,6 @@ func (worker *NatsWorker) readChanMessage() {
 							Source:      packet.Destination,
 							Destination: packet.Source,
 							Body:        body,
-							UserID:      packet.UserID,
-							ConnID:      packet.ConnID,
 						}
 						worker.writeChan <- messageResp
 					}

@@ -48,7 +48,7 @@ func (s *MatchServiceImpl) SetMatchTriggers(matchTriggers map[vo.RankingType]cha
 	log.Info("MatchService 设置匹配触发 channel，段位数: %d", len(matchTriggers))
 }
 
-func (s *MatchServiceImpl) JoinQueue(ctx context.Context, userID, NodeID string) error {
+func (s *MatchServiceImpl) JoinQueue(ctx context.Context, userID, connectorNodeID string) error {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("查询用户失败: %w", err)
@@ -65,7 +65,7 @@ func (s *MatchServiceImpl) JoinQueue(ctx context.Context, userID, NodeID string)
 	}
 
 	score := float64(time.Now().Unix())
-	if err := s.queueRepo.JoinQueue(ctx, userID, NodeID, ranking, score); err != nil {
+	if err := s.queueRepo.JoinQueue(ctx, userID, connectorNodeID, ranking, score); err != nil {
 		return fmt.Errorf("加入队列失败: %w", err)
 	}
 
@@ -132,12 +132,12 @@ func (s *MatchServiceImpl) MatchByRanking(ctx context.Context, ranking vo.Rankin
 		return nil, fmt.Errorf("选择 game 节点失败: %w", err)
 	}
 
-	gameTopic := fmt.Sprintf("game:%s", gameNode.Addr)
+	nodeID := gameNode.NodeID
 
 	//保存用户路由（用于断线重连）
 	for userID, connectorTopic := range players {
 		routerInfo := &repository.UserRouterInfo{
-			GameTopic:      gameTopic,
+			GameTopic:      nodeID,
 			ConnectorTopic: connectorTopic,
 		}
 		if err := s.routerRepo.SaveRouter(ctx, userID, routerInfo, routerTTL); err != nil {
@@ -149,7 +149,7 @@ func (s *MatchServiceImpl) MatchByRanking(ctx context.Context, ranking vo.Rankin
 
 	return &MatchResult{
 		Players:      players,
-		GameNodeID:   gameNode.Addr, // 使用 Addr 作为 ID（用于 NATS topic）
+		GameNodeID:   nodeID,
 		GameNodeAddr: gameNode.Addr,
 	}, nil
 }

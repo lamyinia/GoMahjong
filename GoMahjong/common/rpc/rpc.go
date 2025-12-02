@@ -6,7 +6,7 @@ import (
 	"common/log"
 	"fmt"
 	matchpb "march/pb"
-	"player/pb"
+	userpb "player/pb"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	UserClient  pb.UserServiceClient
+	UserClient  userpb.UserServiceClient
 	MatchClient matchpb.MatchServiceClient
 )
 
@@ -50,8 +50,8 @@ func initClient(name string, loadBalance bool, client interface{}) {
 	}
 	// 指针被装进接口，类型断言提取出来，地址信息完全保留
 	switch c := client.(type) {
-	case *pb.UserServiceClient:
-		*c = pb.NewUserServiceClient(conn)
+	case *userpb.UserServiceClient:
+		*c = userpb.NewUserServiceClient(conn)
 	case *matchpb.MatchServiceClient:
 		*c = matchpb.NewMatchServiceClient(conn)
 	default:

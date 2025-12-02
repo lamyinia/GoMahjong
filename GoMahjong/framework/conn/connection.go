@@ -12,7 +12,7 @@ import (
 */
 
 type Connection interface {
-	GetSession() *Session
+	TakeSession() *Session
 	SendMessage(buf []byte) error
 	Close()
 }
@@ -34,7 +34,7 @@ var (
 type LongConnection struct {
 	ConnID        string
 	Conn          *websocket.Conn
-	manager       *Manager
+	worker        *Worker
 	ReadChan      chan *ConnectionPack
 	WriteChan     chan []byte
 	Session       *Session
@@ -60,7 +60,7 @@ func (con *LongConnection) writeMessage() {
 				close(con.WriteChan)
 			})
 		}
-		con.manager.removeClient(con)
+		con.worker.removeClient(con)
 	}()
 
 	for {
@@ -73,7 +73,7 @@ func (con *LongConnection) writeMessage() {
 				con.Close()
 				return
 			}
-			log.Warn("%v", string(message))
+			log.Debug("写入消息: %#v", message)
 			if err := con.Conn.WriteMessage(websocket.BinaryMessage, message); err != nil {
 				log.Error("客户端[%s] write stream err :%+v", con.ConnID, err)
 			}
@@ -96,7 +96,7 @@ func (con *LongConnection) writeMessage() {
 func (con *LongConnection) readMessage() {
 	defer func() {
 		log.Info("客户端[%s] 读事件停止", con.ConnID)
-		con.manager.removeClient(con)
+		con.worker.removeClient(con)
 	}()
 
 	con.Conn.SetReadLimit(maxMessageSize)
@@ -117,7 +117,7 @@ func (con *LongConnection) readMessage() {
 				}
 				return
 			}
-			log.Info("[%s] 收到二进制消息 %+v", con.ConnID, string(message))
+			log.Debug("[%s] 收到二进制消息, 大小 %d 字节, 详细: %+v", con.ConnID, len(message), message)
 			if messageType == websocket.BinaryMessage {
 				select {
 				case con.ReadChan <- &ConnectionPack{ConnID: con.ConnID, Body: message}:
@@ -139,7 +139,7 @@ func (con *LongConnection) PongHandler(data string) error {
 	return nil
 }
 
-func (con *LongConnection) GetSession() *Session {
+func (con *LongConnection) TakeSession() *Session {
 	return con.Session
 }
 
@@ -172,7 +172,7 @@ func (con *LongConnection) Close() {
 func (con *LongConnection) reset() {
 	con.ConnID = ""
 	con.Conn = nil
-	con.manager = nil
+	con.worker = nil
 	con.ReadChan = nil
 	con.WriteChan = nil
 	con.Session = nil
@@ -180,6 +180,6 @@ func (con *LongConnection) reset() {
 	con.closeChan = nil
 }
 
-func NewLongConnection(conn *websocket.Conn, manager *Manager) *LongConnection {
-	return GetLongConnectionPool().Get(conn, manager)
+func NewLongConnection(conn *websocket.Conn, worker *Worker) *LongConnection {
+	return GetLongConnectionPool().Get(conn, worker)
 }

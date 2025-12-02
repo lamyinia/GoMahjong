@@ -11,10 +11,20 @@ import (
 var logger *log.Logger
 
 func InitLog(appName string, logLevel string) {
-	logger = log.New(os.Stderr)
+	// 使用 os.Stdout 而不是 os.Stderr
+	// GoLand 控制台会将 stderr 显示为红色，stdout 显示为正常颜色
+	// 这样可以避免所有日志都显示为红色
+	logger = log.New(os.Stdout)
 	logger.SetPrefix(appName)
 	logger.SetReportTimestamp(true)
 	logger.SetTimeFormat(time.DateTime)
+
+	// 启用调用者信息（显示文件名和行号）
+	logger.SetReportCaller(true)
+
+	// charmbracelet/log 会自动检测终端并启用颜色
+	// 在 GoLand 等 IDE 中，如果终端不支持 ANSI 颜色，会自动禁用
+	// 这样就不会显示错误的颜色了
 
 	// 默认为 info 级别
 	if logLevel == "" {

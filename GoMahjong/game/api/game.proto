@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option go_package = "game/pb;pb";
+
+service GameService {
+  rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
+}
+
+message CreateRoomRequest {
+  map<string, string> players = 1;    // userID -> connectorTopic
+  int32 engineType = 2;               // 游戏引擎类型
+}
+
+message CreateRoomResponse {
+  bool success = 1;
+  string roomID = 2;
+  string message = 3;
+}

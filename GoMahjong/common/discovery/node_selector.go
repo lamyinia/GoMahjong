@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	gameServiceName = "game" // 固定为 game 服务
+	gameServiceName = "game" // 暂时固定为 game 服务
 )
 
 type NodeSelector struct {
