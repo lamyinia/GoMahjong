@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"framework/node"
-	"framework/protocal"
+	"framework/protocol"
 	"framework/stream"
 	"hash/fnv"
 	"net/http"
@@ -23,6 +23,7 @@ import (
 )
 
 var (
+	// 单例模式
 	websocketUpgrade = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
@@ -37,7 +38,7 @@ var (
 
 type CheckOriginHandler func(r *http.Request) bool
 
-type PacketTypeHandler func(packet *protocal.Packet, c Connection) error
+type PacketTypeHandler func(packet *protocol.Packet, c Connection) error
 
 type ClientBucket struct {
 	sync.RWMutex
@@ -53,8 +54,8 @@ type ClientBucket struct {
 	5. 使用 rpc 服务调用 march 节点的方法，同时 nats 监听来自 march 节点的消息，实现匹配逻辑
 			(1)用户在类似游戏对战开始(匹配、创建房间...)的逻辑之前，一定要有查路由的逻辑，检查有没有正在进行的游戏
 
-	6. 设计正确的处理器和路由，收到来自 game、hall、march 节点或者 player 的消息后，如果需要转发，正确转发给目标
-	7. 设计正确的处理器，收到来自 game、hall、march 节点或者 player 的消息后，如果需要操作本地内存，正确操作本地内存
+	6. 设计路由，收到来自 game、hall、march 节点或者 player 的消息后，如果需要转发，转发给目标
+	7. 设计处理器，收到来自 game、hall、march 节点或者 player 的消息后，响应本地内存事件
 
 	数据流向 LongConnection.ReadChan=Worker.ClientReadChan -> clientBuckets[connID]
 */
@@ -67,15 +68,14 @@ type Worker struct {
 	data               map[string]any
 
 	clientBuckets     []*ClientBucket
-	ClientReadChan    chan *ConnectionPack
 	clientWorkers     []chan *ConnectionPack
-	clientHandlers    map[protocal.PackageType]PacketTypeHandler
+	clientHandlers    map[protocol.PackageType]PacketTypeHandler
 	bucketMask        uint32
 	clientWorkerCount int
 
 	MiddleWorker *node.NatsWorker
 
-	LocalHandlers LogicHandler
+	MessageTypeHandlers MessageTypeHandler
 
 	maxConnectionCount int
 	connSemaphore      chan struct{}
@@ -105,16 +105,15 @@ func NewWorkerWithDeps(connectorConfig interface{}, natsWorker *node.NatsWorker,
 	}
 
 	w := &Worker{
-		nodeID:             cfg.GetID(),
-		ClientReadChan:     make(chan *ConnectionPack, 2048),
-		clientHandlers:     make(map[protocal.PackageType]PacketTypeHandler),
-		MiddleWorker:       natsWorker,
-		data:               make(map[string]any),
-		LocalHandlers:      make(LogicHandler),
-		bucketMask:         bucketMask,
-		clientWorkerCount:  workerCount,
-		maxConnectionCount: 100000,
-		connSemaphore:      make(chan struct{}, 100000),
+		nodeID:              cfg.GetID(),
+		clientHandlers:      make(map[protocol.PackageType]PacketTypeHandler),
+		MiddleWorker:        natsWorker,
+		data:                make(map[string]any),
+		MessageTypeHandlers: make(MessageTypeHandler),
+		bucketMask:          bucketMask,
+		clientWorkerCount:   workerCount,
+		maxConnectionCount:  100000,
+		connSemaphore:       make(chan struct{}, 100000),
 	}
 
 	// 初始化客户端分片
@@ -172,7 +171,6 @@ func (w *Worker) Run(topic string, maxConn int, addr string) error {
 		go w.clientWorkerRoutine(i)
 	}
 
-	go w.clientReadRoutine()
 	go w.monitorPerformance()
 	w.injectDefaultHandlers()
 
@@ -183,13 +181,13 @@ func (w *Worker) Run(topic string, maxConn int, addr string) error {
 }
 
 func (w *Worker) injectDefaultHandlers() {
-	w.clientHandlers[protocal.Handshake] = w.handshakeHandler
-	w.clientHandlers[protocal.HandshakeAck] = w.handshakeAckHandler
-	w.clientHandlers[protocal.Heartbeat] = w.heartbeatHandler
-	w.clientHandlers[protocal.Data] = w.messageHandler
-	w.clientHandlers[protocal.Kick] = w.kickHandler
+	w.clientHandlers[protocol.Handshake] = w.handshakeHandler
+	w.clientHandlers[protocol.HandshakeAck] = w.handshakeAckHandler
+	w.clientHandlers[protocol.Heartbeat] = w.heartbeatHandler
+	w.clientHandlers[protocol.Data] = w.messageHandler
+	w.clientHandlers[protocol.Kick] = w.kickHandler
 
-	w.LocalHandlers["connector.joinqueue"] = joinQueueHandler
+	w.MessageTypeHandlers["connector.joinqueue"] = joinQueueHandler
 }
 
 func (w *Worker) upgradeFunc(writer http.ResponseWriter, r *http.Request) {
@@ -313,21 +311,6 @@ func (w *Worker) clientWorkerRoutine(workerID int) {
 	}
 }
 
-func (w *Worker) clientReadRoutine() {
-	for messagePack := range w.ClientReadChan {
-		hash := fnv32(messagePack.ConnID)
-		workerID := hash % uint32(w.clientWorkerCount)
-		select {
-		case w.clientWorkers[workerID] <- messagePack:
-			// 分发到工作池
-		default:
-			atomic.AddInt64(&w.stats.messageErrors, 1)
-			log.Warn("工作池满了，直接处理:\n workerID:%#v\n messagePack:%#v", workerID, messagePack)
-			w.dealPack(messagePack)
-		}
-	}
-}
-
 func (w *Worker) monitorPerformance() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
@@ -342,19 +325,19 @@ func (w *Worker) monitorPerformance() {
 }
 
 func (w *Worker) Push(message *stream.ServicePacket) {
-	buf, err := protocal.MessageEncode(message.Body)
+	buf, err := protocol.MessageEncode(message.Body)
 	if err != nil {
 		log.Error("pushMessage 推送编码错误, err:%#v", err)
 		return
 	}
 
-	res, err := protocal.Wrap(protocal.Data, buf)
+	res, err := protocol.Wrap(protocol.Data, buf)
 	if err != nil {
 		log.Error("pushMessage 打包类型错误, err:%#v", err)
 		return
 	}
 
-	if message.Body.Type == protocal.Push {
+	if message.Body.Type == protocol.Push {
 		if len(message.PushUser) == 0 {
 			return
 		}
@@ -385,7 +368,7 @@ func (w *Worker) doPush(bye *[]byte, conn *Connection) error {
 }
 
 func (w *Worker) dealPack(messagePack *ConnectionPack) {
-	packet, err := protocal.Decode(messagePack.Body)
+	packet, err := protocol.Decode(messagePack.Body)
 	if err != nil {
 		atomic.AddInt64(&w.stats.messageErrors, 1)
 		log.Error("解码错误, pack: %#v, err: %#v", packet, err)
@@ -399,7 +382,7 @@ func (w *Worker) dealPack(messagePack *ConnectionPack) {
 }
 
 // doEvent 处理协议层的时间
-func (w *Worker) doEvent(packet *protocal.Packet, connID string) error {
+func (w *Worker) doEvent(packet *protocol.Packet, connID string) error {
 	bucket := w.getBucket(connID)
 
 	bucket.RLock()
@@ -509,82 +492,56 @@ func (w *Worker) UnbindUser(userID string, conn Connection) {
 	}
 }
 
-func (w *Worker) handshakeHandler(packet *protocal.Packet, conn Connection) error {
-	log.Debug("握手事件发生: %#v", packet.ParseBody())
-	res := protocal.HandshakeResponse{
-		Code: 200,
-		Sys: protocal.Sys{
-			Heartbeat: 3,
-		},
+func (w *Worker) send(messageType protocol.MessageType, userID string, route string, body any) error {
+	connAny, ok := w.connMap.Load(userID)
+	if !ok {
+		return fmt.Errorf("玩家 %s 连接不存在", userID)
 	}
-	data, _ := json.Marshal(res)
-	buf, err := protocal.Wrap(packet.Type, data)
-	if err != nil {
-		log.Error("handshakeHandler 打包错误 err:%v", err)
-		return err
-	}
-	return conn.SendMessage(buf)
-}
-
-func (w *Worker) handshakeAckHandler(packet *protocal.Packet, c Connection) error {
-	log.Debug("握手确认事件发生: %#v", packet.ParseBody())
-	return nil
-}
-
-func (w *Worker) heartbeatHandler(packet *protocal.Packet, conn Connection) error {
-	log.Debug("心跳事件发生: %#v", packet.ParseBody())
-	var res []byte
-	data, _ := json.Marshal(res)
-	buf, err := protocal.Wrap(packet.Type, data)
-	if err != nil {
-		log.Error("heartbeatHandler 打包错误 err:%v", err)
-		return err
-	}
-	return conn.SendMessage(buf)
-}
-
-func (w *Worker) messageHandler(packet *protocal.Packet, conn Connection) error {
-	parse := packet.ParseBody()
-	routes := parse.Route // 如 hall.marchRequest
-	routeList := strings.Split(routes, ".")
-	if len(routeList) < 2 {
-		return errors.New(fmt.Sprintf("route 格式错误, %v", parse))
-	}
-	if routeList[0] != "connector" {
-		routes = routeList[0] // 转发到下一个链路
+	conn, ok := connAny.(Connection)
+	if !ok {
+		return fmt.Errorf("玩家 %s 连接类型断言失败", userID)
 	}
 
-	handler, exi := w.LocalHandlers[routes]
-	if exi {
-		data, err := handler(conn.TakeSession(), parse.Data)
-		if err != nil {
-			return err
-		}
-		if data != nil {
-			marshal, _ := json.Marshal(data)
-			parse.Type = protocal.Response
-			parse.Data = marshal
-			encode, err := protocal.MessageEncode(parse)
+	// 1. 构建 pomelo Message
+	var data []byte
+	if body != nil {
+		if bodyBytes, ok := body.([]byte); ok {
+			data = bodyBytes
+		} else {
+			// 如果是其他类型，序列化为 JSON
+			jsonData, err := json.Marshal(body)
 			if err != nil {
-				log.Warn("messageHandler 编码错误, %#v", data)
-				return err
+				return fmt.Errorf("%s 序列化消息失败: %w", userID, err)
 			}
-			res, err := protocal.Wrap(packet.Type, encode)
-			if err != nil {
-				log.Warn("messageHandler 打包错误, %#v", data)
-				return err
-			}
-			return w.doPush(&res, &conn)
+			data = jsonData
 		}
-	} else {
-		log.Warn("messageHandler 发现不支持的路由, %#v", parse)
 	}
 
-	return nil
-}
+	msg := &protocol.Message{
+		Type:  messageType,
+		ID:    0,
+		Route: route,
+		Data:  data,
+		Error: false,
+	}
 
-func (w *Worker) kickHandler(packet *protocal.Packet, conn Connection) error {
-	log.Debug("踢人事件发生: %#v", packet.ParseBody())
+	// 2. 编码 Message
+	msgEncoded, err := protocol.MessageEncode(msg)
+	if err != nil {
+		return fmt.Errorf("%s 编码消息失败: %w", userID, err)
+	}
 
+	// 3. 包装成 pomelo Packet
+	packet, err := protocol.Wrap(protocol.Data, msgEncoded)
+	if err != nil {
+		return fmt.Errorf("%s 打包消息失败: %w", userID, err)
+	}
+
+	// 4. 发送给客户端
+	if err := conn.SendMessage(packet); err != nil {
+		return fmt.Errorf("发送消息给玩家 %s 失败: %w", userID, err)
+	}
+
+	log.Info(fmt.Sprintf("connector send 发送消息给玩家 %s, route: %s", userID, route))
 	return nil
 }

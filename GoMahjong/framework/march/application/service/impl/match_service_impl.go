@@ -1,4 +1,4 @@
-package service
+package impl
 
 import (
 	"common/discovery"
@@ -7,6 +7,7 @@ import (
 	"core/domain/repository"
 	"core/domain/vo"
 	"fmt"
+	"framework/march/application/service"
 	"sync"
 	"time"
 )
@@ -30,7 +31,7 @@ func NewMatchService(
 	queueRepo repository.MarchQueueRepository,
 	routerRepo repository.UserRouterRepository,
 	nodeSelector *discovery.NodeSelector,
-) MatchService {
+) service.MatchService {
 	return &MatchServiceImpl{
 		userRepo:      userRepo,
 		queueRepo:     queueRepo,
@@ -109,7 +110,7 @@ func (s *MatchServiceImpl) LeaveQueue(ctx context.Context, userID string) error 
 }
 
 // MatchByRanking 按段位执行一次匹配
-func (s *MatchServiceImpl) MatchByRanking(ctx context.Context, ranking vo.RankingType) (*MatchResult, error) {
+func (s *MatchServiceImpl) MatchByRanking(ctx context.Context, ranking vo.RankingType) (*service.MatchResult, error) {
 	players, err := s.queueRepo.PopPlayers(ctx, ranking, playersPerMatch)
 	if err != nil {
 		return nil, fmt.Errorf("从队列取出玩家失败: %w", err)
@@ -147,7 +148,7 @@ func (s *MatchServiceImpl) MatchByRanking(ctx context.Context, ranking vo.Rankin
 
 	log.Info(fmt.Sprintf("段位 %s 匹配成功: gameNode=%s, players=%d", ranking.GetDisplayName(), gameNode.Addr, len(players)))
 
-	return &MatchResult{
+	return &service.MatchResult{
 		Players:      players,
 		GameNodeID:   nodeID,
 		GameNodeAddr: gameNode.Addr,
@@ -155,7 +156,7 @@ func (s *MatchServiceImpl) MatchByRanking(ctx context.Context, ranking vo.Rankin
 }
 
 // Match 执行一次匹配（遍历所有段位）
-func (s *MatchServiceImpl) Match(ctx context.Context) (*MatchResult, error) {
+func (s *MatchServiceImpl) Match(ctx context.Context) (*service.MatchResult, error) {
 	rankings := vo.GetAllRankings()
 	for _, ranking := range rankings {
 		result, err := s.MatchByRanking(ctx, ranking)

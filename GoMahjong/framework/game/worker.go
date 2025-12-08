@@ -7,9 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"framework/game/application/service"
+	svc "framework/game/application/service"
 	"framework/node"
-	"framework/protocal"
+	"framework/protocol"
 	"framework/stream"
 	"time"
 )
@@ -41,12 +41,12 @@ type Worker struct {
 	MiddleWorker *node.NatsWorker
 	Monitor      *Monitor
 	Registry     *discovery.Registry
-	GameService  service.GameService // 游戏服务
-	nodeID       string              // 当前 game 节点 ID（用于 NATS topic）
+	GameService  svc.GameService // 游戏服务
+	NodeID       string          // 当前 game 节点 ID（用于 NATS topic）
 }
 
 // NewWorker 创建 Worker
-// nodeID: 当前 game 节点 ID（用于 NATS topic 和 etcd 注册）
+// NodeID: 当前 game 节点 ID（用于 NATS topic 和 etcd 注册）
 func NewWorker(nodeID string) *Worker {
 	roomManager := NewRoomManager()
 	registry := discovery.NewRegistry()
@@ -57,46 +57,48 @@ func NewWorker(nodeID string) *Worker {
 		MiddleWorker: node.NewNatsWorker(),
 		Monitor:      monitor,
 		Registry:     registry,
-		nodeID:       nodeID,
+		NodeID:       nodeID,
 	}
 
-	// 创建 GameService 并注入 Worker 引用
-	worker.GameService = service.NewGameService(roomManager, worker)
-
 	return worker
+}
+
+// SetGameService 设置 GameService（由容器注入）
+func (w *Worker) SetGameService(gameService svc.GameService) {
+	w.GameService = gameService
 }
 
 // Start 启动 Worker
 // natsURL: NATS 服务地址，如 "nats://localhost:4222"
 // etcdConf: etcd 配置
 func (w *Worker) Start(ctx context.Context, natsURL string, etcdConf config.EtcdConf) error {
-	// 1. 注册到 etcd（传入 nodeID 作为 nodeID，用于 NATS 通信）
-	err := w.Registry.Register(etcdConf, w.nodeID)
+	// 1. 注册到 etcd（传入 NodeID 作为 NodeID，用于 NATS 通信）
+	err := w.Registry.Register(etcdConf, w.NodeID)
 	if err != nil {
 		return fmt.Errorf("注册到 etcd 失败: %v", err)
 	}
-	log.Info(fmt.Sprintf("Game Worker[%s] 注册到 etcd 成功", w.nodeID))
+	log.Info(fmt.Sprintf("Game Worker[%s] 注册到 etcd 成功", w.NodeID))
 
 	// 2. 注册消息处理器
 	w.registerHandlers()
 
 	// 3. 启动 NATS 监听
-	err = w.MiddleWorker.Run(natsURL, w.nodeID)
+	err = w.MiddleWorker.Run(natsURL, w.NodeID)
 	if err != nil {
 		return fmt.Errorf("启动 NATS 监听失败: %v", err)
 	}
-	log.Info(fmt.Sprintf("Game Worker[%s] 启动 NATS 监听成功, topic: %s", w.nodeID, w.nodeID))
+	log.Info(fmt.Sprintf("Game Worker[%s] 启动 NATS 监听成功, topic: %s", w.NodeID, w.NodeID))
 
 	// 4. 启动 Monitor 负载上报
 	go w.Monitor.Report(ctx)
 
-	log.Info(fmt.Sprintf("Game Worker[%s] 启动成功", w.nodeID))
+	log.Info(fmt.Sprintf("Game Worker[%s] 启动成功", w.NodeID))
 	return nil
 }
 
 // registerHandlers 注册消息处理器
 func (w *Worker) registerHandlers() {
-	handlers := make(node.LogicHandler)
+	handlers := make(node.SubscriberHandler)
 
 	// 处理来自 connector 的游戏消息
 	handlers["game.play"] = w.handleGameMessage
@@ -106,35 +108,6 @@ func (w *Worker) registerHandlers() {
 
 	w.MiddleWorker.RegisterHandlers(handlers)
 	log.Info("Game Worker 注册消息处理器完成")
-}
-
-// handleCreateRoom 处理房间创建消息（来自 march）
-func (w *Worker) handleCreateRoom(data []byte) interface{} {
-	var msg service.CreateRoomReq
-	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Error(fmt.Sprintf("Game Worker 解析房间创建消息失败: %v", err))
-		return map[string]interface{}{
-			"success": false,
-			"error":   "消息格式错误",
-		}
-	}
-
-	// 传递 engineType 参数
-	room, err := w.RoomManager.CreateRoom(msg.Players, msg.EngineType)
-	if err != nil {
-		log.Error(fmt.Sprintf("Game Worker 创建房间失败: %v", err))
-		return map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		}
-	}
-
-	log.Info(fmt.Sprintf("Game Worker 创建房间成功: %s, 玩家数: %d, 引擎类型: %d", room.ID, len(msg.Players), msg.EngineType))
-
-	return map[string]interface{}{
-		"success": true,
-		"roomID":  room.ID,
-	}
 }
 
 // handleGameMessage 处理游戏消息（来自 connector）
@@ -222,12 +195,12 @@ func (w *Worker) PushMessage(userID, route string, data []byte) error {
 
 	// 构建 ServicePacket
 	packet := &stream.ServicePacket{
-		Source:      w.nodeID,
+		Source:      w.NodeID,
 		Destination: dest,
 		Route:       route,
 		PushUser:    []string{userID},
-		Body: &protocal.Message{
-			Type:  protocal.Push,
+		Body: &protocol.Message{
+			Type:  protocol.Push,
 			Route: route,
 			Data:  data,
 		},
@@ -275,5 +248,5 @@ func (w *Worker) Close() {
 	if w.MiddleWorker != nil {
 		w.MiddleWorker.Close()
 	}
-	log.Info(fmt.Sprintf("Game Worker[%s] 已关闭", w.nodeID))
+	log.Info(fmt.Sprintf("Game Worker[%s] 已关闭", w.NodeID))
 }

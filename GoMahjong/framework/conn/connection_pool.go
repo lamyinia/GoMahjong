@@ -28,7 +28,7 @@ func NewLongConnectionPool(maxSize int32) *LongConnectionPool {
 		maxSize: maxSize,
 	}
 	p.pool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			atomic.AddInt64(&p.created, 1)
 			atomic.AddInt32(&p.count, 1)
 			return &LongConnection{}
@@ -54,7 +54,6 @@ func (po *LongConnectionPool) Get(conn *websocket.Conn, worker *Worker) *LongCon
 	longConn.worker = worker
 	longConn.ConnID = connID
 	longConn.WriteChan = make(chan []byte, 1024)
-	longConn.ReadChan = worker.ClientReadChan
 	longConn.Session = NewSession(connID, worker)
 	longConn.closeChan = make(chan struct{})
 

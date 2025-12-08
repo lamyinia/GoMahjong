@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"framework/march"
 	"framework/march/application/service"
+	"framework/march/application/service/impl"
 	"sync"
 )
 
@@ -41,7 +42,7 @@ func NewMarchContainer() *MarchContainer {
 		log.Fatal("NodeSelector 创建错误err:%#v", err)
 	}
 
-	matchService := service.NewMatchService(userRepository, queueRepository, routerRepository, nodeSelector)
+	matchService := impl.NewMatchService(userRepository, queueRepository, routerRepository, nodeSelector)
 
 	// 从 LocalConfig 获取 serverID
 	marchConfig, err := config.InjectedConfig.GetMarchConfig()

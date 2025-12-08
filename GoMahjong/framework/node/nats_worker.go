@@ -4,21 +4,26 @@ import (
 	"common/log"
 	"encoding/json"
 	"fmt"
+	"framework/protocol"
 	"framework/stream"
 )
 
+// PushHandler 处理 Push 类型消息的回调
+type PushHandler func(users []string, body *protocol.Message, route string)
+
 type NatsWorker struct {
-	NatsCli   Client
-	readChan  chan []byte
-	writeChan chan *stream.ServicePacket
-	handlers  LogicHandler
+	NatsCli           Client
+	readChan          chan []byte
+	writeChan         chan *stream.ServicePacket
+	subscriberHandler SubscriberHandler
+	pushHandler       PushHandler
 }
 
 func NewNatsWorker() *NatsWorker {
 	return &NatsWorker{
-		readChan:  make(chan []byte, 1024),
-		writeChan: make(chan *stream.ServicePacket, 1024),
-		handlers:  make(LogicHandler),
+		readChan:          make(chan []byte, 1024),
+		writeChan:         make(chan *stream.ServicePacket, 1024),
+		subscriberHandler: make(SubscriberHandler),
 	}
 }
 
@@ -48,19 +53,33 @@ func (worker *NatsWorker) readChanMessage() {
 			}
 
 			route := packet.Route
-			if handler := worker.handlers[route]; handler != nil {
+			body := packet.Body
+
+			if handler := worker.subscriberHandler[route]; handler != nil || body.Type == protocol.Push {
 				go func() {
-					body := packet.Body
-					result := handler(body.Data)
-					if result != nil {
+					// 如果 body.Type == protocol.Push，可能执行 handler，也可能不执行 handler，但是一定要推送
+					// 处理器可能涉及 IO 操作，新开一个协程去处理
+					var result any
+					if handler != nil {
+						result = handler(body.Data)
+					}
+
+					if body.Type == protocol.Request && result != nil {
 						dataResp, _ := json.Marshal(&result)
 						body.Data = dataResp
+						body.Type = protocol.Response
 						messageResp := &stream.ServicePacket{
 							Source:      packet.Destination,
 							Destination: packet.Source,
 							Body:        body,
 						}
 						worker.writeChan <- messageResp
+					}
+
+					if body.Type == protocol.Push {
+						if worker.pushHandler != nil {
+							worker.pushHandler(packet.PushUser, body, route)
+						}
 					}
 				}()
 			} else {
@@ -91,9 +110,17 @@ func (worker *NatsWorker) Close() {
 	}
 }
 
-func (worker *NatsWorker) RegisterHandlers(handlers LogicHandler) {
-	worker.handlers = handlers
+func (worker *NatsWorker) RegisterHandlers(handlers SubscriberHandler) {
+	worker.subscriberHandler = handlers
 }
+
+// RegisterPushHandler 注册 Push 处理器
+func (worker *NatsWorker) RegisterPushHandler(handler PushHandler) {
+	worker.pushHandler = handler
+}
+
+// 确保 protocol 包被导入
+var _ = protocol.Push
 
 // PushMessage 主动推送消息
 // 将消息写入 writeChan，由 writeChanMessage goroutine 自动发送

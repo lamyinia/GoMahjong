@@ -1,6 +1,8 @@
 package stream
 
-import "framework/protocal"
+import (
+	"framework/protocol"
+)
 
 type SessionType int
 type DataType int
@@ -11,7 +13,7 @@ type SessionData struct {
 }
 
 type ServicePacket struct {
-	Body        *protocal.Message
+	Body        *protocol.Message
 	Source      string
 	Destination string
 	Route       string

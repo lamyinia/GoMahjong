@@ -7,6 +7,7 @@ import (
 	"core/infrastructure/persistence"
 	"fmt"
 	"framework/game"
+	"framework/game/application/service/impl"
 	"sync"
 )
 
@@ -43,6 +44,10 @@ func NewGameContainer() *GameContainer {
 
 	// 创建 GameWorker
 	worker := game.NewWorker(gameConfig.GetID())
+
+	// 创建 GameService 并注入 Worker
+	gameService := impl.NewGameService(worker.RoomManager, worker)
+	worker.SetGameService(gameService)
 
 	return &GameContainer{
 		BaseContainer:  base,

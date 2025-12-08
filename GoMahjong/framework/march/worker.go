@@ -135,8 +135,8 @@ func (w *Worker) doMatch(ctx context.Context, rankingType vo.RankingType, displa
 // handleMatchSuccess 处理匹配成功
 // 通过 gRPC 调用 Game 节点创建房间
 func (w *Worker) handleMatchSuccess(ctx context.Context, result *service.MatchResult) error {
-	// 通过 gRPC 调用 Game 节点创建房间
-	if err := w.callGameCreateRoom(ctx, result.GameNodeAddr, result.Players); err != nil {
+	err := w.callGameCreateRoom(ctx, result.GameNodeAddr, result.Players)
+	if err != nil {
 		// 这里可以考虑重新放进匹配队列，或者通知匹配异常
 		return fmt.Errorf("调用 Game 创建房间失败: %w", err)
 	}
@@ -148,7 +148,7 @@ func (w *Worker) handleMatchSuccess(ctx context.Context, result *service.MatchRe
 // callGameCreateRoom 通过 gRPC 调用 Game 节点创建房间
 func (w *Worker) callGameCreateRoom(ctx context.Context, gameNodeAddr string, players map[string]string) error {
 	// 使用立直麻将 4 人引擎（暂时硬编码，后续可配置）
-	const RIICHI_MAHJONG_4P_ENGINE = 0
+	const RIICHI_MAHJONG_4P_ENGINE = int32(0)
 
 	// 获取 Game 节点的 gRPC 客户端
 	client, err := w.gameConnPool.GetClient(gameNodeAddr)
@@ -159,7 +159,7 @@ func (w *Worker) callGameCreateRoom(ctx context.Context, gameNodeAddr string, pl
 	// 构建 gRPC 请求
 	req := &pb.CreateRoomRequest{
 		Players:    players,
-		EngineType: int32(RIICHI_MAHJONG_4P_ENGINE),
+		EngineType: RIICHI_MAHJONG_4P_ENGINE,
 	}
 
 	// 调用 Game 的 CreateRoom RPC（超时 5 秒）

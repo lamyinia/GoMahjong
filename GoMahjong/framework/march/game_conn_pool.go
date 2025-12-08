@@ -2,13 +2,13 @@ package march
 
 import (
 	"common/log"
-	"context"
 	"fmt"
 	pb "game/pb"
 	"sync"
-	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // GameConnPool 管理与 Game 节点的 gRPC 连接
@@ -25,32 +25,29 @@ func NewGameConnPool() *GameConnPool {
 }
 
 // GetClient 获取 Game 节点的 gRPC 客户端
-// gameNodeID: game 节点的地址，格式为 "host:port"
-func (p *GameConnPool) GetClient(gameNodeID string) (pb.GameServiceClient, error) {
+// gameNodeAddr: game 节点的地址，格式为 "host:port"
+func (p *GameConnPool) GetClient(gameNodeAddr string) (pb.GameServiceClient, error) {
 	p.mu.RLock()
-	conn, exists := p.conns[gameNodeID]
+	conn, exists := p.conns[gameNodeAddr]
 	p.mu.RUnlock()
 
 	// 如果连接已存在且有效，直接返回
-	if exists && conn != nil {
+	if exists && conn != nil && conn.GetState() == connectivity.Ready {
 		return pb.NewGameServiceClient(conn), nil
 	}
 
 	// 创建新连接
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx, gameNodeID, grpc.WithInsecure())
+	conn, err := grpc.NewClient(gameNodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return nil, fmt.Errorf("连接 Game 节点 %s 失败: %v", gameNodeID, err)
+		return nil, fmt.Errorf("连接 Game 节点 %s 失败: %v", gameNodeAddr, err)
 	}
 
 	// 保存连接到池中
 	p.mu.Lock()
-	p.conns[gameNodeID] = conn
+	p.conns[gameNodeAddr] = conn
 	p.mu.Unlock()
 
-	log.Info(fmt.Sprintf("GameConnPool 创建新连接: %s", gameNodeID))
+	log.Info(fmt.Sprintf("GameConnPool 创建新连接: %s", gameNodeAddr))
 	return pb.NewGameServiceClient(conn), nil
 }
 

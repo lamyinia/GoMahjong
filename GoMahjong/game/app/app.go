@@ -5,6 +5,10 @@ import (
 	"common/log"
 	"context"
 	"core/container"
+	provider "game/interfaces/grpc"
+	"game/pb"
+	"google.golang.org/grpc"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -32,8 +36,8 @@ func Run(ctx context.Context) error {
 	}
 
 	grpcServer := grpc.NewServer()
-	gameServer := grpc.NewGameServer(gameContainer.GameWorker.GameService)
-	pb.RegisterGameServiceServer(grpcServer, gameServer)
+	gameProvider := provider.NewGameServer(gameContainer.GameWorker.GameService)
+	pb.RegisterGameServiceServer(grpcServer, gameProvider)
 
 	go func() {
 		log.Info("Game gRPC 服务启动，监听 :8003")

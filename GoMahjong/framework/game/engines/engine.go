@@ -2,7 +2,7 @@ package engines
 
 import (
 	"fmt"
-	"framework/game"
+	"framework/game/share"
 )
 
 type engineType int32
@@ -22,7 +22,7 @@ const (
 
 // Engine 使用工厂模式，每个游戏房间都有一个游戏引擎
 type Engine interface {
-	Initialize(players []*game.PlayerInfo) error
+	Initialize(players []*share.PlayerInfo) error
 
 	CalculateScore() map[string]int
 }

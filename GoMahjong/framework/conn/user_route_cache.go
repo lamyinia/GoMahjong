@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// UserRouteCache 处理 userID -> gameNodeID 的映射
 type UserRouteCache struct {
 	cache    *cache.GeneralCache
 	routeKey string

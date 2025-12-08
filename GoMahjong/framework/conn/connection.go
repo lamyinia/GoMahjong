@@ -4,6 +4,7 @@ import (
 	"common/log"
 	"github.com/gorilla/websocket"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -35,7 +36,6 @@ type LongConnection struct {
 	ConnID        string
 	Conn          *websocket.Conn
 	worker        *Worker
-	ReadChan      chan *ConnectionPack
 	WriteChan     chan []byte
 	Session       *Session
 	pingTicker    *time.Ticker
@@ -119,11 +119,19 @@ func (con *LongConnection) readMessage() {
 			}
 			log.Debug("[%s] 收到二进制消息, 大小 %d 字节, 详细: %+v", con.ConnID, len(message), message)
 			if messageType == websocket.BinaryMessage {
+				pack := &ConnectionPack{ConnID: con.ConnID, Body: message}
+				hash := fnv32(con.ConnID)
+				workerID := hash % uint32(con.worker.clientWorkerCount)
+
 				select {
-				case con.ReadChan <- &ConnectionPack{ConnID: con.ConnID, Body: message}:
 				case <-con.closeChan:
 					log.Info("客户端[%s] 异常 while sending to channel", con.ConnID)
 					return
+				case con.worker.clientWorkers[workerID] <- pack:
+				default:
+					atomic.AddInt64(&con.worker.stats.messageErrors, 1)
+					log.Warn("工作池满了，直接处理:\n workerID:%#v\n messagePack:%#v", workerID, pack)
+					con.worker.dealPack(pack)
 				}
 			} else {
 				log.Error("不支持的流类型 : %d", messageType)
@@ -173,13 +181,8 @@ func (con *LongConnection) reset() {
 	con.ConnID = ""
 	con.Conn = nil
 	con.worker = nil
-	con.ReadChan = nil
 	con.WriteChan = nil
 	con.Session = nil
 	con.pingTicker = nil
 	con.closeChan = nil
-}
-
-func NewLongConnection(conn *websocket.Conn, worker *Worker) *LongConnection {
-	return GetLongConnectionPool().Get(conn, worker)
 }

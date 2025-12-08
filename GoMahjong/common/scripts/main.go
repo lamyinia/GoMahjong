@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"framework/protocol"
 	"log"
 	"os"
 	"os/signal"
@@ -12,8 +13,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-
-	"framework/protocal"
 )
 
 const connectorWS = "ws://127.0.0.1:8082/ws"
@@ -74,12 +73,12 @@ func (tc *TestClient) listenLoop() {
 			return
 		}
 		if mt == websocket.BinaryMessage {
-			packet, err := protocal.Decode(msg)
+			packet, err := protocol.Decode(msg)
 			if err != nil {
 				log.Printf("[%s] decode error: %v", tc.userID, err)
 				continue
 			}
-			if packet.Type == protocal.Data {
+			if packet.Type == protocol.Data {
 				body := packet.ParseBody()
 				log.Printf("[%s] recv route=%s payload=%s", tc.userID, body.Route, string(body.Data))
 			} else {
@@ -100,7 +99,7 @@ func (tc *TestClient) heartbeatLoop() {
 		case <-tc.done:
 			return
 		case <-ticker.C:
-			buf, err := protocal.Wrap(protocal.Heartbeat, []byte{})
+			buf, err := protocol.Wrap(protocol.Heartbeat, []byte{})
 			if err != nil {
 				log.Printf("[%s] heartbeat wrap err: %v", tc.userID, err)
 				continue
@@ -117,8 +116,8 @@ func (tc *TestClient) heartbeatLoop() {
 }
 
 func (tc *TestClient) sendHandshake() error {
-	body := protocal.HandshakeBody{
-		Sys: protocal.Sys{
+	body := protocol.HandshakeBody{
+		Sys: protocol.Sys{
 			Type:         "go-client",
 			Version:      "1.0",
 			ProtoVersion: 1,
@@ -127,7 +126,7 @@ func (tc *TestClient) sendHandshake() error {
 		},
 	}
 	data, _ := json.Marshal(body)
-	buf, err := protocal.Wrap(protocal.Handshake, data)
+	buf, err := protocol.Wrap(protocol.Handshake, data)
 	if err != nil {
 		return err
 	}
@@ -135,7 +134,7 @@ func (tc *TestClient) sendHandshake() error {
 }
 
 func (tc *TestClient) sendHandshakeAck() error {
-	buf, err := protocal.Wrap(protocal.HandshakeAck, []byte{})
+	buf, err := protocol.Wrap(protocol.HandshakeAck, []byte{})
 	if err != nil {
 		return err
 	}
@@ -147,8 +146,8 @@ func (tc *TestClient) SendRequest(route string, body any) error {
 		return ErrNotConnected
 	}
 	payload, _ := json.Marshal(body)
-	msg := &protocal.Message{
-		Type:  protocal.Request,
+	msg := &protocol.Message{
+		Type:  protocol.Request,
 		ID:    1,
 		Route: route,
 		Data:  payload,
@@ -156,12 +155,12 @@ func (tc *TestClient) SendRequest(route string, body any) error {
 	return tc.sendMessage(msg)
 }
 
-func (tc *TestClient) sendMessage(msg *protocal.Message) error {
-	body, err := protocal.MessageEncode(msg)
+func (tc *TestClient) sendMessage(msg *protocol.Message) error {
+	body, err := protocol.MessageEncode(msg)
 	if err != nil {
 		return err
 	}
-	buf, err := protocal.Wrap(protocal.Data, body)
+	buf, err := protocol.Wrap(protocol.Data, body)
 	if err != nil {
 		return err
 	}
@@ -171,7 +170,7 @@ func (tc *TestClient) sendMessage(msg *protocal.Message) error {
 var ErrNotConnected = fmt.Errorf("client not connected")
 
 func main() {
-	buf, _ := protocal.Wrap(protocal.Handshake, []byte{255})
+	buf, _ := protocol.Wrap(protocol.Handshake, []byte{255})
 	fmt.Println(buf)
 }
 

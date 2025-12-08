@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"framework/game/engines"
+	"framework/game/share"
 	"sync"
 	"time"
 )
@@ -16,13 +17,13 @@ const (
 
 // Room 游戏房间 管理房间内的玩家和游戏状态
 type Room struct {
-	ID        string                 // 房间 ID
-	Players   map[string]*PlayerInfo // playerID -> PlayerInfo
-	Status    RoomStatus             // 房间状态
-	Engine    engines.Engine         // 游戏引擎
-	Snapshot  interface{}            // 游戏快照（用于断线重连）
-	CreatedAt time.Time              // 创建时间
-	mu        sync.RWMutex           // 保护 Players 的读写锁
+	ID        string                       // 房间 ID
+	Players   map[string]*share.PlayerInfo // playerID -> PlayerInfo
+	Status    RoomStatus                   // 房间状态
+	Engine    engines.Engine               // 游戏引擎
+	Snapshot  interface{}                  // 游戏快照（用于断线重连）
+	CreatedAt time.Time                    // 创建时间
+	mu        sync.RWMutex                 // 保护 Players 的读写锁
 }
 
 // RoomStatus 房间状态
@@ -55,7 +56,7 @@ func NewRoom(engineType int32) (*Room, error) {
 
 	return &Room{
 		ID:        GenerateRoomID(),
-		Players:   make(map[string]*PlayerInfo),
+		Players:   make(map[string]*share.PlayerInfo),
 		Status:    RoomStatusWaiting,
 		Engine:    engine,
 		Snapshot:  nil,
@@ -88,7 +89,7 @@ func (r *Room) AddPlayer(userID, connectorNodeID string) (int, error) {
 	}
 
 	// 创建玩家信息
-	player := NewPlayerInfo(userID, connectorNodeID, seatIndex)
+	player := share.NewPlayerInfo(userID, connectorNodeID, seatIndex)
 	r.Players[userID] = player
 
 	log.Info(fmt.Sprintf("Room[%s] 玩家 %s 加入房间，座位: %d", r.ID, userID, seatIndex))
@@ -110,7 +111,7 @@ func (r *Room) RemovePlayer(userID string) error {
 }
 
 // GetPlayer 获取玩家信息
-func (r *Room) GetPlayer(userID string) (*PlayerInfo, bool) {
+func (r *Room) GetPlayer(userID string) (*share.PlayerInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -190,11 +191,11 @@ func (r *Room) SavePlayerSnapshot(userID string, snapshot interface{}) error {
 }
 
 // GetAllPlayers 获取所有玩家列表（返回副本）
-func (r *Room) GetAllPlayers() []*PlayerInfo {
+func (r *Room) GetAllPlayers() []*share.PlayerInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	players := make([]*PlayerInfo, 0, len(r.Players))
+	players := make([]*share.PlayerInfo, 0, len(r.Players))
 	for _, player := range r.Players {
 		players = append(players, player)
 	}

@@ -1,15 +1,15 @@
 package mahjong
 
 import (
-	"framework/game"
 	"framework/game/engines"
+	"framework/game/share"
 )
 
 type RiichiMahjong4p struct {
 	State engines.GameState
 }
 
-func (eg *RiichiMahjong4p) Initialize(players []*game.PlayerInfo) error {
+func (eg *RiichiMahjong4p) Initialize(players []*share.PlayerInfo) error {
 	return nil
 }
 
