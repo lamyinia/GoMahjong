@@ -86,7 +86,7 @@ func (con *LongConnection) writeMessage() {
 				con.Close()
 			}
 		case <-con.closeChan:
-			log.Info("客户端[%s] writeMessage stopped", con.ConnID)
+			log.Info("客户端[%s] 写事件停止", con.ConnID)
 			return
 		}
 	}

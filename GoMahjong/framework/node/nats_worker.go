@@ -46,7 +46,7 @@ func (worker *NatsWorker) readChanMessage() {
 		select {
 		case rawMessage := <-worker.readChan:
 			var packet stream.ServicePacket
-			err := json.Unmarshal(rawMessage, packet)
+			err := json.Unmarshal(rawMessage, &packet) // TODO 传指针
 			if err != nil {
 				log.Warn("NatsWorker-节点通信 packet 解析错误: %#v", packet)
 				continue
@@ -118,9 +118,6 @@ func (worker *NatsWorker) RegisterHandlers(handlers SubscriberHandler) {
 func (worker *NatsWorker) RegisterPushHandler(handler PushHandler) {
 	worker.pushHandler = handler
 }
-
-// 确保 protocol 包被导入
-var _ = protocol.Push
 
 // PushMessage 主动推送消息
 // 将消息写入 writeChan，由 writeChanMessage goroutine 自动发送

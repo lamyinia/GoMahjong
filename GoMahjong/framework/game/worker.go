@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	svc "framework/game/application/service"
+	"framework/game/share"
 	"framework/node"
 	"framework/protocol"
 	"framework/stream"
@@ -24,18 +25,6 @@ import (
 	3.游戏结束时，更新排名积分，持久化对战记录，删除房间实例，推送游戏结束通知
 */
 
-// GameMessage connector 发送的游戏消息
-type GameMessage struct {
-	UserID string          `json:"userID"` // 用户 ID（用于查找房间）
-	Action string          `json:"action"` // 游戏动作（如：playTile, chi, peng, gang, hu）
-	Data   json.RawMessage `json:"data"`   // 动作数据
-}
-
-// ReconnectMessage 断线重连消息
-type ReconnectMessage struct {
-	UserID string `json:"userID"`
-}
-
 type Worker struct {
 	RoomManager  *RoomManager
 	MiddleWorker *node.NatsWorker
@@ -50,7 +39,7 @@ type Worker struct {
 func NewWorker(nodeID string) *Worker {
 	roomManager := NewRoomManager()
 	registry := discovery.NewRegistry()
-	monitor := NewMonitor(roomManager, registry, 5*time.Second) // 5秒更新一次负载
+	monitor := NewMonitor(roomManager, registry, 5*time.Second) // 负载上报器
 
 	worker := &Worker{
 		RoomManager:  roomManager,
@@ -100,9 +89,7 @@ func (w *Worker) Start(ctx context.Context, natsURL string, etcdConf config.Etcd
 func (w *Worker) registerHandlers() {
 	handlers := make(node.SubscriberHandler)
 
-	// 处理来自 connector 的游戏消息
-	handlers["game.play"] = w.handleGameMessage
-
+	handlers["game.play.droptile"] = w.handleDropTileHandler
 	// 处理断线重连消息
 	handlers["game.reconnect"] = w.handleReconnect
 
@@ -110,48 +97,9 @@ func (w *Worker) registerHandlers() {
 	log.Info("Game Worker 注册消息处理器完成")
 }
 
-// handleGameMessage 处理游戏消息（来自 connector）
-func (w *Worker) handleGameMessage(data []byte) interface{} {
-	var msg GameMessage
-	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Error(fmt.Sprintf("Game Worker 解析游戏消息失败: %v", err))
-		return nil
-	}
-
-	if msg.UserID == "" {
-		log.Error("Game Worker 游戏消息缺少 UserID")
-		return map[string]interface{}{
-			"success": false,
-			"error":   "缺少 UserID",
-		}
-	}
-
-	// 查找玩家所在房间
-	room, exists := w.RoomManager.GetPlayerRoom(msg.UserID)
-	if !exists {
-		log.Error(fmt.Sprintf("Game Worker 玩家 %s 不在任何房间中", msg.UserID))
-		return map[string]interface{}{
-			"success": false,
-			"error":   "玩家不在任何房间中",
-		}
-	}
-
-	log.Info(fmt.Sprintf("Game Worker 收到游戏消息: userID=%s, roomID=%s, action=%s", msg.UserID, room.ID, msg.Action))
-
-	// TODO: 根据 action 处理游戏逻辑（出牌、吃、碰、杠、胡等）
-	// 这里先返回成功，后续在 Engine 中实现具体逻辑
-	// 示例：room.Engine.HandleAction(msg.Action, msg.Data)
-
-	return map[string]interface{}{
-		"success": true,
-		"action":  msg.Action,
-		"roomID":  room.ID,
-	}
-}
-
 // handleReconnect 处理断线重连消息
 func (w *Worker) handleReconnect(data []byte) interface{} {
-	var msg ReconnectMessage
+	var msg share.ReconnectMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		log.Error(fmt.Sprintf("Game Worker 解析重连消息失败: %v", err))
 		return map[string]interface{}{
@@ -185,6 +133,37 @@ func (w *Worker) handleReconnect(data []byte) interface{} {
 	}
 }
 
+// PushConnector 推送消息给指定的 Connector（由 Engine 使用）
+// connectorNodeID: connector 的 topic
+// route: 消息路由
+// data: 消息数据
+func (w *Worker) PushConnector(connectorNodeID, route string, data []byte) error {
+	if connectorNodeID == "" {
+		return fmt.Errorf("connector topic 不能为空")
+	}
+
+	// 构建 ServicePacket
+	packet := &stream.ServicePacket{
+		Source:      w.NodeID,
+		Destination: connectorNodeID,
+		Route:       route,
+		Body: &protocol.Message{
+			Type:  protocol.Push,
+			Route: route,
+			Data:  data,
+		},
+	}
+
+	// 通过 NatsWorker 推送消息
+	err := w.MiddleWorker.PushMessage(packet)
+	if err != nil {
+		return fmt.Errorf("推送消息失败: %v", err)
+	}
+
+	log.Info(fmt.Sprintf("Game Worker 推送消息给 Connector %s, route: %s", connectorNodeID, route))
+	return nil
+}
+
 // PushMessage 主动推送消息给指定玩家
 func (w *Worker) PushMessage(userID, route string, data []byte) error {
 	// 获取玩家的 connector topic
@@ -213,27 +192,6 @@ func (w *Worker) PushMessage(userID, route string, data []byte) error {
 	}
 
 	log.Info(fmt.Sprintf("Game Worker 推送消息给玩家 %s, route: %s, connector: %s", userID, route, dest))
-	return nil
-}
-
-// PushMessageToRoom 推送消息给房间内的所有玩家
-// roomID: 房间 ID
-// route: 消息路由
-// data: 消息数据
-func (w *Worker) PushMessageToRoom(roomID, route string, data []byte) error {
-	room, exists := w.RoomManager.GetRoom(roomID)
-	if !exists {
-		return fmt.Errorf("房间 %s 不存在", roomID)
-	}
-
-	players := room.GetAllPlayers()
-	for _, player := range players {
-		if err := w.PushMessage(player.UserID, route, data); err != nil {
-			log.Error(fmt.Sprintf("Game Worker 推送消息给玩家 %s 失败: %v", player.UserID, err))
-			// 继续推送其他玩家，不中断
-		}
-	}
-
 	return nil
 }
 

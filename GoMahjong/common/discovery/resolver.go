@@ -99,7 +99,7 @@ func (r *Resolver) sync() error {
 		log.Error("sync() grpc 客户端获取 etcd 错误")
 		return err
 	}
-	log.Info(fmt.Sprintf("sync() etcd 客户端同步结果：%+v", res))
+	log.Debug(fmt.Sprintf("sync() etcd 客户端同步结果：%+v", res))
 
 	r.srvAddrList = []resolver.Address{}
 	for _, kv := range res.Kvs {

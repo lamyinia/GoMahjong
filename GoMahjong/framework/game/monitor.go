@@ -70,7 +70,7 @@ func (m *Monitor) reportLoad() {
 	if err != nil {
 		log.Error(fmt.Sprintf("Monitor 上报负载信息失败: %v", err))
 	} else {
-		log.Debug(fmt.Sprintf("Monitor 上报负载信息成功: Load=%.2f, Games=%d, Players=%d, CPU=%.2f%%, Mem=%.2f%%",
+		log.Debug(fmt.Sprintf("Monitor 上报负载信息成功: Load=%.2f, Games=%d, Users=%d, CPU=%.2f, Mem=%.2f",
 			load, loadInfo.GameCount, loadInfo.PlayerCount, loadInfo.CPUUsage, loadInfo.MemUsage))
 	}
 }

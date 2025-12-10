@@ -38,7 +38,7 @@ var (
 
 type CheckOriginHandler func(r *http.Request) bool
 
-type PacketTypeHandler func(packet *protocol.Packet, c Connection) error
+type PacketTypeHandler func(packet *protocol.Packet, c *Connection) error
 
 type ClientBucket struct {
 	sync.RWMutex
@@ -57,7 +57,6 @@ type ClientBucket struct {
 	6. 设计路由，收到来自 game、hall、march 节点或者 player 的消息后，如果需要转发，转发给目标
 	7. 设计处理器，收到来自 game、hall、march 节点或者 player 的消息后，响应本地内存事件
 
-	数据流向 LongConnection.ReadChan=Worker.ClientReadChan -> clientBuckets[connID]
 */
 
 type Worker struct {
@@ -173,21 +172,12 @@ func (w *Worker) Run(topic string, maxConn int, addr string) error {
 
 	go w.monitorPerformance()
 	w.injectDefaultHandlers()
+	w.injectMiddleWorkerHandler()
 
 	http.HandleFunc("/ws/", w.upgradeFunc) // 注意匹配子路径
 	log.Info("websocket worker 启动了 %d 个 worker 协程和 %d 个连接分片桶", w.clientWorkerCount, len(w.clientBuckets))
 	log.Info("http 监听地址 %s", addr)
 	return http.ListenAndServe(addr, nil)
-}
-
-func (w *Worker) injectDefaultHandlers() {
-	w.clientHandlers[protocol.Handshake] = w.handshakeHandler
-	w.clientHandlers[protocol.HandshakeAck] = w.handshakeAckHandler
-	w.clientHandlers[protocol.Heartbeat] = w.heartbeatHandler
-	w.clientHandlers[protocol.Data] = w.messageHandler
-	w.clientHandlers[protocol.Kick] = w.kickHandler
-
-	w.MessageTypeHandlers["connector.joinqueue"] = joinQueueHandler
 }
 
 func (w *Worker) upgradeFunc(writer http.ResponseWriter, r *http.Request) {
@@ -231,7 +221,7 @@ func (w *Worker) upgradeFunc(writer http.ResponseWriter, r *http.Request) {
 	w.BindUser(userID, client)
 	w.addClient(client)
 	client.Run()
-	log.Debug("WebSocket connection established: userID=%s method=%s cid=%s remote=%s", userID, authMethod, client.ConnID, r.RemoteAddr)
+	log.Info("WebSocket 建立连接: userID=%s, method=%s, connID=%s, remote=%s", userID, authMethod, client.ConnID, r.RemoteAddr)
 }
 
 func (w *Worker) addClient(client *LongConnection) {
@@ -371,22 +361,22 @@ func (w *Worker) dealPack(messagePack *ConnectionPack) {
 	packet, err := protocol.Decode(messagePack.Body)
 	if err != nil {
 		atomic.AddInt64(&w.stats.messageErrors, 1)
-		log.Error("解码错误, pack: %#v, err: %#v", packet, err)
+		log.Warn("解码错误, pack: %#v, err: %#v", packet, err)
 		return
 	}
 	if err := w.doEvent(packet, messagePack.ConnID); err != nil {
 		atomic.AddInt64(&w.stats.messageErrors, 1)
-		log.Error("事件处理错误, pack: %#v, err: %#v", packet, err)
+		log.Warn("事件处理错误, pack: %#v, err: %#v", packet, err)
 		return
 	}
 }
 
-// doEvent 处理协议层的时间
+// doEvent 处理协议层的事件
 func (w *Worker) doEvent(packet *protocol.Packet, connID string) error {
 	bucket := w.getBucket(connID)
 
 	bucket.RLock()
-	conn, ok := bucket.clients[connID]
+	conn, ok := bucket.clients[connID] // TODO 这里会拷贝新的 conn 吗?
 	bucket.RUnlock()
 
 	if !ok {
@@ -398,7 +388,7 @@ func (w *Worker) doEvent(packet *protocol.Packet, connID string) error {
 		return errors.New("找不到处理器")
 	}
 
-	return handler(packet, conn)
+	return handler(packet, &conn)
 }
 
 func (w *Worker) getBucket(connID string) *ClientBucket {

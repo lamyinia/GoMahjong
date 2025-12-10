@@ -17,13 +17,13 @@ const (
 
 // Room 游戏房间 管理房间内的玩家和游戏状态
 type Room struct {
-	ID        string                       // 房间 ID
-	Players   map[string]*share.PlayerInfo // playerID -> PlayerInfo
-	Status    RoomStatus                   // 房间状态
-	Engine    engines.Engine               // 游戏引擎
-	Snapshot  interface{}                  // 游戏快照（用于断线重连）
-	CreatedAt time.Time                    // 创建时间
-	mu        sync.RWMutex                 // 保护 Players 的读写锁
+	ID        string                     // 房间 ID
+	Users     map[string]*share.UserInfo // userID -> UserInfo（Engine 和 Room 共用）
+	Status    RoomStatus                 // 房间状态
+	Engine    engines.Engine             // 游戏引擎
+	Snapshot  interface{}                // 游戏快照（用于断线重连）
+	CreatedAt time.Time                  // 创建时间
+	mu        sync.RWMutex               // 保护 Users 的读写锁
 }
 
 // RoomStatus 房间状态
@@ -45,18 +45,16 @@ func GenerateRoomID() string {
 	return fmt.Sprintf("room_%d_%s", timestamp, randomStr)
 }
 
-// NewRoom 创建新房间
-// engineType: 游戏引擎类型
-func NewRoom(engineType int32) (*Room, error) {
-	// 创建游戏引擎
-	engine, err := engines.NewEngine(engineType)
-	if err != nil {
-		return nil, fmt.Errorf("创建游戏引擎失败: %v", err)
+// NewRoom 创建新房间（使用原型模式，Engine 由外部注入）
+// engine: 克隆的游戏引擎实例
+func NewRoom(engine engines.Engine) (*Room, error) {
+	if engine == nil {
+		return nil, fmt.Errorf("游戏引擎不能为空")
 	}
 
 	return &Room{
 		ID:        GenerateRoomID(),
-		Players:   make(map[string]*share.PlayerInfo),
+		Users:     make(map[string]*share.UserInfo),
 		Status:    RoomStatusWaiting,
 		Engine:    engine,
 		Snapshot:  nil,
@@ -73,7 +71,7 @@ func (r *Room) AddPlayer(userID, connectorNodeID string) (int, error) {
 	defer r.mu.Unlock()
 
 	// 检查玩家是否已在房间中
-	if _, exists := r.Players[userID]; exists {
+	if _, exists := r.Users[userID]; exists {
 		return -1, fmt.Errorf("玩家 %s 已在房间中", userID)
 	}
 
@@ -89,8 +87,8 @@ func (r *Room) AddPlayer(userID, connectorNodeID string) (int, error) {
 	}
 
 	// 创建玩家信息
-	player := share.NewPlayerInfo(userID, connectorNodeID, seatIndex)
-	r.Players[userID] = player
+	player := share.NewUserInfo(userID, connectorNodeID, seatIndex)
+	r.Users[userID] = player
 
 	log.Info(fmt.Sprintf("Room[%s] 玩家 %s 加入房间，座位: %d", r.ID, userID, seatIndex))
 	return seatIndex, nil
@@ -101,21 +99,21 @@ func (r *Room) RemovePlayer(userID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, exists := r.Players[userID]; !exists {
+	if _, exists := r.Users[userID]; !exists {
 		return fmt.Errorf("玩家 %s 不在房间中", userID)
 	}
 
-	delete(r.Players, userID)
+	delete(r.Users, userID)
 	log.Info(fmt.Sprintf("Room[%s] 玩家 %s 离开房间", r.ID, userID))
 	return nil
 }
 
 // GetPlayer 获取玩家信息
-func (r *Room) GetPlayer(userID string) (*share.PlayerInfo, bool) {
+func (r *Room) GetPlayer(userID string) (*share.UserInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	player, exists := r.Players[userID]
+	player, exists := r.Users[userID]
 	return player, exists
 }
 
@@ -124,7 +122,7 @@ func (r *Room) GetPlayerCount() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return len(r.Players)
+	return len(r.Users)
 }
 
 // UpdateStatus 更新房间状态
@@ -167,7 +165,7 @@ func (r *Room) GetPlayerSnapshot(userID string) interface{} {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	player, exists := r.Players[userID]
+	player, exists := r.Users[userID]
 	if !exists {
 		return nil
 	}
@@ -180,7 +178,7 @@ func (r *Room) SavePlayerSnapshot(userID string, snapshot interface{}) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	player, exists := r.Players[userID]
+	player, exists := r.Users[userID]
 	if !exists {
 		return fmt.Errorf("玩家 %s 不在房间中", userID)
 	}
@@ -191,12 +189,12 @@ func (r *Room) SavePlayerSnapshot(userID string, snapshot interface{}) error {
 }
 
 // GetAllPlayers 获取所有玩家列表（返回副本）
-func (r *Room) GetAllPlayers() []*share.PlayerInfo {
+func (r *Room) GetAllPlayers() []*share.UserInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	players := make([]*share.PlayerInfo, 0, len(r.Players))
-	for _, player := range r.Players {
+	players := make([]*share.UserInfo, 0, len(r.Users))
+	for _, player := range r.Users {
 		players = append(players, player)
 	}
 	return players
@@ -207,7 +205,7 @@ func (r *Room) GetAllPlayers() []*share.PlayerInfo {
 func (r *Room) findAvailableSeat() int {
 	// 获取已占用的座位
 	occupiedSeats := make(map[int]bool)
-	for _, player := range r.Players {
+	for _, player := range r.Users {
 		occupiedSeats[player.SeatIndex] = true
 	}
 

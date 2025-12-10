@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>麻将游戏测试客户端</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
+        .header h1 { color: #333; margin-bottom: 10px; }
+        .content { display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 20px; }
+        .player-panel { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); display: flex; flex-direction: column; height: 600px; }
+        .player-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; font-weight: 600; }
+        .player-status { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; font-size: 14px; }
+        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+        .status-connected { background: #d4edda; color: #155724; }
+        .status-disconnected { background: #f8d7da; color: #721c24; }
+        .log-area { flex: 1; overflow-y: auto; padding: 15px; background: #f8f9fa; font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; line-height: 1.6; }
+        .log-entry { margin-bottom: 8px; padding: 8px; background: white; border-left: 3px solid #667eea; border-radius: 2px; }
+        .log-time { color: #999; font-size: 11px; }
+        .log-level { font-weight: 600; display: inline-block; min-width: 60px; }
+        .log-level.SEND { color: #28a745; }
+        .log-level.RECV { color: #007bff; }
+        .log-level.ERROR { color: #dc3545; }
+        .log-message { color: #333; word-break: break-all; }
+        .input-area { padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; flex-direction: column; }
+        .command-input { padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; font-family: 'Monaco', 'Courier New', monospace; }
+        .command-input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+        .send-btn { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; transition: all 0.3s; }
+        .send-btn:hover { background: #5568d3; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); }
+        .quick-buttons { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+        .quick-btn { padding: 8px 16px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.3s; }
+        .quick-btn:hover { background: #e0e0e0; border-color: #667eea; }
+        @media (max-width: 768px) { .content { grid-template-columns: 1fr; } .player-panel { height: 500px; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>麻将游戏测试客户端</h1>
+            <p>实时多玩家测试界面</p>
+        </div>
+        <div id="content" class="content"></div>
+    </div>
+    <script>
+        const players = {};
+        const wsConnections = {};
+
+        async function loadPlayers() {
+            try {
+                const response = await fetch('/api/players');
+                const playerList = await response.json();
+                const content = document.getElementById('content');
+                
+                for (const player of playerList) {
+                    if (!players[player.userID]) {
+                        createPlayerPanel(player.userID);
+                        connectWebSocket(player.userID);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load players:', error);
+            }
+        }
+
+        function createPlayerPanel(userID) {
+            if (document.getElementById('player-' + userID)) {
+                return;
+            }
+            
+            const content = document.getElementById('content');
+            const panel = document.createElement('div');
+            panel.className = 'player-panel';
+            panel.id = 'player-' + userID;
+            
+            let html = '<div class="player-header">' + userID + '</div>';
+            html += '<div class="player-status"><span>Status: <span class="status-badge status-disconnected" id="status-' + userID + '">Disconnected</span></span></div>';
+            html += '<div class="log-area" id="logs-' + userID + '"></div>';
+            html += '<div class="input-area">';
+            html += '<div class="quick-buttons">';
+            html += '<button class="quick-btn" onclick="sendCommand(\'' + userID + '\', \'join\')">Join</button>';
+            html += '<button class="quick-btn" onclick="sendCommand(\'' + userID + '\', \'play 5p\')">Play 5p</button>';
+            html += '<button class="quick-btn" onclick="sendCommand(\'' + userID + '\', \'peng\')">Peng</button>';
+            html += '<button class="quick-btn" onclick="sendCommand(\'' + userID + '\', \'gang\')">Gang</button>';
+            html += '<button class="quick-btn" onclick="sendCommand(\'' + userID + '\', \'hu\')">Hu</button>';
+            html += '<button class="quick-btn" onclick="sendCommand(\'' + userID + '\', \'skip\')">Skip</button>';
+            html += '</div>';
+            html += '<div style="display: flex; gap: 10px;">';
+            html += '<input type="text" class="command-input" id="input-' + userID + '" placeholder="Enter command..." />';
+            html += '<button class="send-btn" onclick="sendCommand(\'' + userID + '\', document.getElementById(\'input-' + userID + '\').value)">Send</button>';
+            html += '</div></div>';
+            
+            panel.innerHTML = html;
+            content.appendChild(panel);
+
+            document.getElementById('input-' + userID).addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendCommand(userID, e.target.value);
+                    e.target.value = '';
+                }
+            });
+
+            players[userID] = { logs: [] };
+        }
+
+        function connectWebSocket(userID) {
+            if (wsConnections[userID] && wsConnections[userID].readyState === WebSocket.OPEN) {
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
+
+            ws.onopen = function() {
+                console.log('WebSocket connected for ' + userID);
+                ws.send(JSON.stringify({ playerId: userID }));
+                updateStatus(userID, true);
+            };
+
+            ws.onmessage = function(event) {
+                const msg = JSON.parse(event.data);
+                addLog(msg.playerId, msg.level, msg.message, msg.timestamp);
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error for ' + userID + ':', error);
+                updateStatus(userID, false);
+            };
+
+            ws.onclose = function() {
+                console.log('WebSocket closed for ' + userID);
+                updateStatus(userID, false);
+                setTimeout(function() { connectWebSocket(userID); }, 3000);
+            };
+
+            wsConnections[userID] = ws;
+        }
+
+        function sendCommand(userID, command) {
+            if (!command || !command.trim()) return;
+            const ws = wsConnections[userID];
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ playerId: userID, command: command.trim() }));
+                document.getElementById('input-' + userID).value = '';
+            } else {
+                alert('Not connected to server');
+            }
+        }
+
+        function addLog(userID, level, message, timestamp) {
+            const logsDiv = document.getElementById('logs-' + userID);
+            if (!logsDiv) return;
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const time = new Date(timestamp).toLocaleTimeString('en-US');
+            entry.innerHTML = '<div class="log-time">' + time + '</div><span class="log-level ' + level + '">' + level + '</span><span class="log-message">' + escapeHtml(message) + '</span>';
+            logsDiv.appendChild(entry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+            if (logsDiv.children.length > 100) {
+                logsDiv.removeChild(logsDiv.firstChild);
+            }
+        }
+
+        function updateStatus(userID, connected) {
+            const badge = document.getElementById('status-' + userID);
+            if (badge) {
+                if (connected) {
+                    badge.textContent = 'Connected';
+                    badge.className = 'status-badge status-connected';
+                } else {
+                    badge.textContent = 'Disconnected';
+                    badge.className = 'status-badge status-disconnected';
+                }
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        loadPlayers();
+    </script>
+</body>
+</html>

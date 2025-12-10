@@ -29,7 +29,7 @@ func Run(ctx context.Context) error {
 	}()
 
 	// 1. 启动 gRPC 服务
-	lis, err := net.Listen("tcp", ":8003")
+	lis, err := net.Listen("tcp", config.Conf.EtcdConf.Register.Addr)
 	if err != nil {
 		log.Fatal("监听 gRPC 端口失败: %v", err)
 		return err
@@ -46,7 +46,7 @@ func Run(ctx context.Context) error {
 		}
 	}()
 
-	// 2. 启动 Worker（NATS 监听）
+	// 2. 启动 Worker
 	go func() {
 		err := gameContainer.GameWorker.Start(
 			ctx,

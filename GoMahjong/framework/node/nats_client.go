@@ -30,7 +30,6 @@ func (nc *NatsClient) IsConnected() bool {
 }
 
 func (nc *NatsClient) Run(url string) error {
-	log.Info("nats 服务正在启动, url:%s", url)
 	var err error
 	nc.conn, err = nats.Connect(url)
 	if err != nil {

@@ -52,7 +52,7 @@ func joinQueueHandler(session *Session, body []byte) (any, error) {
 		result["estimatedSeconds"] = resp.GetEstimatedSeconds()
 	}
 
-	log.Info("用户加入匹配队列: userID=%s, connectorID=%s, success=%v, queueID=%s", userID, nodeID, resp.GetSuccess(), resp.GetQueueID())
+	log.Info("用户加入匹配队列: userID=%s, success=%v, message=%s", userID, resp.GetSuccess(), resp.GetMessage())
 
 	return result, nil
 }

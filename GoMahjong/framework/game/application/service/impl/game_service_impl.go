@@ -67,7 +67,7 @@ func (s *GameServiceImpl) CreateRoom(ctx context.Context, req *service.CreateRoo
 	// 向每个玩家推送匹配成功消息
 	for userID := range req.Players {
 		if err := s.worker.PushMessage(userID, dto.MatchingSuccess, msgData); err != nil {
-			log.Error(fmt.Sprintf("GameService 推送消息给玩家 %s 失败: %v", userID, err))
+			log.Warn(fmt.Sprintf("GameService 推送消息给玩家 %s 失败: %v", userID, err))
 			// 继续推送其他玩家，不中断
 		}
 	}

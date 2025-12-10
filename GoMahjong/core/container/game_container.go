@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"framework/game"
 	"framework/game/application/service/impl"
+	"framework/game/engines"
+	"framework/game/engines/mahjong"
 	"sync"
 )
 
@@ -45,7 +47,19 @@ func NewGameContainer() *GameContainer {
 	// 创建 GameWorker
 	worker := game.NewWorker(gameConfig.GetID())
 
-	// 创建 GameService 并注入 Worker
+	// 步骤 1：创建 Engine 原型（使用原型模式，注入 Worker）
+	// 目前只支持立直麻将 4 人引擎
+	enginePrototypes := createEnginePrototypes(worker)
+
+	// 步骤 2：注入 Engine 原型到 RoomManager
+	for engineType, engine := range enginePrototypes {
+		if err := worker.RoomManager.SetEnginePrototype(engineType, engine); err != nil {
+			log.Fatal("注入 Engine 原型失败: %v", err)
+			return nil
+		}
+	}
+
+	// 步骤 3：创建 GameService 并注入 Worker
 	gameService := impl.NewGameService(worker.RoomManager, worker)
 	worker.SetGameService(gameService)
 
@@ -54,6 +68,19 @@ func NewGameContainer() *GameContainer {
 		userRepository: userRepo,
 		GameWorker:     worker,
 	}
+}
+
+// createEnginePrototypes 创建所有 Engine 原型
+// worker: Game Worker（注入到 Engine 原型中）
+// 返回：map[engineType]Engine 原型
+func createEnginePrototypes(worker *game.Worker) map[int32]engines.Engine {
+	prototypes := make(map[int32]engines.Engine)
+
+	// 创建立直麻将 4 人引擎原型，注入 Worker
+	prototypes[int32(engines.RIICHI_MAHJONG_4P_ENGINE)] = mahjong.NewRiichiMahjong4p(worker)
+
+	log.Info("GameContainer 创建 Engine 原型完成，共 %d 个引擎", len(prototypes))
+	return prototypes
 }
 
 // Close 关闭容器资源（幂等操作，可以安全地多次调用）

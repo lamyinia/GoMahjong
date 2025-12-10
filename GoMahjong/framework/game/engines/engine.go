@@ -1,7 +1,6 @@
 package engines
 
 import (
-	"fmt"
 	"framework/game/share"
 )
 
@@ -20,20 +19,18 @@ const (
 	GameFinished                    // 结束
 )
 
-// Engine 使用工厂模式，每个游戏房间都有一个游戏引擎
+// Engine 使用原型模式，每个游戏房间都有一个游戏引擎
 type Engine interface {
-	Initialize(players []*share.PlayerInfo) error
+	// Initialize 初始化游戏引擎
+	// users: Room.Users map，Engine 和 Room 共用
+	Initialize(users map[string]*share.UserInfo) error
 
+	// CalculateScore 计算分数
 	CalculateScore() map[string]int
-}
 
-// NewEngine 工厂方法，根据 engineType 创建对应的引擎
-func NewEngine(engineType int32) (Engine, error) {
-	switch engineType {
-	case int32(RIICHI_MAHJONG_4P_ENGINE):
-		// 暂时返回 nil，游戏逻辑部分后续实现
-		return nil, fmt.Errorf("立直麻将引擎实现中，敬请期待")
-	default:
-		return nil, fmt.Errorf("不支持的引擎类型: %d", engineType)
-	}
+	// DriveEngine 驱动游戏逻辑
+	DriveEngine(event share.GameEvent)
+
+	// Clone 克隆引擎实例（用于原型模式）
+	Clone() Engine
 }

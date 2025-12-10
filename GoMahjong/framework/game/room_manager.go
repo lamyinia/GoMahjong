@@ -4,26 +4,44 @@ import (
 	"common/log"
 	"errors"
 	"fmt"
+	"framework/game/engines"
 	"sync"
 )
 
 // RoomManager 房间管理器
-// 管理所有游戏房间实例
+// 管理所有游戏房间实例，使用原型模式管理 Engine
 type RoomManager struct {
-	rooms      map[string]*Room  // roomID -> Room
-	playerRoom map[string]string // playerID -> roomID
-	mu         sync.RWMutex
+	rooms            map[string]*Room         // roomID -> Room
+	playerRoom       map[string]string        // playerID -> roomID
+	enginePrototypes map[int32]engines.Engine // engineType -> Engine 原型
+	mu               sync.RWMutex
 }
 
 // NewRoomManager 创建房间管理器
 func NewRoomManager() *RoomManager {
 	return &RoomManager{
-		rooms:      make(map[string]*Room),
-		playerRoom: make(map[string]string),
+		rooms:            make(map[string]*Room),
+		playerRoom:       make(map[string]string),
+		enginePrototypes: make(map[int32]engines.Engine),
 	}
 }
 
-// CreateRoom 创建房间并添加玩家
+// SetEnginePrototype 注入 Engine 原型
+// 在 GameContainer 初始化时调用
+func (rm *RoomManager) SetEnginePrototype(engineType int32, engine engines.Engine) error {
+	if engine == nil {
+		return fmt.Errorf("Engine 原型不能为空")
+	}
+
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	rm.enginePrototypes[engineType] = engine
+	log.Info(fmt.Sprintf("RoomManager 注入 Engine 原型: engineType=%d", engineType))
+	return nil
+}
+
+// CreateRoom 创建房间并添加玩家（使用原型模式）
 // players: 玩家列表，格式为 map[userID]connectorTopic
 // engineType: 游戏引擎类型
 // 返回：房间实例和错误
@@ -32,27 +50,34 @@ func (rm *RoomManager) CreateRoom(players map[string]string, engineType int32) (
 		return nil, errors.New("玩家列表不能为空")
 	}
 
-	if len(players) > MaxPlayers {
-		return nil, fmt.Errorf("玩家数量超过最大限制 %d", MaxPlayers)
-	}
-
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
 	// 检查玩家是否已在其他房间中
 	for userID := range players {
 		if roomID, exists := rm.playerRoom[userID]; exists {
-			return nil, fmt.Errorf("玩家 %s 已在房间 %s 中", userID, roomID)
+			log.Warn("玩家 %s 已在房间 %s 中", userID, roomID)
 		}
 	}
 
-	// 创建新房间（传递 engineType）
-	room, err := NewRoom(engineType)
+	// 步骤 1：从原型克隆 Engine
+	prototype, exists := rm.enginePrototypes[engineType]
+	if !exists {
+		return nil, fmt.Errorf("不支持的引擎类型: %d", engineType)
+	}
+
+	engine := prototype.Clone()
+	if engine == nil {
+		return nil, fmt.Errorf("克隆游戏引擎失败: engineType=%d", engineType)
+	}
+
+	// 步骤 2：创建新房间（注入克隆的 Engine）
+	room, err := NewRoom(engine)
 	if err != nil {
 		return nil, fmt.Errorf("创建房间失败: %v", err)
 	}
 
-	// 添加玩家到房间
+	// 步骤 3：添加玩家到房间
 	for userID, connectorNodeID := range players {
 		seatIndex, err := room.AddPlayer(userID, connectorNodeID)
 		if err != nil {
@@ -66,9 +91,8 @@ func (rm *RoomManager) CreateRoom(players map[string]string, engineType int32) (
 		log.Info(fmt.Sprintf("RoomManager 玩家 %s 路由到房间 %s，connector: %s，座位: %d", userID, room.ID, connectorNodeID, seatIndex))
 	}
 
-	// 初始化游戏引擎
-	playerInfos := room.GetAllPlayers()
-	if err := room.Engine.Initialize(playerInfos); err != nil {
+	// 步骤 4：初始化游戏引擎（所有玩家都添加后，传入 Room.Users）
+	if err := room.Engine.Initialize(room.Users); err != nil {
 		rm.cleanupRoom(room.ID)
 		return nil, fmt.Errorf("初始化游戏引擎失败: %v", err)
 	}
@@ -116,7 +140,7 @@ func (rm *RoomManager) DeleteRoom(roomID string) error {
 
 	// 清理所有玩家的路由映射
 	room.mu.RLock()
-	for playerID := range room.Players {
+	for playerID := range room.Users {
 		delete(rm.playerRoom, playerID)
 	}
 	room.mu.RUnlock()
@@ -233,7 +257,7 @@ func (rm *RoomManager) GetPlayerConnector(userID string) (string, bool) {
 		return "", false
 	}
 
-	return player.ConnectorTopic, true
+	return player.ConnectorNodeID, true
 }
 
 // GetStats 获取统计信息（房间数、玩家数）
@@ -248,7 +272,7 @@ func (rm *RoomManager) GetStats() (gameCount int, playerCount int) {
 	playerSet := make(map[string]bool)
 	for _, room := range rm.rooms {
 		room.mu.RLock()
-		for playerID := range room.Players {
+		for playerID := range room.Users {
 			playerSet[playerID] = true
 		}
 		room.mu.RUnlock()
@@ -279,7 +303,7 @@ func (rm *RoomManager) cleanupRoom(roomID string) {
 
 	// 清理所有玩家的路由映射
 	room.mu.RLock()
-	for playerID := range room.Players {
+	for playerID := range room.Users {
 		delete(rm.playerRoom, playerID)
 	}
 	room.mu.RUnlock()

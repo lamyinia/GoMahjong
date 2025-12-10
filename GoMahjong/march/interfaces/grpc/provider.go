@@ -32,7 +32,7 @@ func (p *MatchProvider) JoinQueue(ctx context.Context, req *pb.JoinQueueRequest)
 	}
 
 	if err := p.matchService.JoinQueue(ctx, req.GetUserID(), req.GetNodeID()); err != nil {
-		log.Debug("进入匹配队列失败: %#v", req)
+		log.Warn("进入匹配队列失败: %#v", req)
 		return &pb.JoinQueueResponse{
 			Success: false,
 			Message: err.Error(),
