@@ -76,7 +76,6 @@ func NewGameContainer() *GameContainer {
 func createEnginePrototypes(worker *game.Worker) map[int32]engines.Engine {
 	prototypes := make(map[int32]engines.Engine)
 
-	// 创建立直麻将 4 人引擎原型，注入 Worker
 	prototypes[int32(engines.RIICHI_MAHJONG_4P_ENGINE)] = mahjong.NewRiichiMahjong4p(worker)
 
 	log.Info("GameContainer 创建 Engine 原型完成，共 %d 个引擎", len(prototypes))

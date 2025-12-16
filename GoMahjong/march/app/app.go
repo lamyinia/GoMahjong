@@ -45,7 +45,7 @@ func Run(ctx context.Context) error {
 
 	registry = discovery.NewRegistry()
 	if err = registry.Register(config.Conf.EtcdConf, marchContainer.NodeID); err != nil {
-		log.Fatal("march gRPC 注册 etcd 失败: %v", err)
+		log.Fatal("march 注册 etcd 失败: %v", err)
 		return err
 	}
 

@@ -21,15 +21,15 @@ const (
 
 // Engine 使用原型模式，每个游戏房间都有一个游戏引擎
 type Engine interface {
-	// Initialize 初始化游戏引擎
-	// users: Room.Users map，Engine 和 Room 共用
-	Initialize(users map[string]*share.UserInfo) error
+	// InitializeEngine 初始化游戏引擎
+	// users: Room.UserMap map，Engine 和 Room 共用
+	InitializeEngine(users map[string]*share.UserInfo) error
 
 	// CalculateScore 计算分数
 	CalculateScore() map[string]int
 
 	// DriveEngine 驱动游戏逻辑
-	DriveEngine(event share.GameEvent)
+	DriveEngine(event share.GameEvent) // 似乎跟 go 的特性有关，所以这里实际上需要传指针
 
 	// Clone 克隆引擎实例（用于原型模式）
 	Clone() Engine

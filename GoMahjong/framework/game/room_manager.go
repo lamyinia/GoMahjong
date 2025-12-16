@@ -45,16 +45,19 @@ func (rm *RoomManager) SetEnginePrototype(engineType int32, engine engines.Engin
 // players: 玩家列表，格式为 map[userID]connectorTopic
 // engineType: 游戏引擎类型
 // 返回：房间实例和错误
-func (rm *RoomManager) CreateRoom(players map[string]string, engineType int32) (*Room, error) {
-	if len(players) == 0 {
+func (rm *RoomManager) CreateRoom(users map[string]string, engineType int32) (*Room, error) {
+	if len(users) == 0 {
 		return nil, errors.New("玩家列表不能为空")
+	}
+	if len(users) > 4 {
+		return nil, errors.New("玩家列表异常")
 	}
 
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
 	// 检查玩家是否已在其他房间中
-	for userID := range players {
+	for userID := range users {
 		if roomID, exists := rm.playerRoom[userID]; exists {
 			log.Warn("玩家 %s 已在房间 %s 中", userID, roomID)
 		}
@@ -65,42 +68,30 @@ func (rm *RoomManager) CreateRoom(players map[string]string, engineType int32) (
 	if !exists {
 		return nil, fmt.Errorf("不支持的引擎类型: %d", engineType)
 	}
-
 	engine := prototype.Clone()
 	if engine == nil {
 		return nil, fmt.Errorf("克隆游戏引擎失败: engineType=%d", engineType)
 	}
 
-	// 步骤 2：创建新房间（注入克隆的 Engine）
-	room, err := NewRoom(engine)
+	// 步骤 2：创建新房间（注入克隆的 Engine 和已分配座位的玩家）
+	room, err := NewRoom(engine, users)
 	if err != nil {
 		return nil, fmt.Errorf("创建房间失败: %v", err)
 	}
 
-	// 步骤 3：添加玩家到房间
-	for userID, connectorNodeID := range players {
-		seatIndex, err := room.AddPlayer(userID, connectorNodeID)
-		if err != nil {
-			// 如果添加失败，清理已添加的玩家
-			rm.cleanupRoom(room.ID)
-			return nil, fmt.Errorf("添加玩家 %s 失败: %v", userID, err)
-		}
-
-		// 更新路由映射
+	// 步骤 3：更新路由映射
+	for userID := range users {
 		rm.playerRoom[userID] = room.ID
-		log.Info(fmt.Sprintf("RoomManager 玩家 %s 路由到房间 %s，connector: %s，座位: %d", userID, room.ID, connectorNodeID, seatIndex))
 	}
 
-	// 步骤 4：初始化游戏引擎（所有玩家都添加后，传入 Room.Users）
-	if err := room.Engine.Initialize(room.Users); err != nil {
+	// 步骤 4：初始化游戏引擎（传入 Room.UserMap）
+	if err := room.Engine.InitializeEngine(room.Users); err != nil {
 		rm.cleanupRoom(room.ID)
 		return nil, fmt.Errorf("初始化游戏引擎失败: %v", err)
 	}
-
-	// 保存房间
 	rm.rooms[room.ID] = room
 
-	log.Info(fmt.Sprintf("RoomManager 创建房间 %s，玩家数: %d，引擎类型: %d", room.ID, len(players), engineType))
+	log.Info(fmt.Sprintf("RoomManager 创建房间 %s，玩家数: %d，引擎类型: %d", room.ID, len(users), engineType))
 	return room, nil
 }
 
@@ -149,58 +140,6 @@ func (rm *RoomManager) DeleteRoom(roomID string) error {
 	delete(rm.rooms, roomID)
 
 	log.Info(fmt.Sprintf("RoomManager 删除房间 %s", roomID))
-	return nil
-}
-
-// AddPlayerToRoom 添加玩家到房间（更新路由）
-// 用于玩家重新连接或加入已有房间
-func (rm *RoomManager) AddPlayerToRoom(roomID, userID, connectorTopic string) (int, error) {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	room, exists := rm.rooms[roomID]
-	if !exists {
-		return -1, fmt.Errorf("房间 %s 不存在", roomID)
-	}
-
-	// 检查玩家是否已在其他房间中
-	if existingRoomID, exists := rm.playerRoom[userID]; exists && existingRoomID != roomID {
-		return -1, fmt.Errorf("玩家 %s 已在房间 %s 中", userID, existingRoomID)
-	}
-
-	// 添加玩家到房间
-	seatIndex, err := room.AddPlayer(userID, connectorTopic)
-	if err != nil {
-		return -1, err
-	}
-
-	// 更新路由映射
-	rm.playerRoom[userID] = roomID
-
-	log.Info(fmt.Sprintf("RoomManager 玩家 %s 添加到房间 %s，connector: %s，座位: %d", userID, roomID, connectorTopic, seatIndex))
-	return seatIndex, nil
-}
-
-// RemovePlayerFromRoom 从房间移除玩家（更新路由）
-func (rm *RoomManager) RemovePlayerFromRoom(roomID, userID string) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	room, exists := rm.rooms[roomID]
-	if !exists {
-		return fmt.Errorf("房间 %s 不存在", roomID)
-	}
-
-	// 从房间移除玩家
-	err := room.RemovePlayer(userID)
-	if err != nil {
-		return err
-	}
-
-	// 清理路由映射
-	delete(rm.playerRoom, userID)
-
-	log.Info(fmt.Sprintf("RoomManager 玩家 %s 从房间 %s 移除", userID, roomID))
 	return nil
 }
 

@@ -14,11 +14,9 @@ import (
 )
 
 func Run(ctx context.Context) error {
-	// 1. 创建容器（管理所有依赖）
 	connectorContainer := container.NewConnectorContainer()
 	defer connectorContainer.Close()
 
-	// 2. 从容器获取配置和 Worker
 	connectorConfig := connectorContainer.GetConnectorConfig()
 	cfg, ok := connectorConfig.(interface{ GetID() string })
 	if !ok || cfg == nil {
@@ -26,20 +24,17 @@ func Run(ctx context.Context) error {
 		return nil
 	}
 
-	// 3. 初始化 RPC 客户端并检测 march gRPC 是否可达
+	// 初始化 RPC 客户端并检测 march gRPC 是否可达
 	rpc.Init()
 	if err := healthCheckMarch(cfg.GetID()); err != nil {
 		log.Fatal("march RPC 健康检查失败: %v", err)
 	}
 
-	// 4. 从容器获取 Worker（已注入所有依赖）
 	worker := connectorContainer.GetWorker()
 	if worker == nil {
 		log.Fatal("Worker 获取失败")
 		return nil
 	}
-
-	// 5. 启动 Worker
 	go func() {
 		addr := "localhost:8082"
 		if err := worker.Run(cfg.GetID(), 5000, addr); err != nil {
@@ -47,7 +42,6 @@ func Run(ctx context.Context) error {
 		}
 	}()
 
-	// 6. 优雅关闭处理
 	stop := func() {
 		_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

@@ -22,7 +22,11 @@ var (
 func Init() {
 	r := discovery.NewResolver(config.Conf.EtcdConf)
 	resolver.Register(r)
-	userDomain := config.Conf.Domain["user"]
+
+	userDomain, ok := config.Conf.Domain["user"]
+	if !ok {
+		log.Fatal("rpc 初始化失败: 未配置 user domain")
+	}
 	initClient(userDomain.Name, userDomain.LoadBalance, &UserClient)
 	log.Info(fmt.Sprintf("rpc 发现 user 服务，%#v", userDomain))
 

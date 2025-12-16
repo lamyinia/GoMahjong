@@ -14,7 +14,6 @@ import (
 	"hash/fnv"
 	"net/http"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,7 +46,7 @@ type ClientBucket struct {
 
 /*
 	连接器职责：
-	1. 正确处理玩家长连接的生命周期、读写事件
+	1. 处理玩家长连接的生命周期、读写事件
 	2. 调用 rpc 服务，实现游戏断线重连机制
 	3. 调用 nats 服务和 game 节点通信，nats 监听来自 game 节点的消息，实现游戏逻辑
 	4. 使用 rpc 服务调用 game 节点的方法，同时 nats 监听来自 hall 节点的消息，实现大厅逻辑
@@ -275,18 +274,6 @@ func (w *Worker) removeClient(con *LongConnection) {
 	atomic.AddInt32(&w.stats.currentConnections, -1)
 }
 
-func (w *Worker) Close() {
-	if w.isRunning {
-		if w.MiddleWorker != nil {
-			w.MiddleWorker.Close()
-		}
-		if w.UserRouteCache != nil {
-			w.UserRouteCache.Close()
-		}
-		w.isRunning = false
-	}
-}
-
 func (w *Worker) clientWorkerRoutine(workerID int) {
 	for messagePack := range w.clientWorkers[workerID] {
 		startTime := time.Now()
@@ -433,28 +420,6 @@ func (w *Worker) identifyUser(r *http.Request) (string, string, error) {
 	return userID, "token", nil
 }
 
-// ws/test={userID}
-func (w *Worker) extractUserIDFromTestPath(path string) (string, bool) {
-	if config.Conf == nil || !config.Conf.JwtConf.AllowTestPath {
-		return "", false
-	}
-	trimmed := strings.Trim(path, "/")
-	if trimmed == "" {
-		return "", false
-	}
-
-	segments := strings.Split(trimmed, "/")
-	for _, segment := range segments {
-		if strings.HasPrefix(segment, "test=") {
-			userID := strings.TrimPrefix(segment, "test=")
-			if userID != "" {
-				return userID, true
-			}
-		}
-	}
-	return "", false
-}
-
 func (w *Worker) BindUser(userID string, conn Connection) {
 	if userID == "" || conn == nil {
 		return
@@ -534,4 +499,16 @@ func (w *Worker) send(messageType protocol.MessageType, userID string, route str
 
 	log.Info(fmt.Sprintf("connector send 发送消息给玩家 %s, route: %s", userID, route))
 	return nil
+}
+
+func (w *Worker) Close() {
+	if w.isRunning {
+		if w.MiddleWorker != nil {
+			w.MiddleWorker.Close()
+		}
+		if w.UserRouteCache != nil {
+			w.UserRouteCache.Close()
+		}
+		w.isRunning = false
+	}
 }

@@ -5,10 +5,8 @@ import (
 	"common/discovery"
 	"common/log"
 	"context"
-	"encoding/json"
 	"fmt"
 	svc "framework/game/application/service"
-	"framework/game/share"
 	"framework/node"
 	"framework/protocol"
 	"framework/stream"
@@ -61,24 +59,20 @@ func (w *Worker) SetGameService(gameService svc.GameService) {
 // natsURL: NATS 服务地址，如 "nats://localhost:4222"
 // etcdConf: etcd 配置
 func (w *Worker) Start(ctx context.Context, natsURL string, etcdConf config.EtcdConf) error {
-	// 1. 注册到 etcd（传入 NodeID 作为 NodeID，用于 NATS 通信）
+	w.registerHandlers()
 	err := w.Registry.Register(etcdConf, w.NodeID)
 	if err != nil {
 		return fmt.Errorf("注册到 etcd 失败: %v", err)
 	}
 	log.Info(fmt.Sprintf("Game Worker[%s] 注册到 etcd 成功", w.NodeID))
 
-	// 2. 注册消息处理器
-	w.registerHandlers()
-
-	// 3. 启动 NATS 监听
 	err = w.MiddleWorker.Run(natsURL, w.NodeID)
 	if err != nil {
 		return fmt.Errorf("启动 NATS 监听失败: %v", err)
 	}
 	log.Info(fmt.Sprintf("Game Worker[%s] 启动 NATS 监听成功, topic: %s", w.NodeID, w.NodeID))
 
-	// 4. 启动 Monitor 负载上报
+	// 启动 Monitor 负载上报
 	go w.Monitor.Report(ctx)
 
 	log.Info(fmt.Sprintf("Game Worker[%s] 启动成功", w.NodeID))
@@ -95,42 +89,6 @@ func (w *Worker) registerHandlers() {
 
 	w.MiddleWorker.RegisterHandlers(handlers)
 	log.Info("Game Worker 注册消息处理器完成")
-}
-
-// handleReconnect 处理断线重连消息
-func (w *Worker) handleReconnect(data []byte) interface{} {
-	var msg share.ReconnectMessage
-	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Error(fmt.Sprintf("Game Worker 解析重连消息失败: %v", err))
-		return map[string]interface{}{
-			"success": false,
-			"error":   "消息格式错误",
-		}
-	}
-
-	// 查找玩家所在房间
-	room, exists := w.RoomManager.GetPlayerRoom(msg.UserID)
-	if !exists {
-		return map[string]interface{}{
-			"success": false,
-			"error":   "玩家不在任何房间中",
-		}
-	}
-
-	// 获取游戏快照
-	snapshot := room.GetPlayerSnapshot(msg.UserID)
-	if snapshot == nil {
-		// 如果没有玩家快照，返回房间快照
-		snapshot = room.GetSnapshot()
-	}
-
-	log.Info(fmt.Sprintf("Game Worker 处理重连请求: userID=%s, roomID=%s", msg.UserID, room.ID))
-
-	return map[string]interface{}{
-		"success":  true,
-		"roomID":   room.ID,
-		"snapshot": snapshot,
-	}
 }
 
 // PushConnector 推送消息给指定的 Connector（由 Engine 使用）

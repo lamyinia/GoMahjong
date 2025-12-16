@@ -7,6 +7,11 @@ import (
 	"framework/game/share"
 )
 
+// handleReconnect 处理断线重连消息
+func (w *Worker) handleReconnect(data []byte) interface{} {
+	return nil
+}
+
 func (w *Worker) handleDropTileHandler(data []byte) any {
 	var event share.DropTileEvent
 	err := json.Unmarshal(data, &event)

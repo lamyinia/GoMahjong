@@ -2,10 +2,11 @@ package conn
 
 import (
 	"common/log"
-	"github.com/gorilla/websocket"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 /*
@@ -41,7 +42,6 @@ type LongConnection struct {
 	pingTicker    *time.Ticker
 	closeChan     chan struct{}
 	closeOnce     sync.Once
-	readChanOnce  sync.Once
 	writeChanOnce sync.Once
 }
 

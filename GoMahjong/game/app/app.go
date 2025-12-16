@@ -28,7 +28,6 @@ func Run(ctx context.Context) error {
 		}
 	}()
 
-	// 1. 启动 gRPC 服务
 	lis, err := net.Listen("tcp", config.Conf.EtcdConf.Register.Addr)
 	if err != nil {
 		log.Fatal("监听 gRPC 端口失败: %v", err)
@@ -45,15 +44,12 @@ func Run(ctx context.Context) error {
 			log.Fatal("gRPC 服务启动失败: %v", err)
 		}
 	}()
-
-	// 2. 启动 Worker
 	go func() {
 		err := gameContainer.GameWorker.Start(
 			ctx,
 			config.InjectedConfig.Nats.URL,
 			config.Conf.EtcdConf,
 		)
-
 		if err != nil {
 			log.Fatal("worker 启动失败，err:%#v", err)
 		}
@@ -86,7 +82,7 @@ func Run(ctx context.Context) error {
 	}
 
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGHUP)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGHUP) // 从左到右分别是终止、退出、中断、挂起
 	for {
 		select {
 		case <-ctx.Done():

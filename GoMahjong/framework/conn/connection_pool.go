@@ -58,7 +58,6 @@ func (po *LongConnectionPool) Get(conn *websocket.Conn, worker *Worker) *LongCon
 	longConn.closeChan = make(chan struct{})
 
 	longConn.closeOnce = sync.Once{}
-	longConn.readChanOnce = sync.Once{}
 	longConn.writeChanOnce = sync.Once{}
 
 	return longConn

@@ -14,7 +14,7 @@ import (
 )
 
 /*
-	进入大厅时，需要记录 user 的上下线状态、
+	进入大厅时，需要记录 user 的上下线状态
 	游戏进行时，需要记录 user 和 game 节点的映射，为重连机制做保障
 */
 
@@ -23,22 +23,14 @@ import (
 	1.设计启发式的匹配算法实现分配逻辑，如等待时间、玩家水平、段位
 	2.实时监控 game 节点的对局数量、玩家数量、性能信息
 	3.根据监控的信息，对 game 节点的分配做负载均衡
-	4.游戏对局的生命周期，管理玩家和 game 节点的路由
+	4.管理玩家和 game 节点的路由
 	5.设计接口(匹配请求、房间创建、路由查询、游戏结束)，注册 rpc 服务，以供其它节点调用
-	6.异步给玩家的长连接器推送通知(如匹配成功)
 */
 
 const (
-	matchInterval = 60 * time.Second // 匹配间隔：2秒
+	matchInterval = 60 * time.Second // 匹配间隔：60秒
 	maxWaitTime   = 10 * time.Minute // 队列超时：10分钟
 )
-
-// MatchSuccessMessage 发送给玩家的匹配成功消息
-// 注意：connector 不需要知道 roomID，因为 game 节点内部会自己维护索引
-type MatchSuccessMessage struct {
-	GameNodeTopic string   `json:"gameNodeTopic"` // game 节点 TopicID（用于后续通信）
-	PlayerIDs     []string `json:"playerIDs"`     // 所有玩家 ID
-}
 
 type Worker struct {
 	matchService  service.MatchService

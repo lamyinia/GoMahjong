@@ -10,6 +10,8 @@ import (
 
 // PushHandler 处理 Push 类型消息的回调
 type PushHandler func(users []string, body *protocol.Message, route string)
+type LogicFunc func(message []byte) any
+type SubscriberHandler map[string]LogicFunc
 
 type NatsWorker struct {
 	NatsCli           Client
@@ -29,7 +31,7 @@ func NewNatsWorker() *NatsWorker {
 
 // Run
 // url nats 服务的地址
-// topic 本地订阅的 nats 服务的频道
+// nodeID 本地订阅的 nats 服务的频道
 func (worker *NatsWorker) Run(url string, nodeID string) error {
 	worker.NatsCli = NewNatsClient(nodeID, worker.readChan)
 	if err := worker.NatsCli.Run(url); err != nil {
@@ -46,7 +48,7 @@ func (worker *NatsWorker) readChanMessage() {
 		select {
 		case rawMessage := <-worker.readChan:
 			var packet stream.ServicePacket
-			err := json.Unmarshal(rawMessage, &packet) // TODO 传指针
+			err := json.Unmarshal(rawMessage, &packet)
 			if err != nil {
 				log.Warn("NatsWorker-节点通信 packet 解析错误: %#v", packet)
 				continue
@@ -63,20 +65,20 @@ func (worker *NatsWorker) readChanMessage() {
 					if handler != nil {
 						result = handler(body.Data)
 					}
-
-					if body.Type == protocol.Request && result != nil {
-						dataResp, _ := json.Marshal(&result)
-						body.Data = dataResp
-						body.Type = protocol.Response
-						messageResp := &stream.ServicePacket{
-							Source:      packet.Destination,
-							Destination: packet.Source,
-							Body:        body,
+					switch body.Type {
+					case protocol.Request:
+						if result != nil {
+							dataResp, _ := json.Marshal(&result)
+							body.Data = dataResp
+							body.Type = protocol.Response
+							messageResp := &stream.ServicePacket{
+								Source:      packet.Destination,
+								Destination: packet.Source,
+								Body:        body,
+							}
+							worker.writeChan <- messageResp
 						}
-						worker.writeChan <- messageResp
-					}
-
-					if body.Type == protocol.Push {
+					case protocol.Push:
 						if worker.pushHandler != nil {
 							worker.pushHandler(packet.PushUser, body, route)
 						}

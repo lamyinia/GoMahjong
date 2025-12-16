@@ -1,5 +1,11 @@
 package share
 
+// Tile 牌的定义
+type Tile struct {
+	Type int // 牌的类型
+	ID   int // 牌的 ID
+}
+
 // GameEvent 游戏事件接口
 type GameEvent interface {
 	GetUserID() string
@@ -7,7 +13,7 @@ type GameEvent interface {
 }
 
 type GameMessageEvent struct {
-	UserID string `json:"userID"` // 用户 ID（用于查找房间）
+	UserID string `json:"userID"` // 用户 ID（用于查找座位）
 }
 
 func (e *GameMessageEvent) GetUserID() string {
@@ -16,10 +22,15 @@ func (e *GameMessageEvent) GetUserID() string {
 
 type DropTileEvent struct {
 	GameMessageEvent
+	Tile Tile `json:"tile"` // 打出的牌
 }
 
 func (e *DropTileEvent) GetEventType() string {
 	return "DropTile"
+}
+
+func (e *DropTileEvent) GetTile() Tile {
+	return e.Tile
 }
 
 type PengTileEvent struct {
@@ -27,7 +38,7 @@ type PengTileEvent struct {
 }
 
 func (e *PengTileEvent) GetEventType() string {
-	return "PengTile"
+	return "Peng"
 }
 
 type HuEvent struct {
@@ -44,4 +55,20 @@ type GangEvent struct {
 
 func (e *GangEvent) GetEventType() string {
 	return "Gang"
+}
+
+type ChiEvent struct {
+	GameMessageEvent
+}
+
+func (e *ChiEvent) GetEventType() string {
+	return "Chi"
+}
+
+type RiichiEvent struct {
+	GameMessageEvent
+}
+
+func (e *RiichiEvent) GetEventType() string {
+	return "Riichi"
 }
