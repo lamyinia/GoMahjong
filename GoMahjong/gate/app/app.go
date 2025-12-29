@@ -23,7 +23,7 @@ func Run(ctx context.Context) error {
 
 	// 中间处理器注册
 	server.Use(
-	// http.CorsMiddleware(),
+	//http.CorsMiddleware(),
 	// http.LoggerMiddleware(),
 	// http.RecoveryMiddleware(),
 	// http.RequestIDMiddleware(),

@@ -23,14 +23,17 @@ const (
 type Engine interface {
 	// InitializeEngine 初始化游戏引擎
 	// users: Room.UserMap map，Engine 和 Room 共用
-	InitializeEngine(users map[string]*share.UserInfo) error
+	InitializeEngine(roomID string, users map[string]*share.UserInfo) error
 
-	// CalculateScore 计算分数
-	CalculateScore() map[string]int
-
-	// DriveEngine 驱动游戏逻辑
-	DriveEngine(event share.GameEvent) // 似乎跟 go 的特性有关，所以这里实际上需要传指针
+	// NotifyEvent 通知游戏事件（入队，由引擎内部串行处理）
+	NotifyEvent(event share.GameEvent) // 似乎跟 go 的特性有关，所以这里实际上需要传指针
 
 	// Clone 克隆引擎实例（用于原型模式）
 	Clone() Engine
+
+	// Terminate 触发销毁房间（异步请求）
+	Terminate()
+
+	// Close 释放引擎内部资源
+	Close()
 }

@@ -7,25 +7,77 @@ import (
 	"framework/game/engines"
 	"framework/game/share"
 	"sync"
+	"sync/atomic"
 	"time"
+)
+
+const (
+	DefaultMaxRoundTime = 30   // 每回合的最多分配时间
+	UseRedFive          = true // 是否使用赤牌
 )
 
 /*
 	大概分了几个状态机
-	主要有几个模块构成：
-	倒计时调度：
-		对玩家来说，游戏状态无非就两个
+		玩家操作前，需要有牌库(牌墙、王牌、手牌)初始化和发牌的逻辑，这是 1 个状态
+		玩家开始操作，游戏状态无非就两个:
 			第一是出牌，玩家对应的操作有(出牌、暗杠、加杠、立直、自摸)
 			第二是响应出牌，玩家对应的操作有(吃、碰、明杠、荣和)
+		所以这里有 8 个状态，玩家 1 出牌、反应玩家 1 出牌、玩家 2 出牌 ...
+		(这里可以继续逻辑细化为，收集玩家 1 的可选操作，收集非玩家 1 的可选操作... 这里不进行细化)
+		游戏结束计算，可能是和牌，也可能荒牌流局了，需要进行点数增减，然后继续判断需不需要进行下一轮游戏，这是 1 个状态
+		泛化为 10 个状态
+	主要有几个模块构成：
+	倒计时调度：
+
 		对于整个游戏来说
 	和牌设计：
 
 	立直+向听数：
 		预估是时间复杂度最高的部分
 	番符计算
+
+	自摸一定不能立直
 */
 
-// PlayerOperation 玩家可用的单个操作
+type RiichiMahjong4p struct {
+	State           engines.GameState
+	Worker          *game.Worker               // Game Worker（在 GameContainer 创建原型时注入）
+	RoomID          string                     // 房间 ID（用于请求销毁房间）
+	UserMap         map[string]*share.UserInfo // Room.UserMap 的引用，包含座位索引（Engine 和 Room 共用）
+	Situation       *Situation                 // 游戏局面信息
+	Players         [4]*PlayerImage            // 座位索引 -> 玩家游戏状态
+	Deck            *TileDeck                  // 牌库管理
+	Wang            *Wang                      // 王牌
+	TurnManager     *TurnManager               // 回合管理
+	roundStartTimer *time.Timer                // 开局延迟计时器（用于 Close 时停止）
+
+	gameEvents chan share.GameEvent
+	gameDone   chan struct{}
+	actorExit  chan struct{}
+	closed     atomic.Bool
+
+	// 反应阶段管理
+	Reactions map[int]*PlayerReaction // 玩家座位 → 反应信息
+	closeOnce sync.Once
+}
+
+type TimeoutEvent struct {
+	share.GameMessageEvent
+	SeatIndex int
+}
+
+func (e *TimeoutEvent) GetEventType() string {
+	return "Timeout"
+}
+
+type StartRoundEvent struct {
+	share.GameMessageEvent
+}
+
+func (e *StartRoundEvent) GetEventType() string {
+	return "StartRound"
+}
+
 type PlayerOperation struct {
 	Type  string // "HU", "GANG", "PENG", "CHI"
 	Tiles []Tile // 操作涉及的牌（对于吃碰杠，包含选择的牌）
@@ -38,19 +90,11 @@ type PlayerReaction struct {
 	Responded  bool               // 是否已响应
 }
 
-type RiichiMahjong4p struct {
-	State       engines.GameState
-	Worker      *game.Worker               // Game Worker（在 GameContainer 创建原型时注入）
-	UserMap     map[string]*share.UserInfo // Room.UserMap 的引用，包含座位索引（Engine 和 Room 共用）
-	Situation   *Situation                 // 游戏局面信息
-	Players     [4]*PlayerImage            // 座位索引 -> 玩家游戏状态
-	Deck        *TileDeck                  // 牌库管理
-	Wang        *Wang                      // 王牌
-	TurnManager *TurnManager               // 回合管理
-
-	// 反应阶段管理
-	Reactions  map[int]*PlayerReaction // 玩家座位 → 反应信息
-	ReactMutex sync.RWMutex            // 并发控制
+// ReactionAction 选择的反应操作
+type ReactionAction struct {
+	Type       string // "HU", "GANG", "PENG", "CHI"
+	PlayerSeat int
+	Tiles      []Tile
 }
 
 // NewRiichiMahjong4p 创建立直麻将 4 人引擎实例
@@ -58,6 +102,7 @@ func NewRiichiMahjong4p(worker *game.Worker) *RiichiMahjong4p {
 	return &RiichiMahjong4p{
 		State:   engines.GameWaiting,
 		Worker:  worker,
+		RoomID:  "",
 		UserMap: nil,
 		Situation: &Situation{
 			DealerIndex:  0,
@@ -66,6 +111,7 @@ func NewRiichiMahjong4p(worker *game.Worker) *RiichiMahjong4p {
 			RoundNumber:  1,
 			RiichiSticks: 0,
 		},
+		Deck: NewTileDeck(UseRedFive),
 		Wang: &Wang{
 			DeadWall:          make([]Tile, 0),
 			DoraIndicators:    make([]Tile, 0),
@@ -76,11 +122,17 @@ func NewRiichiMahjong4p(worker *game.Worker) *RiichiMahjong4p {
 	}
 }
 
-const DefaultMaxRoundTime = 30
-
 // InitializeEngine 初始化游戏引擎
-func (eg *RiichiMahjong4p) InitializeEngine(userMap map[string]*share.UserInfo) error {
+func (eg *RiichiMahjong4p) InitializeEngine(roomID string, userMap map[string]*share.UserInfo) error {
+	eg.RoomID = roomID
 	eg.UserMap = userMap
+
+	eg.closed.Store(false)
+	eg.gameDone = make(chan struct{})
+	eg.actorExit = make(chan struct{})
+	if eg.gameEvents == nil {
+		eg.gameEvents = make(chan share.GameEvent, 256)
+	}
 
 	// 初始化 PlayerTicker 数组
 	tickers := [4]*PlayerTicker{}
@@ -105,13 +157,56 @@ func (eg *RiichiMahjong4p) InitializeEngine(userMap map[string]*share.UserInfo) 
 	}
 	eg.TurnManager = NewTurnManager(tickers)
 	eg.State = engines.GameWaiting
-	time.AfterFunc(10*time.Second, eg.roundGameStart)
+	eg.roundStartTimer = time.AfterFunc(10*time.Second, func() {
+		eg.NotifyEvent(&StartRoundEvent{})
+	})
+	go eg.actorLoop()
 
 	return nil
 }
 
-// DriveEngine 驱动游戏逻辑
-func (eg *RiichiMahjong4p) DriveEngine(event share.GameEvent) {
+func (eg *RiichiMahjong4p) NotifyEvent(event share.GameEvent) {
+	if event == nil {
+		return
+	}
+
+	if eg.closed.Load() {
+		return
+	}
+	ch := eg.gameEvents
+	done := eg.gameDone
+
+	select {
+	case <-done:
+		return
+	case ch <- event:
+		return
+	default:
+		log.Warn("gameEvents 队列已满, eventType=%s", event.GetEventType())
+		return
+	}
+}
+
+func (eg *RiichiMahjong4p) actorLoop() {
+	defer func() {
+		if eg.actorExit != nil {
+			close(eg.actorExit)
+		}
+	}()
+
+	for {
+		done := eg.gameDone
+
+		select {
+		case <-done:
+			return
+		case event := <-eg.gameEvents:
+			eg.processEvent(event)
+		}
+	}
+}
+
+func (eg *RiichiMahjong4p) processEvent(event share.GameEvent) {
 	if event == nil {
 		log.Warn("事件为空")
 		return
@@ -145,16 +240,50 @@ func (eg *RiichiMahjong4p) DriveEngine(event share.GameEvent) {
 		if riichiEvent, ok := event.(*share.RiichiEvent); ok {
 			eg.handleRiichiEvent(riichiEvent)
 		}
+	case "Timeout":
+		if t, ok := event.(*TimeoutEvent); ok {
+			eg.handleTimeoutEvent(t)
+		}
+	case "StartRound":
+		if _, ok := event.(*StartRoundEvent); ok {
+			eg.handleStartRoundEvent()
+		}
 	default:
 		log.Warn("不支持的事件类型: %s", eventType)
 	}
 }
 
-// handleDropTileEvent 处理出牌事件
+func (eg *RiichiMahjong4p) handleStartRoundEvent() {
+	eg.State = engines.GameInProgress
+	if err := eg.TurnManager.EnterDropPhase(eg.Situation.DealerIndex, 5); err != nil {
+		log.Warn("游戏异常: %v", err)
+		eg.Terminate()
+		return
+	}
+	log.Info("游戏开始，庄家出牌")
+}
+
+func (eg *RiichiMahjong4p) DropTurn(seatIndex int) {
+
+}
+
+func (eg *RiichiMahjong4p) handleTimeoutEvent(event *TimeoutEvent) {
+	seatIndex := event.SeatIndex
+	log.Info("玩家 %d 超时", seatIndex)
+
+	state := eg.TurnManager.GetState()
+	switch state {
+	case StateDropping:
+		eg.handleDropTimeout(seatIndex)
+	case StateReacting:
+		eg.handleReactionTimeout(seatIndex)
+	}
+}
+
 func (eg *RiichiMahjong4p) handleDropTileEvent(event *share.DropTileEvent) {
 	log.Info("处理出牌事件")
 	if eg.TurnManager.GetState() != StateDropping {
-		log.Warn("当前不在出牌阶段，状态: %v", eg.TurnManager.GetState())
+		log.Warn("当前状态不是 StateDropping，而是: %v", eg.TurnManager.GetState())
 		return
 	}
 	seatIndex, err := eg.getSeatIndex(event.GetUserID())
@@ -168,7 +297,11 @@ func (eg *RiichiMahjong4p) handleDropTileEvent(event *share.DropTileEvent) {
 	}
 	ticker := eg.TurnManager.GetPlayerTicker(seatIndex)
 
-	ticker.Stop()
+	ok := ticker.Stop()
+	if !ok {
+		log.Warn("handleDropTileEvent 已经超时处理, %v", event)
+		return
+	}
 
 	// 处理出牌逻辑
 	player := eg.Players[seatIndex]
@@ -194,10 +327,13 @@ func (eg *RiichiMahjong4p) handleDropTileEvent(event *share.DropTileEvent) {
 }
 
 func (eg *RiichiMahjong4p) waitReaction(excludeSeat int) {
-	eg.ReactMutex.Lock()
-	defer eg.ReactMutex.Unlock()
+	if eg.TurnManager.GetState() != StateDropping {
+		log.Warn("当前状态不是 StateDropping，而是: %v", eg.TurnManager.GetState())
+		return
+	}
 
-	// 计算可用操作
+	// 搜索可用操作
+	eg.TurnManager.EnterSelectingPhase()
 	reactions := eg.calculateAvailableOperations(excludeSeat)
 	eg.Reactions = reactions
 
@@ -213,8 +349,11 @@ func (eg *RiichiMahjong4p) waitReaction(excludeSeat int) {
 	// 下发操作给客户端
 	eg.broadcastOperations(eg.Reactions)
 
-	// 启动反应阶段计时
-	eg.TurnManager.State = StateReacting
+	if eg.TurnManager.GetState() != StateSelecting {
+		log.Warn("当前状态不是 StateSelecting，而是: %v", eg.TurnManager.GetState())
+		return
+	}
+	eg.TurnManager.EnterReactingPhase()
 
 	for seatIndex := range eg.Reactions {
 		ticker := eg.TurnManager.GetPlayerTicker(seatIndex)
@@ -226,37 +365,22 @@ func (eg *RiichiMahjong4p) waitReaction(excludeSeat int) {
 	}
 }
 
-// broadcastOperations 下发操作给客户端
-func (eg *RiichiMahjong4p) broadcastOperations(reactions map[int]*PlayerReaction) {
-	for seatIndex, reaction := range reactions {
-		log.Info("玩家 %d 可用操作数: %d", seatIndex, len(reaction.Operations))
-		for _, op := range reaction.Operations {
-			log.Info("  - %s: %v", op.Type, op.Tiles)
-		}
-		// TODO: 通过 Worker 下发消息给客户端
-	}
-}
-
 // recordPlayerResponse 记录玩家响应
 func (eg *RiichiMahjong4p) recordPlayerResponse(seatIndex int, chosenOp *PlayerOperation) {
-	eg.ReactMutex.Lock()
-	defer eg.ReactMutex.Unlock()
+	ticker := eg.TurnManager.GetPlayerTicker(seatIndex)
+	ok := ticker.Stop()
+	if !ok {
+		log.Warn("recordPlayerResponse 响应已经超时处理, %v", chosenOp)
+		return
+	}
 
 	reaction, exists := eg.Reactions[seatIndex]
 	if !exists {
 		log.Warn("玩家 %d 不在反应列表中", seatIndex)
 		return
 	}
-
 	reaction.ChosenOp = chosenOp
 	reaction.Responded = true
-
-	// 停止该玩家的计时
-	ticker := eg.TurnManager.GetPlayerTicker(seatIndex)
-	if ticker.GetState() == StateRunning {
-		ticker.Stop()
-	}
-
 	log.Info("玩家 %d 响应: %s", seatIndex, chosenOp.Type)
 
 	// 检查是否所有响应已收集
@@ -290,9 +414,7 @@ func (eg *RiichiMahjong4p) handlePengEvent(event *share.PengTileEvent) {
 		return
 	}
 
-	eg.ReactMutex.RLock()
 	reaction, exists := eg.Reactions[seatIndex]
-	eg.ReactMutex.RUnlock()
 
 	if !exists {
 		log.Warn("玩家 %d 不在反应列表中", seatIndex)
@@ -316,7 +438,6 @@ func (eg *RiichiMahjong4p) handlePengEvent(event *share.PengTileEvent) {
 	eg.recordPlayerResponse(seatIndex, pengOp)
 }
 
-// handleGangEvent 处理杠牌事件
 func (eg *RiichiMahjong4p) handleGangEvent(event *share.GangEvent) {
 	log.Info("处理杠牌事件")
 
@@ -331,9 +452,7 @@ func (eg *RiichiMahjong4p) handleGangEvent(event *share.GangEvent) {
 		return
 	}
 
-	eg.ReactMutex.RLock()
 	reaction, exists := eg.Reactions[seatIndex]
-	eg.ReactMutex.RUnlock()
 
 	if !exists {
 		log.Warn("玩家 %d 不在反应列表中", seatIndex)
@@ -357,7 +476,6 @@ func (eg *RiichiMahjong4p) handleGangEvent(event *share.GangEvent) {
 	eg.recordPlayerResponse(seatIndex, gangOp)
 }
 
-// handleChiEvent 处理吃牌事件
 func (eg *RiichiMahjong4p) handleChiEvent(event *share.ChiEvent) {
 	log.Info("处理吃牌事件")
 
@@ -372,9 +490,7 @@ func (eg *RiichiMahjong4p) handleChiEvent(event *share.ChiEvent) {
 		return
 	}
 
-	eg.ReactMutex.RLock()
 	reaction, exists := eg.Reactions[seatIndex]
-	eg.ReactMutex.RUnlock()
 
 	if !exists {
 		log.Warn("玩家 %d 不在反应列表中", seatIndex)
@@ -398,7 +514,6 @@ func (eg *RiichiMahjong4p) handleChiEvent(event *share.ChiEvent) {
 	eg.recordPlayerResponse(seatIndex, chiOp)
 }
 
-// handleHuEvent 处理和牌事件
 func (eg *RiichiMahjong4p) handleHuEvent(event *share.HuEvent) {
 	log.Info("处理和牌事件")
 
@@ -413,9 +528,7 @@ func (eg *RiichiMahjong4p) handleHuEvent(event *share.HuEvent) {
 		return
 	}
 
-	eg.ReactMutex.RLock()
 	reaction, exists := eg.Reactions[seatIndex]
-	eg.ReactMutex.RUnlock()
 
 	if !exists {
 		log.Warn("玩家 %d 不在反应列表中", seatIndex)
@@ -439,7 +552,6 @@ func (eg *RiichiMahjong4p) handleHuEvent(event *share.HuEvent) {
 	eg.recordPlayerResponse(seatIndex, huOp)
 }
 
-// handleRiichiEvent 处理立直事件
 func (eg *RiichiMahjong4p) handleRiichiEvent(event *share.RiichiEvent) {
 	log.Info("处理立直事件")
 
@@ -462,30 +574,19 @@ func (eg *RiichiMahjong4p) handleRiichiEvent(event *share.RiichiEvent) {
 // makeTimeoutHandler 创建超时处理回调
 func (eg *RiichiMahjong4p) makeTimeoutHandler(seatIndex int) func() {
 	return func() {
-		log.Info("玩家 %d 超时", seatIndex)
-
-		state := eg.TurnManager.GetState()
-		switch state {
-		case StateDropping:
-			eg.handleDropTimeout(seatIndex)
-		case StateReacting:
-			eg.handleReactionTimeout(seatIndex)
-		}
+		eg.NotifyEvent(&TimeoutEvent{SeatIndex: seatIndex})
 	}
 }
 
-// makeStopHandler 创建停止处理回调
+// makeStopHandler 这里的逻辑已经交给 NotifyEvent/actorLoop 了，创建停止处理回调，占位编程
 func (eg *RiichiMahjong4p) makeStopHandler(seatIndex int) func() {
 	return func() {
-		log.Info("玩家 %d 停止计时", seatIndex)
-
 		state := eg.TurnManager.GetState()
 		switch state {
 		case StateDropping:
 			// 玩家主动出牌，已经处理
 		case StateReacting:
 			// 玩家反应，需要收集所有反应，才开始处理
-			eg.handlePlayerReacted(seatIndex)
 		}
 	}
 }
@@ -523,21 +624,15 @@ func (eg *RiichiMahjong4p) handleReactionTimeout(seatIndex int) {
 	eg.recordPlayerResponse(seatIndex, skipOp)
 }
 
-// handlePlayerReacted 处理玩家反应
-func (eg *RiichiMahjong4p) handlePlayerReacted(seatIndex int) {
-	log.Info("玩家 %d 反应", seatIndex)
-	// 注意：此方法在反应阶段不应被调用，因为反应已通过 DriveEngine 处理
-}
-
 // handleReactionComplete 处理玩家
 func (eg *RiichiMahjong4p) handleReactionComplete() {
 	log.Info("所有玩家反应完成")
 
-	// 进入选择阶段
-	if err := eg.TurnManager.EnterSelectingPhase(); err != nil {
-		log.Error("进入选择阶段失败: %v", err)
+	if eg.TurnManager.GetState() != StateReacting {
+		log.Warn("状态出错，应该是 StateReacting")
 		return
 	}
+	eg.TurnManager.EnterChoosingPhase()
 
 	// 执行吃碰杠选择算法
 	// 优先级：荣和 > 明杠 > 碰 > 吃
@@ -556,20 +651,9 @@ func (eg *RiichiMahjong4p) handleReactionComplete() {
 	eg.executeReaction(selectedAction)
 }
 
-// ReactionAction 反应操作
-type ReactionAction struct {
-	Type       string // "HU", "GANG", "PENG", "CHI"
-	PlayerSeat int
-	Tiles      []Tile
-}
-
 // selectBestReaction 选择最优的反应操作
 // 优先级：荣和 > 明杠 > 碰 > 吃
 func (eg *RiichiMahjong4p) selectBestReaction() *ReactionAction {
-	eg.ReactMutex.RLock()
-	defer eg.ReactMutex.RUnlock()
-
-	// 从收集的响应中选择最优操作（按优先级）
 	// 优先级 1：荣和（最高）
 	for seatIndex, reaction := range eg.Reactions {
 		if reaction.ChosenOp != nil && reaction.ChosenOp.Type == "HU" {
@@ -627,21 +711,6 @@ func (eg *RiichiMahjong4p) executeReaction(action *ReactionAction) {
 
 }
 
-func (eg *RiichiMahjong4p) roundGameStart() {
-	eg.State = engines.GameInProgress
-	if err := eg.TurnManager.EnterDropPhase(eg.Situation.DealerIndex, 5); err != nil {
-		log.Warn("游戏失败: %v", err)
-		return
-	}
-	log.Info("游戏开始，庄家出牌")
-}
-
-// CalculateScore 计算分数
-func (eg *RiichiMahjong4p) CalculateScore() map[string]int {
-	// TODO: 实现分数计算逻辑
-	return nil
-}
-
 // getSeatIndex 从 UserMap 中查找玩家座位
 func (eg *RiichiMahjong4p) getSeatIndex(userID string) (int, error) {
 	if eg.UserMap == nil {
@@ -677,6 +746,16 @@ func (eg *RiichiMahjong4p) Clone() engines.Engine {
 	copy(clonedWall.DoraIndicators, eg.Wang.DoraIndicators)
 	copy(clonedWall.UraDoraIndicators, eg.Wang.UraDoraIndicators)
 
+	// 深拷贝 Deck
+	var clonedDeck *TileDeck
+	if eg.Deck != nil {
+		clonedDeck = &TileDeck{
+			tiles: make([]Tile, len(eg.Deck.tiles)),
+			index: eg.Deck.index,
+		}
+		copy(clonedDeck.tiles, eg.Deck.tiles)
+	}
+
 	// 防御性编程，深拷贝 Players 数组，由于克隆时 Players 本来就是空, 这里暂时没有意义
 	clonedPlayers := [4]*PlayerImage{}
 	for i, player := range eg.Players {
@@ -696,11 +775,9 @@ func (eg *RiichiMahjong4p) Clone() engines.Engine {
 		}
 	}
 
-	// 克隆 TurnManager（注意：克隆时 TurnManager 为 nil，因为克隆是为了创建新的原型）
 	// 实际的 TurnManager 会在 InitializeEngine 中创建
 	var clonedTurnManager *TurnManager
 	if eg.TurnManager != nil {
-		// 如果原引擎有 TurnManager，创建新的空 TurnManager
 		clonedTurnManager = NewTurnManager([4]*PlayerTicker{})
 	}
 
@@ -710,7 +787,54 @@ func (eg *RiichiMahjong4p) Clone() engines.Engine {
 		UserMap:     nil,
 		Situation:   clonedSituation,
 		Wang:        clonedWall,
+		Deck:        clonedDeck,
 		Players:     clonedPlayers,
 		TurnManager: clonedTurnManager,
 	}
+}
+
+func (eg *RiichiMahjong4p) requestDestroyRoom() {
+	if eg.Worker == nil {
+		return
+	}
+	if eg.RoomID == "" {
+		return
+	}
+	eg.Worker.RequestDestroyRoom(eg.RoomID)
+}
+
+func (eg *RiichiMahjong4p) Terminate() {
+	eg.requestDestroyRoom()
+	return
+}
+
+func (eg *RiichiMahjong4p) Close() {
+	eg.closeOnce.Do(func() {
+		eg.closed.Store(true)
+		if eg.gameDone != nil {
+			close(eg.gameDone)
+		}
+		if eg.actorExit != nil {
+			<-eg.actorExit
+		}
+
+		eg.Worker = nil
+		eg.State = engines.GameFinished
+
+		if eg.roundStartTimer != nil {
+			eg.roundStartTimer.Stop()
+			eg.roundStartTimer = nil
+		}
+
+		if eg.TurnManager != nil {
+			eg.TurnManager.stopAllTickers()
+			eg.TurnManager = nil
+		}
+		eg.Reactions = nil
+
+		eg.UserMap = nil
+		eg.Players = [4]*PlayerImage{}
+		eg.Deck = nil
+		eg.Wang = nil
+	})
 }

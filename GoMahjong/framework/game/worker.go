@@ -10,6 +10,7 @@ import (
 	"framework/node"
 	"framework/protocol"
 	"framework/stream"
+	"sync"
 	"time"
 )
 
@@ -30,6 +31,10 @@ type Worker struct {
 	Registry     *discovery.Registry
 	GameService  svc.GameService // 游戏服务
 	NodeID       string          // 当前 game 节点 ID（用于 NATS topic）
+
+	destroyRoomCh chan string
+	destroyMu     sync.Mutex
+	destroyClosed bool
 }
 
 // NewWorker 创建 Worker
@@ -40,14 +45,49 @@ func NewWorker(nodeID string) *Worker {
 	monitor := NewMonitor(roomManager, registry, 5*time.Second) // 负载上报器
 
 	worker := &Worker{
-		RoomManager:  roomManager,
-		MiddleWorker: node.NewNatsWorker(),
-		Monitor:      monitor,
-		Registry:     registry,
-		NodeID:       nodeID,
+		RoomManager:   roomManager,
+		MiddleWorker:  node.NewNatsWorker(),
+		Monitor:       monitor,
+		Registry:      registry,
+		NodeID:        nodeID,
+		destroyRoomCh: make(chan string, 128),
 	}
 
+	go worker.destroyRoomLoop()
+
 	return worker
+}
+
+func (w *Worker) destroyRoomLoop() {
+	for roomID := range w.destroyRoomCh {
+		if roomID == "" {
+			continue
+		}
+		err := w.RoomManager.DeleteRoom(roomID)
+		if err != nil {
+			log.Warn("Worker destroyRoomLoop 删除房间失败: %v", err)
+		}
+	}
+}
+
+func (w *Worker) RequestDestroyRoom(roomID string) {
+	if roomID == "" {
+		return
+	}
+
+	w.destroyMu.Lock()
+	if w.destroyClosed {
+		w.destroyMu.Unlock()
+		return
+	}
+	ch := w.destroyRoomCh
+	w.destroyMu.Unlock()
+
+	select {
+	case ch <- roomID:
+	default:
+		log.Warn("Worker RequestDestroyRoom 队列已满, roomID=%s", roomID)
+	}
 }
 
 // SetGameService 设置 GameService（由容器注入）
@@ -84,7 +124,6 @@ func (w *Worker) registerHandlers() {
 	handlers := make(node.SubscriberHandler)
 
 	handlers["game.play.droptile"] = w.handleDropTileHandler
-	// 处理断线重连消息
 	handlers["game.reconnect"] = w.handleReconnect
 
 	w.MiddleWorker.RegisterHandlers(handlers)
@@ -155,6 +194,13 @@ func (w *Worker) PushMessage(userID, route string, data []byte) error {
 
 // Close 关闭 Worker
 func (w *Worker) Close() {
+	w.destroyMu.Lock()
+	if !w.destroyClosed {
+		close(w.destroyRoomCh)
+		w.destroyClosed = true
+	}
+	w.destroyMu.Unlock()
+
 	if w.Monitor != nil {
 		w.Monitor.Stop()
 	}

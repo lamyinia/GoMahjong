@@ -274,7 +274,7 @@ func (tc *TestClient) printHelp() {
 	fmt.Println("status            - Show current status")
 	fmt.Println("help              - Show this help")
 	fmt.Println("quit              - Quit the game")
-	fmt.Println("================\n")
+	fmt.Println("================")
 }
 
 // printStatus：显示当前状态

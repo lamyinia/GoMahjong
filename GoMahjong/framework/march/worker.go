@@ -14,11 +14,6 @@ import (
 )
 
 /*
-	进入大厅时，需要记录 user 的上下线状态
-	游戏进行时，需要记录 user 和 game 节点的映射，为重连机制做保障
-*/
-
-/*
 	匹配器职责：
 	1.设计启发式的匹配算法实现分配逻辑，如等待时间、玩家水平、段位
 	2.实时监控 game 节点的对局数量、玩家数量、性能信息
@@ -148,13 +143,10 @@ func (w *Worker) callGameCreateRoom(ctx context.Context, gameNodeAddr string, pl
 		return fmt.Errorf("获取 Game 客户端失败: %v", err)
 	}
 
-	// 构建 gRPC 请求
 	req := &pb.CreateRoomRequest{
 		Players:    players,
 		EngineType: RIICHI_MAHJONG_4P_ENGINE,
 	}
-
-	// 调用 Game 的 CreateRoom RPC（超时 5 秒）
 	callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -181,8 +173,7 @@ func (w *Worker) cleanupExpiredPlayers(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			// TODO: 调用 MatchService 清理过期玩家
-			// 这里需要 MatchService 提供清理方法，或者直接通过 Repository 清理
+			// TODO: 调用 MatchService 匹配超时的玩家，先占位
 			log.Debug("March Worker 执行过期玩家清理")
 		case <-w.stopChan:
 			log.Info(fmt.Sprintf("March Worker[%s] 过期玩家清理停止", w.NodeID))

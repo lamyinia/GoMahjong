@@ -25,7 +25,7 @@ func (w *Worker) handleDropTileHandler(data []byte) any {
 		return nil
 	}
 
-	room.Engine.DriveEngine(&event)
+	room.Engine.NotifyEvent(&event)
 	return nil
 }
 
@@ -42,7 +42,7 @@ func (w *Worker) handlePengTileHandler(data []byte) any {
 		return nil
 	}
 
-	room.Engine.DriveEngine(&event)
+	room.Engine.NotifyEvent(&event)
 	return nil
 }
 
@@ -59,6 +59,6 @@ func (w *Worker) handleGangTileHandler(data []byte) any {
 		return nil
 	}
 
-	room.Engine.DriveEngine(&event)
+	room.Engine.NotifyEvent(&event)
 	return nil
 }

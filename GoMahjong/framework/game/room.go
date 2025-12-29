@@ -31,6 +31,14 @@ func GenerateRoomID() string {
 	return fmt.Sprintf("room_%d_%s", timestamp, randomStr)
 }
 
+// Close 关闭房间并释放资源
+func (r *Room) Close() {
+	// 调用引擎释放资源
+	if r.Engine != nil {
+		r.Engine.Close()
+	}
+}
+
 // NewRoom 创建新房间（使用原型模式，Engine 由外部注入）
 // engine: 克隆的游戏引擎实例
 // users: userID -> UserInfo 的映射（已分配座位）
@@ -43,13 +51,15 @@ func NewRoom(engine engines.Engine, users map[string]string) (*Room, error) {
 		userInfo[k] = share.NewUserInfo(k, v)
 	}
 
-	return &Room{
+	room := &Room{
 		ID:         GenerateRoomID(),
 		Users:      userInfo,
-		AllowWatch: true,
+		AllowWatch: false,
 		Engine:     engine,
 		CreatedAt:  time.Now(),
-	}, nil
+	}
+
+	return room, nil
 }
 
 // RemovePlayer 从房间移除玩家

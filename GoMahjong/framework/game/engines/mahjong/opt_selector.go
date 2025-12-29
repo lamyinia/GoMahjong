@@ -19,7 +19,7 @@ func (eg *RiichiMahjong4p) calculateAvailableOperations(excludeSeat int) map[int
 			continue
 		}
 
-		playerOps := []*PlayerOperation{}
+		var playerOps []*PlayerOperation
 
 		// 检查是否可以荣和
 		if eg.canHu(i, droppedTile) {
@@ -124,8 +124,11 @@ func (eg *RiichiMahjong4p) findChiCombinations(hand []Tile, droppedTile Tile) []
 	return combos
 }
 
-// isSameTile 判断两张牌是否相同（考虑红5p）
+// isSameTile 判断两张牌是否相同
 func (eg *RiichiMahjong4p) isSameTile(tile1, tile2 Tile) bool {
-	// TODO: 实现牌比较逻辑
-	return tile1 == tile2
+	// 如果Type不同，肯定不是同一张牌
+	if tile1.Type != tile2.Type {
+		return false
+	}
+	return true
 }

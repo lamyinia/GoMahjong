@@ -22,9 +22,9 @@ type TurnState int
 const (
 	StateWaiting   TurnState = iota // 等待开始
 	StateDropping                   // 等待出牌、立直
-	StateSelecting                  // 吃碰杠收集等算法执行
+	StateSelecting                  // 吃碰杠收集等算法收集
 	StateReacting                   // 等待反应（吃碰杠和）
-	StateFinished                   // 回合结束
+	StateChoosing                   // 吃碰杠收集等算法执行
 )
 
 type TurnManager struct {
@@ -54,19 +54,6 @@ func (tm *TurnManager) NextTurn() int {
 	return tm.TurnPointer
 }
 
-// Appoint 指定玩家出牌
-func (tm *TurnManager) Appoint(seatIndex int) int {
-	tm.Lock()
-	defer tm.Unlock()
-
-	if seatIndex < 0 || seatIndex >= 4 {
-		return tm.TurnPointer
-	}
-
-	tm.TurnPointer = seatIndex
-	return tm.TurnPointer
-}
-
 // GetCurrentPlayer 获取当前出牌玩家座位
 func (tm *TurnManager) GetCurrentPlayer() int {
 	tm.RLock()
@@ -83,10 +70,9 @@ func (tm *TurnManager) GetState() TurnState {
 	return tm.State
 }
 
-// stopAllTickersExcept 停止除指定座位外的所有计时器
-func (tm *TurnManager) stopAllTickersExcept(exceptSeat int) {
+func (tm *TurnManager) stopAllTickers() {
 	for i := 0; i < 4; i++ {
-		if i != exceptSeat && tm.Tickers[i].GetState() == StateRunning {
+		if tm.Tickers[i].GetState() == StateRunning {
 			tm.Tickers[i].Stop()
 		}
 	}
@@ -103,8 +89,7 @@ func (tm *TurnManager) EnterDropPhase(seatIndex int, roundCompensation int) erro
 		return fmt.Errorf("无效的座位索引: %d", seatIndex)
 	}
 
-	// 停止其他玩家的计时
-	tm.stopAllTickersExcept(seatIndex)
+	tm.stopAllTickers()
 	tm.TurnPointer = seatIndex
 	tm.State = StateDropping
 
@@ -124,22 +109,31 @@ func (tm *TurnManager) EnterDropPhase(seatIndex int, roundCompensation int) erro
 	return nil
 }
 
-// EnterSelectingPhase 进入选择阶段（吃碰杠收集、算法执行）
+// EnterSelectingPhase 进入收集阶段（吃碰杠）
 // 此阶段不需要计时
-func (tm *TurnManager) EnterSelectingPhase() error {
+func (tm *TurnManager) EnterSelectingPhase() {
 	tm.Lock()
 	defer tm.Unlock()
-
-	// 停止所有玩家的计时
-	for i := 0; i < 4; i++ {
-		if tm.Tickers[i].GetState() == StateRunning {
-			tm.Tickers[i].Stop()
-		}
-	}
-
+	tm.stopAllTickers()
 	tm.State = StateSelecting
+}
 
-	return nil
+// EnterReactingPhase 进入等待反应阶段（吃碰杠）
+// 此阶段不需要计时
+func (tm *TurnManager) EnterReactingPhase() {
+	tm.Lock()
+	defer tm.Unlock()
+	tm.stopAllTickers()
+	tm.State = StateReacting
+}
+
+// EnterChoosingPhase 进入选择阶段（吃碰杠）
+// 此阶段不需要计时
+func (tm *TurnManager) EnterChoosingPhase() {
+	tm.Lock()
+	defer tm.Unlock()
+	tm.stopAllTickers()
+	tm.State = StateChoosing
 }
 
 // GetPlayerTicker 获取玩家的计时器
@@ -202,12 +196,10 @@ func (pt *PlayerTicker) Start(duration int) error {
 	if pt.isRunning {
 		return fmt.Errorf("计时已在运行，无法重复启动")
 	}
-
 	if pt.Available < duration {
 		return fmt.Errorf("剩余时间 %d 秒不足 %d 秒", pt.Available, duration)
 	}
 
-	// 更新状态
 	pt.isRunning = true
 	oldState := pt.State
 	pt.State = StateRunning
@@ -217,8 +209,6 @@ func (pt *PlayerTicker) Start(duration int) error {
 	if pt.onStateChange != nil {
 		pt.onStateChange(oldState, StateRunning)
 	}
-
-	// 启动计时循环
 	go pt.timerLoop(duration)
 
 	return nil
@@ -249,7 +239,6 @@ func (pt *PlayerTicker) timerLoop(duration int) {
 		if pt.onStateChange != nil {
 			pt.onStateChange(oldState, StateTimeout)
 		}
-
 		if pt.onTimeout != nil {
 			pt.onTimeout()
 		}
@@ -264,7 +253,6 @@ func (pt *PlayerTicker) timerLoop(duration int) {
 		if pt.onStateChange != nil {
 			pt.onStateChange(oldState, StateStopped)
 		}
-
 		if pt.onStop != nil {
 			pt.onStop()
 		}
@@ -273,23 +261,21 @@ func (pt *PlayerTicker) timerLoop(duration int) {
 
 // Stop 停止计时
 // 返回已用时间（秒）
-func (pt *PlayerTicker) Stop() {
+func (pt *PlayerTicker) Stop() bool {
 	pt.Lock()
 	defer pt.Unlock()
-	if !pt.isRunning {
-		return
+	if !pt.isRunning || pt.cancel == nil {
+		return false
 	}
-	// 取消 context
-	if pt.cancel != nil {
-		pt.cancel()
-	}
+	pt.cancel()
+	return true
 }
 
-func (pt *PlayerTicker) SetAvailable(duration int) int {
+func (pt *PlayerTicker) SetAvailable(Available int) int {
 	pt.Lock()
 	defer pt.Unlock()
 
-	pt.Available = duration
+	pt.Available = Available
 
 	return pt.Available
 }
@@ -327,7 +313,7 @@ func (pt *PlayerTicker) SetOnStateChange(callback func(oldState, newState Ticker
 }
 
 /*
-	废弃设计，利用 EventOrder 的时间戳来实现时间的合并和超时处理，不稳定
+	废弃设计，利用 EventOrder 的时间戳来实现时间的合并和超时处理，不易管理
 
 type PlayerTicker struct {
 	Available    time.Duration

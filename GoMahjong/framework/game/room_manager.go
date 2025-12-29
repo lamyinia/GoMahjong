@@ -42,14 +42,13 @@ func (rm *RoomManager) SetEnginePrototype(engineType int32, engine engines.Engin
 }
 
 // CreateRoom 创建房间并添加玩家（使用原型模式）
-// players: 玩家列表，格式为 map[userID]connectorTopic
-// engineType: 游戏引擎类型
 // 返回：房间实例和错误
 func (rm *RoomManager) CreateRoom(users map[string]string, engineType int32) (*Room, error) {
-	if len(users) == 0 {
-		return nil, errors.New("玩家列表不能为空")
+	pass := false
+	if len(users) == 4 && engineType == int32(engines.RIICHI_MAHJONG_4P_ENGINE) {
+		pass = true
 	}
-	if len(users) > 4 {
+	if !pass {
 		return nil, errors.New("玩家列表异常")
 	}
 
@@ -85,7 +84,7 @@ func (rm *RoomManager) CreateRoom(users map[string]string, engineType int32) (*R
 	}
 
 	// 步骤 4：初始化游戏引擎（传入 Room.UserMap）
-	if err := room.Engine.InitializeEngine(room.Users); err != nil {
+	if err := room.Engine.InitializeEngine(room.ID, room.Users); err != nil {
 		rm.cleanupRoom(room.ID)
 		return nil, fmt.Errorf("初始化游戏引擎失败: %v", err)
 	}
@@ -135,6 +134,9 @@ func (rm *RoomManager) DeleteRoom(roomID string) error {
 		delete(rm.playerRoom, playerID)
 	}
 	room.mu.RUnlock()
+
+	// 关闭房间资源（释放引擎、计时器等）
+	room.Close()
 
 	// 删除房间
 	delete(rm.rooms, roomID)
@@ -246,6 +248,9 @@ func (rm *RoomManager) cleanupRoom(roomID string) {
 		delete(rm.playerRoom, playerID)
 	}
 	room.mu.RUnlock()
+
+	// 关闭房间资源（释放引擎、计时器等）
+	room.Close()
 
 	// 删除房间
 	delete(rm.rooms, roomID)

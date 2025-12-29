@@ -18,7 +18,6 @@ const (
 	Man3
 	Man4
 	Man5
-	Man5Red // 赤五万
 	Man6
 	Man7
 	Man8
@@ -30,7 +29,6 @@ const (
 	Pin3
 	Pin4
 	Pin5
-	Pin5Red // 赤五筒
 	Pin6
 	Pin7
 	Pin8
@@ -42,7 +40,6 @@ const (
 	So3
 	So4
 	So5
-	So5Red // 赤五索
 	So6
 	So7
 	So8
@@ -58,9 +55,11 @@ const (
 	Red
 )
 
+const TileLimit = 136
+
 type Tile struct {
 	Type TileType
-	ID   int // 用于区分相同的牌（0-3）
+	ID   int // 用于区分相同的牌（0-3）。对于数牌5，ID=0表示赤宝牌，ID=1-3表示普通牌
 }
 
 type Wang struct {
@@ -90,7 +89,7 @@ type TileDeck struct {
 
 func NewTileDeck(useRedFives bool) *TileDeck {
 	deck := &TileDeck{
-		tiles: make([]Tile, 0, 136),
+		tiles: make([]Tile, 0, TileLimit),
 		index: 0,
 	}
 	deck.initializeTiles(useRedFives)
@@ -100,54 +99,22 @@ func NewTileDeck(useRedFives bool) *TileDeck {
 func (d *TileDeck) initializeTiles(useRedFives bool) {
 	d.tiles = d.tiles[:0] // 清空切片
 	// 生成数牌（万、筒、索）
-	d.generateSuitTiles(Man1, Man9, useRedFives) // 万子
-	d.generateSuitTiles(Pin1, Pin9, useRedFives) // 筒子
-	d.generateSuitTiles(So1, So9, useRedFives)   // 索子
+	d.generateSuitTiles(Man1, Man9) // 万子
+	d.generateSuitTiles(Pin1, Pin9) // 筒子
+	d.generateSuitTiles(So1, So9)   // 索子
 	// 生成字牌（风牌和箭牌）
 	d.generateHonorTiles(East, Red)
 }
 
 // generateSuitTiles 生成一种花色的数牌
-func (d *TileDeck) generateSuitTiles(start, end TileType, useRedFives bool) {
+func (d *TileDeck) generateSuitTiles(start, end TileType) {
 	for tileType := start; tileType <= end; tileType++ {
-		if tileType.IsRedFive() {
-			continue
-		}
-		// 如果是5牌且使用赤五牌
-		if useRedFives && tileType.IsFive() {
+		for i := 0; i < 4; i++ {
 			d.tiles = append(d.tiles, Tile{
-				Type: getRedFiveType(tileType),
-				ID:   0,
+				Type: tileType,
+				ID:   i,
 			})
-			for i := 0; i < 3; i++ {
-				d.tiles = append(d.tiles, Tile{
-					Type: tileType,
-					ID:   i + 1,
-				})
-			}
-		} else {
-			// 非5牌或不使用赤五牌，生成4张普通牌
-			for i := 0; i < 4; i++ {
-				d.tiles = append(d.tiles, Tile{
-					Type: tileType,
-					ID:   i,
-				})
-			}
 		}
-	}
-}
-
-// getRedFiveType 获取对应花色的赤五牌类型
-func getRedFiveType(normalFive TileType) TileType {
-	switch normalFive {
-	case Man5:
-		return Man5Red
-	case Pin5:
-		return Pin5Red
-	case So5:
-		return So5Red
-	default:
-		return normalFive
 	}
 }
 
@@ -171,26 +138,8 @@ func (t TileType) IsHonor() bool {
 	return t >= East && t <= Red
 }
 
-func (t TileType) IsRedFive() bool {
-	return t == Man5Red || t == Pin5Red || t == So5Red
-}
-
 func (t TileType) IsFive() bool {
-	return t == Man5 || t == Man5Red || t == Pin5 || t == Pin5Red || t == So5 || t == So5Red
-}
-
-// GetNormalFive 获取同花色的普通5（用于赤牌替换）
-func (t TileType) GetNormalFive() TileType {
-	switch t {
-	case Man5Red:
-		return Man5
-	case Pin5Red:
-		return Pin5
-	case So5Red:
-		return So5
-	default:
-		return t
-	}
+	return t == Man5 || t == Pin5 || t == So5
 }
 
 func (w Wind) String() string {
@@ -210,4 +159,19 @@ func (w Wind) String() string {
 
 func (w Wind) Next() Wind {
 	return (w + 1) % 4
+}
+
+// IsRedFive 判断是否为赤宝牌（ID=0且为数牌5）
+func (t Tile) IsRedFive() bool {
+	return t.ID == 0 && (t.Type == Man5 || t.Type == Pin5 || t.Type == So5)
+}
+
+// IsFive 判断是否为5牌（不区分赤普通）
+func (t Tile) IsFive() bool {
+	return t.Type == Man5 || t.Type == Pin5 || t.Type == So5
+}
+
+// GetTileValue 获取牌的数值（用于和牌算法，赤牌和普通牌视为相同）
+func (t Tile) GetTileValue() TileType {
+	return t.Type
 }
