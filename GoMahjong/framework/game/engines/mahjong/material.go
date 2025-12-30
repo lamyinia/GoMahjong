@@ -1,5 +1,10 @@
 package mahjong
 
+import (
+	"math/rand"
+	"time"
+)
+
 type Wind int
 
 const (
@@ -66,6 +71,97 @@ type Wang struct {
 	DeadWall          []Tile // 岭上牌
 	DoraIndicators    []Tile // 宝牌指示牌
 	UraDoraIndicators []Tile // 里宝牌指示牌
+}
+
+type DeckManager struct {
+	wall        []Tile
+	wallIndex   int
+	wang        Wang
+	remain34    [34]int
+	rng         *rand.Rand
+	useRedFives bool
+}
+
+func NewDeckManager(useRedFives bool) *DeckManager {
+	return &DeckManager{
+		wall:      make([]Tile, 0, TileLimit),
+		wallIndex: 0,
+		wang: Wang{
+			DeadWall:          make([]Tile, 0, 14),
+			DoraIndicators:    make([]Tile, 0, 5),
+			UraDoraIndicators: make([]Tile, 0, 5),
+		},
+		remain34:    [34]int{},
+		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
+		useRedFives: useRedFives,
+	}
+}
+
+func (dm *DeckManager) InitRound() {
+	deck := NewTileDeck(dm.useRedFives)
+	dm.rng.Shuffle(len(deck.tiles), func(i, j int) {
+		deck.tiles[i], deck.tiles[j] = deck.tiles[j], deck.tiles[i]
+	})
+
+	dm.wall = dm.wall[:0]
+	dm.wallIndex = 0
+	dm.wang.DeadWall = dm.wang.DeadWall[:0]
+	dm.wang.DoraIndicators = dm.wang.DoraIndicators[:0]
+	dm.wang.UraDoraIndicators = dm.wang.UraDoraIndicators[:0]
+
+	for i := 0; i < 34; i++ {
+		dm.remain34[i] = 4
+	}
+
+	if len(deck.tiles) <= 14 {
+		return
+	}
+
+	deadStart := len(deck.tiles) - 14
+	dm.wall = append(dm.wall, deck.tiles[:deadStart]...)
+	dm.wang.DeadWall = append(dm.wang.DeadWall, deck.tiles[deadStart:]...)
+}
+
+func (dm *DeckManager) Draw() (Tile, bool) {
+	if dm.wallIndex >= len(dm.wall) {
+		return Tile{}, false
+	}
+	t := dm.wall[dm.wallIndex]
+	dm.wallIndex++
+	dm.remain34[int(t.Type)]--
+	return t, true
+}
+
+func (dm *DeckManager) Deal() (Tile, bool) {
+	return dm.Draw()
+}
+
+func (dm *DeckManager) RevealDoraIndicator() (Tile, bool) {
+	if len(dm.wang.DeadWall) == 0 {
+		return Tile{}, false
+	}
+	t := dm.wang.DeadWall[0]
+	dm.wang.DeadWall = dm.wang.DeadWall[1:]
+	dm.wang.DoraIndicators = append(dm.wang.DoraIndicators, t)
+	dm.remain34[int(t.Type)]--
+	return t, true
+}
+
+func (dm *DeckManager) Visible34(dst *[34]uint8) {
+	for i := 0; i < 34; i++ {
+		v := 4 - dm.remain34[i]
+		if v < 0 {
+			v = 0
+		}
+		if v > 4 {
+			v = 4
+		}
+		dst[i] = uint8(v)
+	}
+}
+
+func (dm *DeckManager) Wang() *Wang {
+	return &dm.wang
 }
 
 type Situation struct {

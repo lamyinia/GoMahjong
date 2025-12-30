@@ -17,12 +17,12 @@ const (
 	StateTimeout                    // 已超时
 )
 
-type TurnState int
+type TurnState int // 空闲、收集、等待出牌者反应、等待非出牌者反应
 
 const (
 	StateWaiting   TurnState = iota // 等待开始
 	StateDropping                   // 等待出牌、立直
-	StateSelecting                  // 吃碰杠收集等算法收集
+	StateSelecting                  // 吃碰杠收集
 	StateReacting                   // 等待反应（吃碰杠和）
 	StateChoosing                   // 吃碰杠收集等算法执行
 )
@@ -185,14 +185,13 @@ func NewPlayerTicker(totalTime int) *PlayerTicker {
 	}
 }
 
-// Start 启动计时（支持多次启动）
+// Start 启动计时
 // duration: 本次分配的时间（秒）
 // 返回 error 如果时间不足或已在运行
 func (pt *PlayerTicker) Start(duration int) error {
 	pt.Lock()
 	defer pt.Unlock()
 
-	// 前置条件检查
 	if pt.isRunning {
 		return fmt.Errorf("计时已在运行，无法重复启动")
 	}
@@ -245,7 +244,7 @@ func (pt *PlayerTicker) timerLoop(duration int) {
 	} else if errors.Is(ctx.Err(), context.Canceled) {
 		// 被取消处理（玩家操作）
 		usedTime := int(time.Since(pt.RoundStartTime).Seconds())
-		pt.Available -= usedTime
+		pt.Available = max(0, pt.Available-usedTime)
 		oldState := pt.State
 		pt.State = StateStopped
 		pt.isRunning = false

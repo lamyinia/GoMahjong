@@ -49,6 +49,30 @@ func (e *HuEvent) GetEventType() string {
 	return "Hu"
 }
 
+type RongHuEvent struct {
+	GameMessageEvent
+}
+
+func (e *RongHuEvent) GetEventType() string {
+	return "RongHu"
+}
+
+type TouchHuEvent struct {
+	GameMessageEvent
+}
+
+func (e *TouchHuEvent) GetEventType() string {
+	return "TouchHu"
+}
+
+type ReconnectEvent struct {
+	GameMessageEvent
+}
+
+func (e *ReconnectEvent) GetEventType() string {
+	return "Reconnect"
+}
+
 type GangEvent struct {
 	GameMessageEvent
 }

@@ -30,12 +30,8 @@ func (eg *RiichiMahjong4p) calculateAvailableOperations(excludeSeat int) map[int
 		}
 
 		// 检查是否可以明杠
-		if eg.canGang(i, droppedTile) {
-			playerOps = append(playerOps, &PlayerOperation{
-				Type:  "GANG",
-				Tiles: []Tile{droppedTile},
-			})
-		}
+		gangOps := eg.getGangOptions(i, droppedTile)
+		playerOps = append(playerOps, gangOps...)
 
 		// 检查是否可以碰
 		pengOps := eg.getPengOptions(i, droppedTile)
@@ -76,20 +72,52 @@ func (eg *RiichiMahjong4p) getPengOptions(seatIndex int, droppedTile Tile) []*Pl
 		}
 	}
 
-	// 如果有多个相同的牌（如红5p和普通5p），提供选择
-	if len(matchingTiles) > 1 {
-		// 优先选择不暴露红5p的组合
-		for _, tile := range matchingTiles {
+	if len(matchingTiles) < 2 {
+		return ops
+	}
+
+	for i := 0; i < len(matchingTiles); i++ {
+		for j := i + 1; j < len(matchingTiles); j++ {
 			ops = append(ops, &PlayerOperation{
 				Type:  "PENG",
-				Tiles: []Tile{tile},
+				Tiles: []Tile{matchingTiles[i], matchingTiles[j]},
 			})
 		}
-	} else if len(matchingTiles) == 1 {
-		ops = append(ops, &PlayerOperation{
-			Type:  "PENG",
-			Tiles: matchingTiles,
-		})
+	}
+
+	return ops
+}
+
+func (eg *RiichiMahjong4p) getGangOptions(seatIndex int, droppedTile Tile) []*PlayerOperation {
+	var ops []*PlayerOperation
+	if !eg.canGang(seatIndex, droppedTile) {
+		return ops
+	}
+
+	player := eg.Players[seatIndex]
+	if player == nil {
+		return ops
+	}
+
+	matchingTiles := make([]Tile, 0, 4)
+	for _, tile := range player.Tiles {
+		if eg.isSameTile(tile, droppedTile) {
+			matchingTiles = append(matchingTiles, tile)
+		}
+	}
+	if len(matchingTiles) < 3 {
+		return ops
+	}
+
+	for i := 0; i < len(matchingTiles); i++ {
+		for j := i + 1; j < len(matchingTiles); j++ {
+			for k := j + 1; k < len(matchingTiles); k++ {
+				ops = append(ops, &PlayerOperation{
+					Type:  "GANG",
+					Tiles: []Tile{matchingTiles[i], matchingTiles[j], matchingTiles[k]},
+				})
+			}
+		}
 	}
 
 	return ops
