@@ -90,20 +90,13 @@ type Worker struct {
 }
 
 // NewWorkerWithDeps 接收依赖的构造函数（推荐用于生产环境）
-func NewWorkerWithDeps(connectorConfig interface{}, natsWorker *node.NatsWorker, rateLimiter *utils.RateLimiter) *Worker {
+func NewWorkerWithDeps(natsWorker *node.NatsWorker, rateLimiter *utils.RateLimiter) *Worker {
 	bucketCount := 32
 	bucketMask := uint32(bucketCount - 1)
 	workerCount := runtime.NumCPU() * 2
 
-	// 类型断言获取配置
-	cfg, ok := connectorConfig.(interface{ GetID() string })
-	if !ok || cfg == nil || cfg.GetID() == "" {
-		log.Fatal("connector 配置类型错误或 ID 为空")
-		return nil
-	}
-
 	w := &Worker{
-		nodeID:              cfg.GetID(),
+		nodeID:              config.ConnectorConfig.ID,
 		clientHandlers:      make(map[protocol.PackageType]PacketTypeHandler),
 		MiddleWorker:        natsWorker,
 		data:                make(map[string]any),
@@ -157,7 +150,7 @@ func (w *Worker) Run(topic string, maxConn int, addr string) error {
 	w.isRunning = true
 
 	// 启动 NATS Worker
-	err := w.MiddleWorker.Run(config.InjectedConfig.Nats.URL, topic)
+	err := w.MiddleWorker.Run(config.ConnectorConfig.NatsConfig.URL, topic)
 	if err != nil {
 		log.Fatal("nats 启动失败")
 		return err
@@ -402,10 +395,7 @@ func (w *Worker) identifyUser(r *http.Request) (string, string, error) {
 		return "", "", errors.New("缺少 barrier token")
 	}
 
-	secret := ""
-	if config.Conf != nil {
-		secret = config.Conf.JwtConf.Secret
-	}
+	secret := config.ConnectorConfig.JwtConf.Secret
 	if secret == "" {
 		return "", "", errors.New("未配置 jwt secret")
 	}

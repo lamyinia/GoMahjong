@@ -26,7 +26,7 @@ type GameContainer struct {
 
 // NewGameContainer 创建 game 服务容器
 func NewGameContainer() *GameContainer {
-	base := NewBase()
+	base := NewBase(config.GameNodeConfig.DatabaseConf)
 	if base == nil {
 		log.Fatal("基础容器初始化失败")
 		return nil
@@ -34,21 +34,10 @@ func NewGameContainer() *GameContainer {
 
 	// 创建 game 服务需要的仓储
 	userRepo := persistence.NewMongoUserRepository(base.mongo)
-
-	// 从 LocalConfig 获取 serverID
-	gameConfig, err := config.InjectedConfig.GetGameConfig()
-	if err != nil {
-		log.Fatal("获取 GameConfig 失败: %v", err)
-		return nil
-	}
-
 	// 创建 GameWorker
-	worker := game.NewWorker(gameConfig.GetID())
-
-	// 步骤 1：创建 Engine 原型（使用原型模式，注入 Worker）
-	// 目前只支持立直麻将 4 人引擎
+	worker := game.NewWorker(config.GameNodeConfig.ID)
+	// 步骤 1：创建 Engine 原型（使用原型模式，注入 Worker）,目前只支持立直麻将 4 人引擎
 	enginePrototypes := createEnginePrototypes(worker)
-
 	// 步骤 2：注入 Engine 原型到 RoomManager
 	for engineType, engine := range enginePrototypes {
 		if err := worker.RoomManager.SetEnginePrototype(engineType, engine); err != nil {

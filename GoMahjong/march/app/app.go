@@ -37,27 +37,27 @@ func Run(ctx context.Context) error {
 		err      error
 	)
 
-	lis, err = net.Listen("tcp", config.Conf.GrpcConf.Addr)
+	lis, err = net.Listen("tcp", config.MarchNodeConfig.EtcdConf.Register.Addr)
 	if err != nil {
 		log.Fatal("监听 gRPC 地址失败: %v", err)
 		return err
 	}
 
 	registry = discovery.NewRegistry()
-	if err = registry.Register(config.Conf.EtcdConf, marchContainer.NodeID); err != nil {
+	if err = registry.Register(config.MarchNodeConfig.EtcdConf, marchContainer.NodeID); err != nil {
 		log.Fatal("march 注册 etcd 失败: %v", err)
 		return err
 	}
 
 	go func() {
-		log.Info(fmt.Sprintf("march gRPC 服务启动, addr=%s", config.Conf.GrpcConf.Addr))
+		log.Info(fmt.Sprintf("march gRPC 服务启动, addr=%s", config.MarchNodeConfig.EtcdConf.Register.Addr))
 		if serveErr := grpcSrv.Serve(lis); serveErr != nil {
 			log.Error(fmt.Sprintf("march gRPC 服务退出: %v", serveErr))
 		}
 	}()
 
 	go func() {
-		err := marchContainer.MarchWorker.Start(ctx, config.InjectedConfig.Nats.URL)
+		err := marchContainer.MarchWorker.Start(ctx, config.MarchNodeConfig.NatsConfig.URL)
 		if err != nil {
 			log.Fatal("match 服务启动失败，err:%#v", err)
 		}

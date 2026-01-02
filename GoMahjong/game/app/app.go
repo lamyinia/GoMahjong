@@ -28,14 +28,14 @@ func Run(ctx context.Context) error {
 		}
 	}()
 
-	lis, err := net.Listen("tcp", config.Conf.EtcdConf.Register.Addr)
+	lis, err := net.Listen("tcp", config.GameNodeConfig.EtcdConf.Register.Addr)
 	if err != nil {
 		log.Fatal("监听 gRPC 端口失败: %v", err)
 		return err
 	}
 
 	grpcServer := grpc.NewServer()
-	gameProvider := provider.NewGameServer(gameContainer.GameWorker.GameService)
+	gameProvider := provider.NewGameProvider(gameContainer.GameWorker.GameService)
 	pb.RegisterGameServiceServer(grpcServer, gameProvider)
 
 	go func() {
@@ -47,8 +47,8 @@ func Run(ctx context.Context) error {
 	go func() {
 		err := gameContainer.GameWorker.Start(
 			ctx,
-			config.InjectedConfig.Nats.URL,
-			config.Conf.EtcdConf,
+			config.GameNodeConfig.NatsConfig.URL,
+			config.GameNodeConfig.EtcdConf,
 		)
 		if err != nil {
 			log.Fatal("worker 启动失败，err:%#v", err)

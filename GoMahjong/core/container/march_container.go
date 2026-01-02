@@ -8,9 +8,10 @@ import (
 	"core/infrastructure/persistence"
 	"core/infrastructure/realtime"
 	"fmt"
-	"framework/march"
-	"framework/march/application/service"
-	"framework/march/application/service/impl"
+	"runtime/march"
+	"runtime/march/application/service"
+	"runtime/march/application/service/impl"
+
 	"sync"
 )
 
@@ -28,7 +29,7 @@ type MarchContainer struct {
 }
 
 func NewMarchContainer() *MarchContainer {
-	base := NewBase()
+	base := NewBase(config.MarchNodeConfig.DatabaseConf)
 	if base == nil {
 		log.Fatal("基础容器初始化失败")
 		return nil
@@ -37,21 +38,14 @@ func NewMarchContainer() *MarchContainer {
 	userRepository := persistence.NewMongoUserRepository(base.mongo)
 	queueRepository := realtime.NewRedisMarchQueueRepository(base.redis)
 	routerRepository := realtime.NewRedisUserRouterRepository(base.redis)
-	nodeSelector, err := discovery.NewNodeSelector(discovery.LeastLoad)
+	nodeSelector, err := discovery.NewNodeSelector(discovery.LeastLoad, config.MarchNodeConfig.EtcdConf)
 	if err != nil {
 		log.Fatal("NodeSelector 创建错误err:%#v", err)
 	}
 
 	matchService := impl.NewMatchService(userRepository, queueRepository, routerRepository, nodeSelector)
 
-	// 从 LocalConfig 获取 serverID
-	marchConfig, err := config.InjectedConfig.GetMarchConfig()
-	if err != nil {
-		log.Fatal("获取 MarchConfig 失败: %v", err)
-		return nil
-	}
-	nodeID := marchConfig.GetID()
-	worker := march.NewWorker(matchService, nodeID)
+	worker := march.NewWorker(matchService, config.MarchNodeConfig.ID)
 
 	return &MarchContainer{
 		BaseContainer:        base,
@@ -60,7 +54,7 @@ func NewMarchContainer() *MarchContainer {
 		UserRouterRepository: routerRepository,
 		MarchWorker:          worker,
 		MatchService:         matchService,
-		NodeID:               nodeID,
+		NodeID:               config.MarchNodeConfig.ID,
 		nodeSelector:         nodeSelector,
 	}
 }

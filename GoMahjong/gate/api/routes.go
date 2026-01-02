@@ -1,6 +1,7 @@
 package api
 
 import (
+	"common/config"
 	"common/http"
 	"common/rpc"
 )
@@ -12,7 +13,7 @@ func RegisterRoutes(server *http.HttpServer) {
 	server.GET("/health", HealthHandler)
 
 	// 发现 rpc 服务
-	rpc.Init()
+	rpc.Init(config.GateNodeConfig.Domains, config.GateNodeConfig.EtcdConf)
 	// API v1 路由组
 	v1 := server.Group("/api/v1")
 	{

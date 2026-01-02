@@ -6,8 +6,8 @@ import (
 	"common/log"
 	"fmt"
 	matchpb "march/pb"
-	userpb "player/pb"
 	"strings"
+	userpb "user/pb"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -19,18 +19,18 @@ var (
 	MatchClient matchpb.MatchServiceClient
 )
 
-func Init() {
-	r := discovery.NewResolver(config.Conf.EtcdConf)
+func Init(domains map[string]config.Domain, etcdConf config.EtcdConf) {
+	r := discovery.NewResolver(etcdConf)
 	resolver.Register(r)
 
-	userDomain, ok := config.Conf.Domain["user"]
+	userDomain, ok := domains["user"]
 	if !ok {
 		log.Fatal("rpc 初始化失败: 未配置 user domain")
 	}
 	initClient(userDomain.Name, userDomain.LoadBalance, &UserClient)
 	log.Info(fmt.Sprintf("rpc 发现 user 服务，%#v", userDomain))
 
-	marchDomain, ok := config.Conf.Domain["march"]
+	marchDomain, ok := domains["march"]
 	if !ok {
 		log.Fatal("rpc 初始化失败: 未配置 march domain")
 	}
@@ -40,7 +40,7 @@ func Init() {
 
 // client 结构体指针，大小 8 字节
 func initClient(name string, loadBalance bool, client interface{}) {
-	// 找服务的地址，强制 host 为空
+	// scheme://authority/path，grpc 框架约定 authority 留空
 	addr := fmt.Sprintf("etcd:///%s", strings.TrimPrefix(name, "/"))
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

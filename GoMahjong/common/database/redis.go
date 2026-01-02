@@ -15,13 +15,12 @@ type RedisManager struct {
 	ClusterCli *redis.ClusterClient
 }
 
-func NewRedis() *RedisManager {
+func NewRedis(redisConf config.RedisConf) *RedisManager {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	var clusterCli *redis.ClusterClient
 	var cli *redis.Client
-	redisConf := config.Conf.DatabaseConf.RedisConf
 
 	// 构建Redis地址
 	var addr string

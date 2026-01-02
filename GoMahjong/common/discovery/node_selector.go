@@ -25,8 +25,8 @@ type NodeSelector struct {
 
 // NewNodeSelector 创建节点选择器
 // strategy: 负载均衡策略
-func NewNodeSelector(strategy LoadBalanceStrategy) (*NodeSelector, error) {
-	seeker, err := NewSeeker(config.Conf.EtcdConf)
+func NewNodeSelector(strategy LoadBalanceStrategy, etcdConf config.EtcdConf) (*NodeSelector, error) {
+	seeker, err := NewSeeker(etcdConf)
 	if err != nil {
 		return nil, fmt.Errorf("创建服务发现客户端失败: %v", err)
 	}

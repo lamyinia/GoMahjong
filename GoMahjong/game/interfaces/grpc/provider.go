@@ -2,24 +2,24 @@ package grpc
 
 import (
 	"context"
-	"framework/game/application/service"
 	pb "game/pb"
+	"runtime/game/application/service"
 )
 
-type GameServer struct {
+type GameProvider struct {
 	pb.UnimplementedGameServiceServer
 	gameService service.GameService
 }
 
-// NewGameServer 创建 GameServer 实例
-func NewGameServer(gameService service.GameService) *GameServer {
-	return &GameServer{
+// NewGameProvider 创建 GameProvider 实例
+func NewGameProvider(gameService service.GameService) *GameProvider {
+	return &GameProvider{
 		gameService: gameService,
 	}
 }
 
 // CreateRoom 实现 GameServiceServer 接口
-func (s *GameServer) CreateRoom(ctx context.Context, req *pb.CreateRoomRequest) (*pb.CreateRoomResponse, error) {
+func (s *GameProvider) CreateRoom(ctx context.Context, req *pb.CreateRoomRequest) (*pb.CreateRoomResponse, error) {
 	// 将 proto 请求转换为 service 请求
 	serviceReq := &service.CreateRoomReq{
 		Players:    req.Players,

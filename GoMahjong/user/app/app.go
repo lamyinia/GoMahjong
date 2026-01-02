@@ -20,7 +20,7 @@ import (
 // Run 1.启用数据库。2.启动 grpc 服务，优雅启停。 3.启用 Etcd。
 func Run(ctx context.Context) error {
 	// 1. 初始化 user 服务专用容器
-	playerContainer := container.NewPlayerContainer()
+	playerContainer := container.NewUserContainer()
 	if playerContainer == nil {
 		log.Fatal("user 容器初始化失败")
 		return nil
@@ -33,18 +33,18 @@ func Run(ctx context.Context) error {
 	// 3. 创建服务发现注册器
 	registry := discovery.NewRegistry()
 
-	// 4. 启动 gRPC 服务（异步）
+	// 4. 启动 gRPC 服务
 	go func() {
 		log.Info("启动 gRPC 服务、etcd 服务...")
 
 		// 监听端口
-		lis, err := net.Listen("tcp", config.Conf.GrpcConf.Addr)
+		lis, err := net.Listen("tcp", config.UserNodeConfig.EtcdConf.Register.Addr)
 		if err != nil {
 			log.Fatal("gRPC 监听失败: %v", err)
 		}
 
 		// 注册到 etcd
-		//err = registry.Register(config.Conf.EtcdConf)
+		err = registry.Register(config.UserNodeConfig.EtcdConf, config.UserNodeConfig.ID)
 		if err != nil {
 			log.Fatal("etcd 注册失败: %v", err)
 		}

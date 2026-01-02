@@ -21,11 +21,6 @@ func InitLog(appName string, logLevel string) {
 
 	// 启用调用者信息（显示文件名和行号）
 	logger.SetReportCaller(true)
-
-	// charmbracelet/log 会自动检测终端并启用颜色
-	// 在 GoLand 等 IDE 中，如果终端不支持 ANSI 颜色，会自动禁用
-	// 这样就不会显示错误的颜色了
-
 	// 默认为 info 级别
 	if logLevel == "" {
 		logLevel = "info"

@@ -17,8 +17,8 @@ func Run(ctx context.Context) error {
 
 	// 使用 common 封装的 gin 库 http-server
 	server := http.NewHttpServer(
-		http.WithPort(config.Conf.HttpPort),
-		http.WithMode(config.Conf.Log.Level),
+		http.WithPort(config.GateNodeConfig.HttpPort),
+		http.WithMode(config.GameNodeConfig.LogConf.Level),
 	)
 
 	// 中间处理器注册
@@ -33,7 +33,7 @@ func Run(ctx context.Context) error {
 	api.RegisterRoutes(server)
 
 	go func() {
-		log.Info(fmt.Sprintf("启动 HTTP 服务器，端口: %d", config.Conf.HttpPort))
+		log.Info(fmt.Sprintf("启动 HTTP 服务器，端口: %d", config.GateNodeConfig.HttpPort))
 		if err := server.Start(); err != nil {
 			// http.ErrServerClosed 是正常关闭，不需要记录为错误
 			if err.Error() != "http: Server closed" {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"common/config"
 	"common/log"
 	"common/rpc"
 	"context"
@@ -17,16 +18,9 @@ func Run(ctx context.Context) error {
 	connectorContainer := container.NewConnectorContainer()
 	defer connectorContainer.Close()
 
-	connectorConfig := connectorContainer.GetConnectorConfig()
-	cfg, ok := connectorConfig.(interface{ GetID() string })
-	if !ok || cfg == nil {
-		log.Fatal("connector 配置类型错误")
-		return nil
-	}
-
 	// 初始化 RPC 客户端并检测 march gRPC 是否可达
-	rpc.Init()
-	if err := healthCheckMarch(cfg.GetID()); err != nil {
+	rpc.Init(config.ConnectorConfig.Domains, config.ConnectorConfig.EtcdConf)
+	if err := healthCheckMarch(config.ConnectorConfig.ID); err != nil {
 		log.Fatal("march RPC 健康检查失败: %v", err)
 	}
 
@@ -37,7 +31,7 @@ func Run(ctx context.Context) error {
 	}
 	go func() {
 		addr := "localhost:8082"
-		if err := worker.Run(cfg.GetID(), 5000, addr); err != nil {
+		if err := worker.Run(config.ConnectorConfig.ID, 5000, addr); err != nil {
 			log.Fatal("worker 启动失败: %v", err)
 		}
 	}()
@@ -98,7 +92,6 @@ func healthCheckMarch(connectorID string) error {
 		if _, err := rpc.MatchClient.JoinQueue(ctx, joinReq); err != nil {
 			return fmt.Errorf("JoinQueue 调用失败: %w", err)
 		}
-		// 最佳努力地移除，避免污染队列
 		_, _ = rpc.MatchClient.LeaveQueue(ctx, &matchpb.LeaveQueueRequest{
 			UserID: "health-check",
 		})

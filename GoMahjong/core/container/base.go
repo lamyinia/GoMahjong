@@ -1,6 +1,7 @@
 package container
 
 import (
+	"common/config"
 	"common/database"
 	"common/log"
 )
@@ -12,9 +13,9 @@ type BaseContainer struct {
 }
 
 // NewBase 创建基础容器并初始化所有共享依赖
-func NewBase() *BaseContainer {
-	mongo := database.NewMongo()
-	redis := database.NewRedis()
+func NewBase(conf config.DatabaseConf) *BaseContainer {
+	mongo := database.NewMongo(conf.MongoConf)
+	redis := database.NewRedis(conf.RedisConf)
 
 	if mongo == nil || redis == nil {
 		log.Fatal("数据库初始化失败")

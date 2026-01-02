@@ -12,26 +12,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	configFile string
-	logLevel   string
-	nodeID     string
-)
+var configFile string
 
 var rootCmd = &cobra.Command{
 	Use:   "march",
 	Short: "march 匹配服务",
 	Long:  `march 匹配服务`,
 	Run: func(cmd *cobra.Command, args []string) {
-		log.InitLog(nodeID, logLevel)
-
-		config.InitFixedConfig(configFile)
-		config.InitDynamicConfig(nodeID)
-		log.Info(fmt.Sprintf("配置文件: %+v", config.Conf))
+		if err := config.Load(configFile); err != nil {
+			log.Fatal("文件配置发生错误：%v", err)
+		}
+		log.InitLog(config.MarchNodeConfig.ID, config.MarchNodeConfig.LogConf.Level)
+		log.Info(fmt.Sprintf("配置文件: %+v", config.MarchNodeConfig))
 
 		go func() {
-			log.Info("启动监控..., URL: http://localhost:" + fmt.Sprintf("%d", config.Conf.MetricPort) + "/debug/statsviz/")
-			err := metrics.Serve(fmt.Sprintf("0.0.0.0:%d", config.Conf.MetricPort))
+			log.Info("启动监控..., URL: http://localhost:" + fmt.Sprintf("%d", config.MarchNodeConfig.MetricPort) + "/debug/statsviz/")
+			err := metrics.Serve(fmt.Sprintf("0.0.0.0:%d", config.MarchNodeConfig.MetricPort))
 			if err != nil {
 				panic(err)
 			}
@@ -46,10 +42,8 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.Flags().StringVar(&configFile, "resource", "resource/application.yml", "resource file")
-	rootCmd.Flags().StringVar(&logLevel, "logLevel", "info", "log level: debug, info, warn, error")
-	rootCmd.Flags().StringVar(&nodeID, "nodeID", "", "subscribed topic and nodeID of server required")
-	rootCmd.MarkFlagRequired("nodeID")
+	rootCmd.Flags().StringVar(&configFile, "configFile", "", "resource file")
+	rootCmd.MarkFlagRequired("configFile")
 }
 
 func main() {

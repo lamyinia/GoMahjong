@@ -9,7 +9,7 @@ import (
 
 // ws/test={userID}
 func (w *Worker) extractUserIDFromTestPath(path string) (string, bool) {
-	if config.Conf == nil || !config.Conf.JwtConf.AllowTestPath {
+	if config.ConnectorConfig.JwtConf.AllowTestPath {
 		return "", false
 	}
 	trimmed := strings.Trim(path, "/")

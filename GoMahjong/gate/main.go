@@ -12,24 +12,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	configFile string
-	logLevel   string
-	identifier string
-)
+var configFile string
 
 var rootCmd = &cobra.Command{
 	Use:   "gate",
 	Short: "gate 网关",
 	Long:  `gate 网关`,
 	Run: func(cmd *cobra.Command, args []string) {
-		config.InitFixedConfig(configFile)
-		log.InitLog(identifier, logLevel)
-		log.Info(fmt.Sprintf("配置文件: %+v", config.Conf))
+		if err := config.Load(configFile); err != nil {
+			log.Fatal("文件配置发生错误：%v", err)
+		}
+		log.InitLog(config.GameNodeConfig.ID, config.GameNodeConfig.LogConf.Level)
+		log.Info(fmt.Sprintf("配置文件: %+v", config.GameNodeConfig))
 
 		go func() {
-			log.Info("启动监控..., URL: http://localhost:" + fmt.Sprintf("%d", config.Conf.MetricPort) + "/debug/statsviz/")
-			err := metrics.Serve(fmt.Sprintf("0.0.0.0:%d", config.Conf.MetricPort))
+			log.Info("启动监控..., URL: http://localhost:" + fmt.Sprintf("%d", config.GameNodeConfig.MetricPort) + "/debug/statsviz/")
+			err := metrics.Serve(fmt.Sprintf("0.0.0.0:%d", config.GameNodeConfig.MetricPort))
 			if err != nil {
 				panic(err)
 			}
@@ -44,10 +42,8 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.Flags().StringVar(&configFile, "resource", "resource/application.yml", "resource file")
-	rootCmd.Flags().StringVar(&logLevel, "logLevel", "info", "log level: debug, info, warn, error")
-	rootCmd.Flags().StringVar(&identifier, "identifier", "", "subscribed topic and identifier of server required")
-	rootCmd.MarkFlagRequired("identifier")
+	rootCmd.Flags().StringVar(&configFile, "configFile", "", "resource file")
+	rootCmd.MarkFlagRequired("configFile")
 }
 
 func main() {

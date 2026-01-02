@@ -299,7 +299,7 @@ func (eg *RiichiMahjong4p) handleReconnectEvent(event *share.ReconnectEvent) {
 
 // todo TurnManager 需要重新初始化，TurnManager 提供开放重新初始化的方法
 func (eg *RiichiMahjong4p) handleStartRoundEvent() {
-	log.Info("新的一局游戏开始：%v", eg.Situation)
+	log.Info("新的一局游戏开始：%#v", eg.Situation)
 	if eg.DeckManager == nil {
 		eg.DeckManager = NewDeckManager(UseRedFive)
 	}
@@ -975,6 +975,7 @@ func (eg *RiichiMahjong4p) handleDropTimeout(seatIndex int) {
 	tileToDiscard, ok := player.DiscardNewestOrLast()
 	if !ok {
 		log.Warn("玩家 %d 自动出牌失败", seatIndex)
+		eg.Terminate()
 		return
 	}
 	log.Info("玩家 %d 自动打出牌: %v", seatIndex, tileToDiscard)

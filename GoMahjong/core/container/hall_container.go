@@ -1,6 +1,7 @@
 package container
 
 import (
+	"common/config"
 	"common/database"
 	"common/log"
 	"core/domain/repository"
@@ -19,7 +20,7 @@ type HallContainer struct {
 
 // NewHallContainer 创建 hall 服务容器
 func NewHallContainer() *HallContainer {
-	base := NewBase()
+	base := NewBase(config.HallNodeConfig.DatabaseConf)
 	if base == nil {
 		log.Fatal("基础容器初始化失败")
 		return nil

@@ -6,39 +6,34 @@ import (
 	"common/metrics"
 	"context"
 	"fmt"
+	"github.com/spf13/cobra"
 	"os"
 	"user/app"
-
-	"github.com/spf13/cobra"
 )
 
 // 加载配置 -> 启动监控 -> 启动 grpc 服务
 // 阿里云代理 go env -w GOPROXY=https://mirrors.aliyun.com/goproxy/,direct
 // 查看兼容的版本 go list -m -versions github.com/arl/statsviz
 
-var (
-	configFile string
-	logLevel   string
-	identifier string
-)
+var configFile string
 
 var rootCmd = &cobra.Command{
 	Use:   "user",
 	Short: "user 玩家服务",
 	Long:  `user 玩家服务`,
 	Run: func(cmd *cobra.Command, args []string) {
-		config.InitFixedConfig(configFile)
-		log.InitLog(identifier, logLevel)
-		log.Info("配置文件: %+v", config.Conf)
-
+		if err := config.Load(configFile); err != nil {
+			log.Fatal("文件配置发生错误：%v", err)
+		}
+		log.InitLog(config.UserNodeConfig.ID, config.UserNodeConfig.LogConf.Level)
+		log.Info(fmt.Sprintf("配置文件: %+v", config.UserNodeConfig))
 		go func() {
-			log.Info("启动监控..., URL: http://localhost:%d/debug/statsviz/", config.Conf.MetricPort)
-			err := metrics.Serve(fmt.Sprintf("0.0.0.0:%d", config.Conf.MetricPort))
+			log.Info("启动监控..., URL: http://localhost:%d/debug/statsviz/", config.UserNodeConfig.MetricPort)
+			err := metrics.Serve(fmt.Sprintf("0.0.0.0:%d", config.UserNodeConfig.MetricPort))
 			if err != nil {
 				panic(err)
 			}
 		}()
-
 		err := app.Run(context.Background())
 		if err != nil {
 			log.Error("发生异常: {}", err)
@@ -48,10 +43,8 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.Flags().StringVar(&configFile, "config", "resource/application.yml", "resource file")
-	rootCmd.Flags().StringVar(&logLevel, "logLevel", "info", "log level: debug, info, warn, error")
-	rootCmd.Flags().StringVar(&identifier, "identifier", "", "subscribed topic and identifier of server required")
-	rootCmd.MarkFlagRequired("identifier")
+	rootCmd.Flags().StringVar(&configFile, "configFile", "", "resource file")
+	rootCmd.MarkFlagRequired("configFile")
 }
 
 func main() {

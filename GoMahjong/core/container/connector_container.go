@@ -17,7 +17,7 @@ type ConnectorContainer struct {
 }
 
 func NewConnectorContainer() *ConnectorContainer {
-	base := NewBase()
+	base := NewBase(config.ConnectorConfig.DatabaseConf)
 	if base == nil {
 		log.Fatal("基础容器初始化失败")
 		return nil
@@ -26,19 +26,6 @@ func NewConnectorContainer() *ConnectorContainer {
 	return &ConnectorContainer{
 		BaseContainer: base,
 	}
-}
-
-// GetConnectorConfig 获取 Connector 配置
-func (c *ConnectorContainer) GetConnectorConfig() interface{} {
-	if c.connectorConfig == nil {
-		cfg, err := config.InjectedConfig.GetConnectorConfig()
-		if err != nil || cfg == nil {
-			log.Fatal("获取 connector 配置文件失败: %v", err)
-			return nil
-		}
-		c.connectorConfig = cfg
-	}
-	return c.connectorConfig
 }
 
 // GetNatsWorker 获取或创建 NATS Worker
@@ -64,11 +51,7 @@ func (c *ConnectorContainer) GetRateLimiter() *utils.RateLimiter {
 // GetWorker 获取或创建 Worker
 func (c *ConnectorContainer) GetWorker() *conn.Worker {
 	if c.worker == nil {
-		c.worker = conn.NewWorkerWithDeps(
-			c.GetConnectorConfig(),
-			c.GetNatsWorker(),
-			c.GetRateLimiter(),
-		)
+		c.worker = conn.NewWorkerWithDeps(c.GetNatsWorker(), c.GetRateLimiter())
 		if c.worker == nil {
 			log.Fatal("Worker 初始化失败")
 		}

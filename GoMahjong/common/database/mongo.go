@@ -17,11 +17,10 @@ type MongoManager struct {
 	Db  *mongo.Database
 }
 
-func NewMongo() *MongoManager {
+func NewMongo(mongoConf config.MongoConf) *MongoManager {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	mongoConf := config.Conf.DatabaseConf.MongoConf
 	clientOptions := options.Client().ApplyURI(mongoConf.Url)
 	clientOptions.SetMinPoolSize(uint64(mongoConf.MinPoolSize))
 	clientOptions.SetMaxPoolSize(uint64(mongoConf.MaxPoolSize))
@@ -45,7 +44,7 @@ func NewMongo() *MongoManager {
 	m := &MongoManager{
 		Cli: client,
 	}
-	m.Db = m.Cli.Database(config.Conf.DatabaseConf.MongoConf.Db)
+	m.Db = m.Cli.Database(mongoConf.Db)
 
 	return m
 }
