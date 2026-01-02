@@ -67,9 +67,9 @@ func (r RankingType) GetQueueKey() string {
 }
 
 // GetPlayerInfoKey 获取段位对应的玩家信息 Hash Key
-// 返回：如 "march:player:info:rank:novice"
+// 返回：如 "march:user:info:rank:novice"
 func (r RankingType) GetPlayerInfoKey() string {
-	return fmt.Sprintf("march:player:info:rank:%s", r.String())
+	return fmt.Sprintf("march:user:info:rank:%s", r.String())
 }
 
 // String 返回段位名称（用于日志和 Redis Key）

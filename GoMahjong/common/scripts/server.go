@@ -79,13 +79,13 @@ func (ws *WebServer) AddPlayer(userID string) error {
 	defer ws.mu.Unlock()
 
 	if _, exists := ws.players[userID]; exists {
-		return fmt.Errorf("player %s already exists", userID)
+		return fmt.Errorf("user %s already exists", userID)
 	}
 
 	// 创建客户端
 	client := NewTestClient(userID)
 	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect player %s: %v", userID, err)
+		return fmt.Errorf("failed to connect user %s: %v", userID, err)
 	}
 
 	pc := &PlayerClient{
@@ -180,7 +180,7 @@ func (ws *WebServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	if !exists {
 		log.Error("Player not found", "playerID", playerID)
-		conn.WriteJSON(map[string]string{"error": "player not found"})
+		conn.WriteJSON(map[string]string{"error": "user not found"})
 		return
 	}
 

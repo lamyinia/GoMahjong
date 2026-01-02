@@ -7,14 +7,14 @@ import (
 	"core/infrastructure/persistence"
 )
 
-// PlayerContainer player 服务专用容器
-// 继承 BaseContainer 的数据库连接，添加 player 服务特定的依赖
+// PlayerContainer user 服务专用容器
+// 继承 BaseContainer 的数据库连接，添加 user 服务特定的依赖
 type PlayerContainer struct {
 	*BaseContainer
 	userRepository repository.UserRepository
 }
 
-// NewPlayerContainer 创建 player 服务容器
+// NewPlayerContainer 创建 user 服务容器
 func NewPlayerContainer() *PlayerContainer {
 	base := NewBase()
 	if base == nil {
@@ -22,7 +22,7 @@ func NewPlayerContainer() *PlayerContainer {
 		return nil
 	}
 
-	// 创建 player 服务需要的仓储
+	// 创建 user 服务需要的仓储
 	userRepo := persistence.NewMongoUserRepository(base.mongo)
 
 	return &PlayerContainer{

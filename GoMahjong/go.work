@@ -6,10 +6,10 @@ use (
 	common
 	connector
 	core
-	framework
+	runtime
 	game
 	gate
 	hall
-	player
+	user
 	march
 )

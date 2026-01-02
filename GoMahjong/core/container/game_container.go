@@ -6,10 +6,11 @@ import (
 	"core/domain/repository"
 	"core/infrastructure/persistence"
 	"fmt"
-	"framework/game"
-	"framework/game/application/service/impl"
-	"framework/game/engines"
-	"framework/game/engines/mahjong"
+	"runtime/game"
+	"runtime/game/application/service/impl"
+	"runtime/game/engines"
+	"runtime/game/engines/mahjong"
+
 	"sync"
 )
 
@@ -21,9 +22,6 @@ type GameContainer struct {
 	GameWorker     *game.Worker
 	closed         bool
 	mu             sync.Mutex
-	// TODO: 添加 game 服务特定的仓储
-	// gameRepository repository.GameRepository
-	// ruleRepository repository.RuleRepository
 }
 
 // NewGameContainer 创建 game 服务容器

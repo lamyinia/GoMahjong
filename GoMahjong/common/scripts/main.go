@@ -24,7 +24,7 @@ func WebUIMode() {
 
 	for _, playerID := range players {
 		if err := server.AddPlayer(playerID); err != nil {
-			log.Printf("Failed to add player %s: %v", playerID, err)
+			log.Printf("Failed to add user %s: %v", playerID, err)
 		}
 	}
 

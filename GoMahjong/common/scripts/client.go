@@ -1,9 +1,9 @@
 package main
 
 import (
+	"core/infrastructure/message/protocol"
 	"encoding/json"
 	"fmt"
-	"framework/protocol"
 	"strings"
 	"time"
 

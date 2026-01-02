@@ -43,7 +43,6 @@ func (r *RedisUserRouterRepository) SaveRouter(ctx context.Context, userID strin
 	if cli == nil {
 		return fmt.Errorf("Redis 客户端未初始化")
 	}
-
 	if info == nil {
 		return fmt.Errorf("路由信息不能为空")
 	}

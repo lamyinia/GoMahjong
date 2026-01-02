@@ -4,8 +4,8 @@ import (
 	"common/config"
 	"common/log"
 	"common/utils"
-	"framework/conn"
-	"framework/node"
+	"core/infrastructure/message/node"
+	"runtime/conn"
 )
 
 type ConnectorContainer struct {

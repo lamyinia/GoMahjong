@@ -17,7 +17,7 @@ const (
 	// 玩家信息过期时间（比队列超时时间长）
 	marchPlayerInfoTTL = 30 * time.Minute
 	// 注意：队列 Key 和玩家信息 Key 现在通过 ranking.GetQueueKey() 和 ranking.GetPlayerInfoKey() 动态生成
-	// 格式：march:queue:rank:{ranking} 和 march:player:info:rank:{ranking}
+	// 格式：march:queue:rank:{ranking} 和 march:user:info:rank:{ranking}
 )
 
 // Lua 脚本：原子性地从队列中取出指定数量的玩家
@@ -50,17 +50,14 @@ end
 for i = 1, #players, 2 do
     local userID = players[i]
     local score = players[i + 1]
-    
     -- 从 Hash 中获取 NodeID
     local NodeID = redis.call('HGET', infoKey, userID)
     if NodeID == false then
         NodeID = ""
     end
-    
     -- 从队列中移除
     redis.call('ZREM', queueKey, userID)
     redis.call('HDEL', infoKey, userID)
-    
     -- 添加到结果数组（userID, NodeID 成对出现）
     table.insert(result, userID)
     table.insert(result, NodeID)
