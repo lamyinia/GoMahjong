@@ -75,7 +75,6 @@ func (seeker *Seeker) WatchServers(serviceName string, callback func([]Server)) 
 				log.Warn(fmt.Sprintf("watch 被取消, serviceName=%s", serviceName))
 				return
 			}
-
 			// 重新获取服务列表
 			servers, err := seeker.GetServers(serviceName)
 			if err != nil {
