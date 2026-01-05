@@ -212,8 +212,15 @@ func (tc *TestClient) HandleCommand(cmd string) error {
 
 	switch action {
 	case "join":
-		// 加入匹配队列
-		return tc.SendRequest("connector.joinqueue", map[string]any{})
+		// 加入匹配队列: join [poolID]
+		// 示例: join classic:rank4 或 join classic:casual4
+		poolID := "classic:rank4" // 默认排位4人
+		if len(parts) > 1 {
+			poolID = parts[1]
+		}
+		return tc.SendRequest("connector.joinqueue", map[string]any{
+			"poolID": poolID,
+		})
 
 	case "play":
 		// 出牌：play 5p

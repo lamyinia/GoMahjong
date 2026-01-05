@@ -34,18 +34,19 @@ func NewMarchContainer() *MarchContainer {
 		log.Fatal("基础容器初始化失败")
 		return nil
 	}
-
-	userRepository := persistence.NewMongoUserRepository(base.mongo)
+	userRepository := persistence.NewUserRepository(base.mongo, base.redis)
 	queueRepository := realtime.NewRedisMarchQueueRepository(base.redis)
 	routerRepository := realtime.NewRedisUserRouterRepository(base.redis)
 	nodeSelector, err := discovery.NewNodeSelector(discovery.LeastLoad, config.MarchNodeConfig.EtcdConf)
 	if err != nil {
 		log.Fatal("NodeSelector 创建错误err:%#v", err)
 	}
-
-	matchService := impl.NewMatchService(userRepository, queueRepository, routerRepository, nodeSelector)
-
+	matchService := impl.NewMatchService(queueRepository, userRepository)
 	worker := march.NewWorker(matchService, config.MarchNodeConfig.ID)
+	if err := worker.InitMatchPools(queueRepository, routerRepository, nodeSelector); err != nil {
+		log.Fatal("初始化匹配池失败: %v", err)
+		return nil
+	}
 
 	return &MarchContainer{
 		BaseContainer:        base,
@@ -60,7 +61,6 @@ func NewMarchContainer() *MarchContainer {
 }
 
 // Close 关闭容器资源（幂等操作，可以安全地多次调用）
-// 关闭顺序：1. MarchWorker 2. NodeSelector 3. BaseContainer（数据库连接）
 func (c *MarchContainer) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

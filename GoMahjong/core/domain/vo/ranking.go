@@ -1,9 +1,5 @@
 package vo
 
-import (
-	"fmt"
-)
-
 // RankingType 段位枚举
 // 数据库只存储数值（score），段位通过 GetRankingByScore 方法计算
 type RankingType int
@@ -58,18 +54,6 @@ func GetRankingByScore(score int) RankingType {
 	}
 	// score >= RankingSkyMin
 	return RankingSky
-}
-
-// GetQueueKey 获取段位对应的 Redis 队列 Key
-// 返回：如 "march:queue:rank:novice"
-func (r RankingType) GetQueueKey() string {
-	return fmt.Sprintf("march:queue:rank:%s", r.String())
-}
-
-// GetPlayerInfoKey 获取段位对应的玩家信息 Hash Key
-// 返回：如 "march:user:info:rank:novice"
-func (r RankingType) GetPlayerInfoKey() string {
-	return fmt.Sprintf("march:user:info:rank:%s", r.String())
 }
 
 // String 返回段位名称（用于日志和 Redis Key）

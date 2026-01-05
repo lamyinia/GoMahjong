@@ -89,7 +89,7 @@ type HandshakeResponse struct {
 }
 
 type Message struct {
-	Type            MessageType // stream type 4中消息类型 request response notify push
+	Type            MessageType // transfer type 4中消息类型 request response notify push
 	ID              uint        // unique id, zero while notify mode 消息id（request response）
 	Route           string      // route for locating service 消息路由
 	Data            []byte      // payload  消息体的原始数据
@@ -162,21 +162,21 @@ func MessageEncode(m *Message) ([]byte, error) {
 
 // MessageDecode https://github.com/NetEase/pomelo/wiki/%E5%8D%8F%E8%AE%AE%E6%A0%BC%E5%BC%8F
 // ------------------------------------------
-// |   flag   |  stream id  |       route        |
+// |   flag   |  transfer id  |       route        |
 // |----------|--------|--------------------|
 // | 1 byte   |0-5bytes|0-256bytes|
 // ------------------------------------------
 // flag占用message头的第一个byte
 // 现在只用到了其中的4个bit，这四个bit包括两部分，占用3个bit的message type字段和占用1个bit的route标识
-// stream type用来标识消息类型,范围为0～7，现在消息共有四类，request，notify，response，push，值的范围是0～3
+// transfer type用来标识消息类型,范围为0～7，现在消息共有四类，request，notify，response，push，值的范围是0～3
 // 最后一位的route表示route是否压缩，影响route字段的长度
 // 不同类型的消息，对应不同消息头，消息类型通过flag字段的第2-4位来确定，其对应关系
 // ------------------------------------------
 // |   type   |  flag  |       other        |
 // |----------|--------|--------------------|
-// | request  |----000-|<stream id>|<route> |
+// | request  |----000-|<transfer id>|<route> |
 // | notify   |----001-|<route>             |
-// | response |----010-|<stream id>         |
+// | response |----010-|<transfer id>         |
 // | push     |----011-|<route>             |
 // ------------------------------------------
 func MessageDecode(body []byte) (Message, error) {
@@ -184,7 +184,7 @@ func MessageDecode(body []byte) (Message, error) {
 	flag := body[0]
 	m.Type = MessageType((flag >> 1) & TypeMask)
 	if m.Type < Request || m.Type > Push {
-		return m, errors.New("invalid stream type")
+		return m, errors.New("invalid transfer type")
 	}
 	offset := 1
 	dataLen := len(body)
@@ -203,7 +203,7 @@ func MessageDecode(body []byte) (Message, error) {
 		m.ID = id
 	}
 	if offset > dataLen {
-		return m, errors.New("invalid stream")
+		return m, errors.New("invalid transfer")
 	}
 	m.Error = flag&ErrorMask == ErrorMask
 	if m.Type == Request || m.Type == Notify || m.Type == Push {
@@ -227,7 +227,7 @@ func MessageDecode(body []byte) (Message, error) {
 		}
 	}
 	if offset > dataLen {
-		return m, errors.New("invalid stream")
+		return m, errors.New("invalid transfer")
 	}
 	m.Data = body[offset:]
 	var err error

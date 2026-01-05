@@ -5,9 +5,12 @@ import (
 	"common/jwts"
 	"common/log"
 	"common/utils"
+	"context"
+	"core/domain/repository"
+	"core/infrastructure/cache"
 	"core/infrastructure/message/node"
 	"core/infrastructure/message/protocol"
-	"core/infrastructure/message/stream"
+	"core/infrastructure/message/transfer"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,62 +24,51 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var (
-	// 单例模式
-	websocketUpgrade = websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
-		ReadBufferSize:    4096,
-		WriteBufferSize:   4096,
-		EnableCompression: true,
-	}
+/*
+长连接网关职责：
+ 1. 连接事件：处理玩家长连接的生命周期、读写事件
+ 2. 游戏断线重连：配合游戏断线重连服务的实现
+ 3. 游戏逻辑通信：调用 nats 服务和 game 节点通信，nats 监听来自 game 节点的消息
+ 4. 大厅逻辑：nats 监听来自 hall 节点的消息
+ 5. 匹配逻辑：使用 rpc 服务调用 march 节点的方法，同时 nats 监听来自 march 节点的消息，配合匹配服务
+    (1)用户在类似游戏对战开始(匹配、创建房间...)的逻辑之前，一定要有查路由的逻辑，检查有没有正在进行的游戏
+ 6. 路由转发，收到来自 game、hall、march 节点或者 user 的消息后，如果需要转发，转发给目标
+ 7. 通信协议协议：收到来自 game、hall、march 节点或者 user 的消息后，识别协议
 
-	connectionRateLimiter = utils.NewRateLimiter(100, 1)
-)
+可扩展点：
+	支持 websocket、TCP、KCP、UDP 等
+*/
 
 type CheckOriginHandler func(r *http.Request) bool
 
-type PacketTypeHandler func(packet *protocol.Packet, c *Connection) error
+type PacketTypeHandler func(packet *protocol.Packet, c Connection) error
 
 type ClientBucket struct {
 	sync.RWMutex
 	clients map[string]Connection
 }
 
-/*
-	连接器职责：
-	1. 处理玩家长连接的生命周期、读写事件
-	2. 调用 rpc 服务，实现游戏断线重连机制
-	3. 调用 nats 服务和 game 节点通信，nats 监听来自 game 节点的消息，实现游戏逻辑
-	4. 使用 rpc 服务调用 game 节点的方法，同时 nats 监听来自 hall 节点的消息，实现大厅逻辑
-	5. 使用 rpc 服务调用 march 节点的方法，同时 nats 监听来自 march 节点的消息，实现匹配逻辑
-			(1)用户在类似游戏对战开始(匹配、创建房间...)的逻辑之前，一定要有查路由的逻辑，检查有没有正在进行的游戏
-
-	6. 设计路由，收到来自 game、hall、march 节点或者 user 的消息后，如果需要转发，转发给目标
-	7. 设计处理器，收到来自 game、hall、march 节点或者 user 的消息后，响应本地内存事件
-
-*/
+type WorkerOption func(worker *Worker) error
 
 type Worker struct {
+	nodeID             string
 	dataLock           sync.RWMutex // 仅用于保护data字段
 	websocketUpgrade   *websocket.Upgrader
-	nodeID             string
+	upgradeOnce        sync.Once
 	CheckOriginHandler CheckOriginHandler
 	data               map[string]any
 
-	clientBuckets     []*ClientBucket
-	clientWorkers     []chan *ConnectionPack
-	clientHandlers    map[protocol.PackageType]PacketTypeHandler
-	bucketMask        uint32
-	clientWorkerCount int
-
-	MiddleWorker *node.NatsWorker
-
-	MessageTypeHandlers MessageTypeHandler
+	clientBuckets         []*ClientBucket
+	clientWorkers         []chan *ConnectionPack
+	clientHandlers        map[protocol.PackageType]PacketTypeHandler
+	bucketMask            uint32
+	clientWorkerCount     int
+	ConnectionRateLimiter *utils.RateLimiter
+	MiddleWorker          *node.NatsWorker
+	MessageTypeHandlers   MessageTypeHandler // see: pomelo_handler.go
 
 	maxConnectionCount int
-	connSemaphore      chan struct{}
+	connSemaphore      chan struct{} // 连接信号量
 	stats              struct {
 		messageProcessed   int64
 		messageErrors      int64
@@ -84,13 +76,15 @@ type Worker struct {
 		currentConnections int32
 	}
 
-	connMap        sync.Map
-	isRunning      bool
-	UserRouteCache *UserRouteCache
+	connMap   sync.Map
+	isRunning bool
+
+	GameRouteCache *cache.GameRouteCache
+	UserRouter     repository.UserRouterRepository
 }
 
 // NewWorkerWithDeps 接收依赖的构造函数（推荐用于生产环境）
-func NewWorkerWithDeps(natsWorker *node.NatsWorker, rateLimiter *utils.RateLimiter) *Worker {
+func NewWorkerWithDeps(opts ...WorkerOption) *Worker {
 	bucketCount := 32
 	bucketMask := uint32(bucketCount - 1)
 	workerCount := runtime.NumCPU() * 2
@@ -98,13 +92,17 @@ func NewWorkerWithDeps(natsWorker *node.NatsWorker, rateLimiter *utils.RateLimit
 	w := &Worker{
 		nodeID:              config.ConnectorConfig.ID,
 		clientHandlers:      make(map[protocol.PackageType]PacketTypeHandler),
-		MiddleWorker:        natsWorker,
 		data:                make(map[string]any),
 		MessageTypeHandlers: make(MessageTypeHandler),
 		bucketMask:          bucketMask,
 		clientWorkerCount:   workerCount,
 		maxConnectionCount:  100000,
 		connSemaphore:       make(chan struct{}, 100000),
+	}
+	for _, opt := range opts {
+		if err := opt(w); err != nil {
+			log.Fatal("worker 启动错误: %v", err)
+		}
 	}
 
 	// 初始化客户端分片
@@ -124,12 +122,12 @@ func NewWorkerWithDeps(natsWorker *node.NatsWorker, rateLimiter *utils.RateLimit
 	}
 
 	// 初始化用户路由缓存
-	userRouteCache, err := NewUserRouteCache()
+	userRouteCache, err := cache.NewGameRouteCache()
 	if err != nil {
 		log.Fatal("创建用户路由缓存失败: %v", err)
 		return nil
 	}
-	w.UserRouteCache = userRouteCache
+	w.GameRouteCache = userRouteCache
 
 	return w
 }
@@ -140,8 +138,7 @@ func NewClientBucket() *ClientBucket {
 	}
 }
 
-// Run 启动 Worker，合并了原 Connector.Run() 和 Manager.Run() 的功能
-func (w *Worker) Run(topic string, maxConn int, addr string) error {
+func (w *Worker) Run(topic string, addr string) error {
 	if w.isRunning {
 		return nil
 	}
@@ -179,7 +176,7 @@ func (w *Worker) upgradeFunc(writer http.ResponseWriter, r *http.Request) {
 		log.Warn("连接鉴权失败 remote=%s err=%v", r.RemoteAddr, err)
 		return
 	}
-	if !connectionRateLimiter.Allow() {
+	if !w.ConnectionRateLimiter.Allow() {
 		http.Error(writer, "Too many connections", http.StatusTooManyRequests)
 		log.Warn("连接速率限流 exceeded from %s", r.RemoteAddr)
 		return
@@ -191,18 +188,18 @@ func (w *Worker) upgradeFunc(writer http.ResponseWriter, r *http.Request) {
 	}
 
 	var upgrade *websocket.Upgrader
-	if w.websocketUpgrade == nil {
-		upgrade = &websocketUpgrade
-	} else {
-		upgrade = w.websocketUpgrade
-	}
+	// 后续可以动态配置升级策略
+	w.upgradeOnce.Do(w.InitUpgrade)
+	upgrade = w.websocketUpgrade
+
 	header := writer.Header()
 	header.Add("Server", "go-mahjong-soul")
 	log.Debug("WebSocket connection attempt from %s, User-Agent: %s", r.RemoteAddr, r.UserAgent())
 
 	conn, err := upgrade.Upgrade(writer, r, nil)
 	if err != nil {
-		log.Error("websocket 升级失败, err:%#v", err)
+		log.Warn("websocket 升级失败, err:%#v", err)
+		return
 	}
 
 	conn.SetReadDeadline(time.Now().Add(120 * time.Second))
@@ -271,7 +268,7 @@ func (w *Worker) clientWorkerRoutine(workerID int) {
 	for messagePack := range w.clientWorkers[workerID] {
 		startTime := time.Now()
 
-		w.dealPack(messagePack)
+		w.DecodeAndHandlePack(messagePack)
 
 		processingTime := time.Since(startTime).Milliseconds()
 		atomic.AddInt64(&w.stats.messageProcessed, 1)
@@ -294,7 +291,7 @@ func (w *Worker) monitorPerformance() {
 	}
 }
 
-func (w *Worker) Push(message *stream.ServicePacket) {
+func (w *Worker) Push(message *transfer.ServicePacket) {
 	buf, err := protocol.MessageEncode(message.Body)
 	if err != nil {
 		log.Error("pushMessage 推送编码错误, err:%#v", err)
@@ -326,49 +323,41 @@ func (w *Worker) Push(message *stream.ServicePacket) {
 				log.Warn("pushMessage 索引类型断言失败: %s", userID)
 				continue
 			}
-			if err := w.doPush(&res, &conn); err != nil {
+			if err := w.doPush(res, conn); err != nil {
 				log.Error("pushMessage 发送失败 userID=%s err=%v", userID, err)
 			}
 		}
 	}
 }
 
-func (w *Worker) doPush(bye *[]byte, conn *Connection) error {
-	return (*conn).SendMessage(*bye) // 接口不能自动 (*). ?
-}
-
-func (w *Worker) dealPack(messagePack *ConnectionPack) {
+func (w *Worker) DecodeAndHandlePack(messagePack *ConnectionPack) {
 	packet, err := protocol.Decode(messagePack.Body)
 	if err != nil {
 		atomic.AddInt64(&w.stats.messageErrors, 1)
 		log.Warn("解码错误, pack: %#v, err: %#v", packet, err)
 		return
 	}
-	if err := w.doEvent(packet, messagePack.ConnID); err != nil {
+	if err := w.handleProtocolEvent(packet, messagePack.ConnID); err != nil {
 		atomic.AddInt64(&w.stats.messageErrors, 1)
 		log.Warn("事件处理错误, pack: %#v, err: %#v", packet, err)
 		return
 	}
 }
 
-// doEvent 处理协议层的事件
-func (w *Worker) doEvent(packet *protocol.Packet, connID string) error {
+// handleProtocolEvent 处理协议层的事件
+func (w *Worker) handleProtocolEvent(packet *protocol.Packet, connID string) error {
 	bucket := w.getBucket(connID)
-
 	bucket.RLock()
-	conn, ok := bucket.clients[connID] // TODO 这里会拷贝新的 conn 吗?
+	conn, ok := bucket.clients[connID] // 不会拷贝新的连接对象，只是拷贝了一份接口值（很小的头部），底层还是同一个连接
 	bucket.RUnlock()
-
 	if !ok {
 		return errors.New("找不到客户端桶")
 	}
-
 	handler, ok := w.clientHandlers[packet.Type]
 	if !ok {
 		return errors.New("找不到处理器")
 	}
-
-	return handler(packet, &conn)
+	return handler(packet, conn)
 }
 
 func (w *Worker) getBucket(connID string) *ClientBucket {
@@ -423,6 +412,10 @@ func (w *Worker) BindUser(userID string, conn Connection) {
 	}
 
 	w.connMap.Store(userID, conn)
+	go func() {
+		// 更新路由错误不用处理
+		_ = w.UserRouter.SaveConnectorRouter(context.Background(), userID, w.nodeID, 2*time.Hour)
+	}()
 }
 
 func (w *Worker) UnbindUser(userID string, conn Connection) {
@@ -435,6 +428,10 @@ func (w *Worker) UnbindUser(userID string, conn Connection) {
 			w.connMap.Delete(userID)
 		}
 	}
+	go func() {
+		// 更新路由错误不用处理
+		_ = w.UserRouter.DeleteConnectorRouter(context.Background(), userID)
+	}()
 }
 
 func (w *Worker) send(messageType protocol.MessageType, userID string, route string, body any) error {
@@ -491,13 +488,28 @@ func (w *Worker) send(messageType protocol.MessageType, userID string, route str
 	return nil
 }
 
+func (w *Worker) doPush(bye []byte, conn Connection) error {
+	return conn.SendMessage(bye)
+}
+
+func (w *Worker) InitUpgrade() {
+	w.websocketUpgrade = &websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+		ReadBufferSize:    4096,
+		WriteBufferSize:   4096,
+		EnableCompression: true,
+	}
+}
+
 func (w *Worker) Close() {
 	if w.isRunning {
 		if w.MiddleWorker != nil {
 			w.MiddleWorker.Close()
 		}
-		if w.UserRouteCache != nil {
-			w.UserRouteCache.Close()
+		if w.GameRouteCache != nil {
+			w.GameRouteCache.Close()
 		}
 		w.isRunning = false
 	}

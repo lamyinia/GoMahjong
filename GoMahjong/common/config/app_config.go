@@ -9,16 +9,16 @@ import (
 	"github.com/spf13/viper"
 )
 
-type BaseConfig interface {
+type ConfigIface interface {
 	CallID() string
 	CallNodeType() string
 }
 
-func (cfg *AConfig) CallID() string {
+func (cfg *BaseConfig) CallID() string {
 	return cfg.ID
 }
 
-func (cfg *AConfig) CallNodeType() string {
+func (cfg *BaseConfig) CallNodeType() string {
 	return cfg.ServerType
 }
 
@@ -29,14 +29,14 @@ var HallNodeConfig HallConfiguration
 var MarchNodeConfig MarchConfiguration
 var UserNodeConfig UserConfiguration
 
-type AConfig struct {
+type BaseConfig struct {
 	ID         string `mapstructure:"id"`
 	ServerType string `mapstructure:"serverType"`
 	MetricPort int    `mapstructure:"metricPort"`
 }
 
 type ConnectorConfiguration struct {
-	AConfig      `mapstructure:",squash"`
+	BaseConfig   `mapstructure:",squash"`
 	DatabaseConf `mapstructure:"database"`
 	JwtConf      `mapstructure:"jwt"`
 	EtcdConf     `mapstructure:"etcd"`
@@ -46,7 +46,7 @@ type ConnectorConfiguration struct {
 }
 
 type GameConfiguration struct {
-	AConfig      `mapstructure:",squash"`
+	BaseConfig   `mapstructure:",squash"`
 	DatabaseConf `mapstructure:"database"`
 	JwtConf      `mapstructure:"jwt"`
 	EtcdConf     `mapstructure:"etcd"`
@@ -56,7 +56,7 @@ type GameConfiguration struct {
 }
 
 type GateConfiguration struct {
-	AConfig      `mapstructure:",squash"`
+	BaseConfig   `mapstructure:",squash"`
 	DatabaseConf `mapstructure:"database"`
 	JwtConf      `mapstructure:"jwt"`
 	EtcdConf     `mapstructure:"etcd"`
@@ -67,7 +67,7 @@ type GateConfiguration struct {
 }
 
 type HallConfiguration struct {
-	AConfig      `mapstructure:",squash"`
+	BaseConfig   `mapstructure:",squash"`
 	DatabaseConf `mapstructure:"database"`
 	JwtConf      `mapstructure:"jwt"`
 	EtcdConf     `mapstructure:"etcd"`
@@ -77,17 +77,18 @@ type HallConfiguration struct {
 }
 
 type MarchConfiguration struct {
-	AConfig      `mapstructure:",squash"`
-	DatabaseConf `mapstructure:"database"`
-	JwtConf      `mapstructure:"jwt"`
-	EtcdConf     `mapstructure:"etcd"`
-	LogConf      `mapstructure:"log"`
-	NatsConfig   `mapstructure:"nats"`
-	Domains      map[string]Domain `mapstructure:"domain"`
+	BaseConfig       `mapstructure:",squash"`
+	DatabaseConf     `mapstructure:"database"`
+	JwtConf          `mapstructure:"jwt"`
+	EtcdConf         `mapstructure:"etcd"`
+	LogConf          `mapstructure:"log"`
+	NatsConfig       `mapstructure:"nats"`
+	MarchPoolConfigs []MarchPoolConfig `mapstructure:"marchPool"`
+	Domains          map[string]Domain `mapstructure:"domain"`
 }
 
 type UserConfiguration struct {
-	AConfig      `mapstructure:",squash"`
+	BaseConfig   `mapstructure:",squash"`
 	DatabaseConf `mapstructure:"database"`
 	JwtConf      `mapstructure:"jwt"`
 	EtcdConf     `mapstructure:"etcd"`
@@ -165,6 +166,24 @@ type NatsConfig struct {
 	URL string `json:"url" mapstructure:"url"`
 }
 
+type MatchMode string
+type MatchStrategy string
+
+const (
+	ModeRank4   MatchMode = "classic:rank4"
+	ModeCasual4 MatchMode = "classic:casual4"
+	ModeCasual3 MatchMode = "classic:casual3"
+
+	ScorePoll MatchStrategy = "classic:poll" // zset 控制 + 先来先服务
+)
+
+type MarchPoolConfig struct {
+	PoolID    MatchMode     `mapstructure:"poolID"` // 池 ID
+	Strategy  MatchStrategy `mapstructure:"strategy"`
+	BatchSize int           `mapstructure:"batchSize"`
+	Internal  int64         `mapstructure:"internal"` // 单位是毫秒
+}
+
 func InitFixedConfig(configFile string) {
 
 	v := viper.New()
@@ -184,7 +203,7 @@ func Load(configFile string) error {
 		return err
 	}
 
-	var base AConfig
+	var base BaseConfig
 	if err := v.Unmarshal(&base); err != nil {
 		return err
 	}

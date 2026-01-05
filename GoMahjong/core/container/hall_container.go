@@ -27,7 +27,7 @@ func NewHallContainer() *HallContainer {
 	}
 
 	// 创建 hall 服务需要的仓储
-	userRepo := persistence.NewMongoUserRepository(base.mongo)
+	userRepo := persistence.NewUserRepository(base.mongo, base.redis)
 
 	return &HallContainer{
 		BaseContainer:  base,

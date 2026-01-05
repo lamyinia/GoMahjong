@@ -33,7 +33,7 @@ func (s *AuthService) Register(ctx context.Context, cmd *dto.RegisterCommand) (*
 	}
 
 	// 2. 创建用户聚合根（包含验证）
-	user, err := entity.NewUser(cmd.Account, cmd.Password, cmd.Platform)
+	user, err := entity.NewUser(cmd.Account, cmd.Password)
 	if err != nil {
 		log.Warn("创建用户失败: %v", err)
 		return nil, err

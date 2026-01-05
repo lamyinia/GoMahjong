@@ -2,19 +2,14 @@ package realtime
 
 import (
 	"common/database"
-	"common/log"
 	"context"
 	"core/domain/repository"
-	"encoding/json"
-	"fmt"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 const (
-	// Redis Key 前缀
-	userRouterKey = "march:router" // Hash: 用户路由 (userID -> JSON{gameTopic, connectorTopic})
+	gameRouterKey      = "game:router"      // userID -> GameTopic
+	connectorRouterKey = "connector:router" // userID -> ConnectorTopic
 )
 
 // RedisUserRouterRepository Redis 实现的用户路由仓储
@@ -29,126 +24,64 @@ func NewRedisUserRouterRepository(redis *database.RedisManager) repository.UserR
 	}
 }
 
-// getClient 获取 Redis 客户端（单机或集群）
-func (r *RedisUserRouterRepository) getClient() redis.Cmdable {
-	if r.redis.Cli != nil {
-		return r.redis.Cli
-	}
-	return r.redis.ClusterCli
+func (r *RedisUserRouterRepository) SaveGameRouter(ctx context.Context, userID, gameTopic string, ttl time.Duration) error {
+	return r.redis.Set(ctx, gameRouterKey+":"+userID, gameTopic, ttl)
 }
 
-// SaveRouter 保存用户路由
-func (r *RedisUserRouterRepository) SaveRouter(ctx context.Context, userID string, info *repository.UserRouterInfo, ttl time.Duration) error {
-	cli := r.getClient()
-	if cli == nil {
-		return fmt.Errorf("Redis 客户端未初始化")
-	}
-	if info == nil {
-		return fmt.Errorf("路由信息不能为空")
-	}
-	if info.GameTopic == "" {
-		return fmt.Errorf("gameTopic 不能为空")
-	}
-
-	// 将路由信息序列化为 JSON
-	data, err := json.Marshal(info)
-	if err != nil {
-		return fmt.Errorf("序列化路由信息失败: %w", err)
-	}
-
-	// 保存到 Hash
-	key := fmt.Sprintf("%s:%s", userRouterKey, userID)
-	err = cli.Set(ctx, key, string(data), ttl).Err()
-	if err != nil {
-		return fmt.Errorf("保存用户路由失败: %w", err)
-	}
-
-	log.Debug(fmt.Sprintf("保存用户路由: userID=%s, gameTopic=%s, connectorTopic=%s, ttl=%v",
-		userID, info.GameTopic, info.ConnectorTopic, ttl))
-	return nil
+func (r *RedisUserRouterRepository) GetGameRouter(ctx context.Context, userID string) (string, error) {
+	return r.redis.Get(ctx, gameRouterKey+":"+userID).Result()
 }
 
-// GetRouter 获取用户路由
-func (r *RedisUserRouterRepository) GetRouter(ctx context.Context, userID string) (*repository.UserRouterInfo, error) {
-	cli := r.getClient()
-	if cli == nil {
-		return nil, fmt.Errorf("Redis 客户端未初始化")
-	}
-
-	key := fmt.Sprintf("%s:%s", userRouterKey, userID)
-	data, err := cli.Get(ctx, key).Result()
-	if err != nil {
-		if err == redis.Nil {
-			return nil, repository.ErrRouterNotFound
-		}
-		return nil, fmt.Errorf("获取用户路由失败: %w", err)
-	}
-
-	// 反序列化
-	var info repository.UserRouterInfo
-	if err := json.Unmarshal([]byte(data), &info); err != nil {
-		return nil, fmt.Errorf("反序列化路由信息失败: %w", err)
-	}
-
-	return &info, nil
+func (r *RedisUserRouterRepository) DeleteGameRouter(ctx context.Context, userID string) error {
+	return r.redis.Del(ctx, gameRouterKey+":"+userID)
 }
 
-// DeleteRouter 删除用户路由
-func (r *RedisUserRouterRepository) DeleteRouter(ctx context.Context, userID string) error {
-	cli := r.getClient()
-	if cli == nil {
-		return fmt.Errorf("Redis 客户端未初始化")
-	}
-
-	key := fmt.Sprintf("%s:%s", userRouterKey, userID)
-	err := cli.Del(ctx, key).Err()
+func (r *RedisUserRouterRepository) ExistsGameRouter(ctx context.Context, userID string) (bool, error) {
+	count, err := r.redis.Exists(ctx, gameRouterKey+":"+userID)
 	if err != nil {
-		return fmt.Errorf("删除用户路由失败: %w", err)
+		return false, err
 	}
-
-	log.Debug(fmt.Sprintf("删除用户路由: userID=%s", userID))
-	return nil
+	return count > 0, nil
 }
 
-// DeleteRouters 批量删除用户路由
-func (r *RedisUserRouterRepository) DeleteRouters(ctx context.Context, userIDs []string) error {
-	cli := r.getClient()
-	if cli == nil {
-		return fmt.Errorf("Redis 客户端未初始化")
-	}
-
+func (r *RedisUserRouterRepository) DeleteGameRouters(ctx context.Context, userIDs []string) error {
 	if len(userIDs) == 0 {
 		return nil
 	}
-
-	// 构建 keys
 	keys := make([]string, 0, len(userIDs))
 	for _, userID := range userIDs {
-		keys = append(keys, fmt.Sprintf("%s:%s", userRouterKey, userID))
+		keys = append(keys, gameRouterKey+":"+userID)
 	}
-
-	// 批量删除
-	err := cli.Del(ctx, keys...).Err()
-	if err != nil {
-		return fmt.Errorf("批量删除用户路由失败: %w", err)
-	}
-
-	log.Debug(fmt.Sprintf("批量删除用户路由: 共 %d 个", len(userIDs)))
-	return nil
+	return r.redis.Del(ctx, keys...)
 }
 
-// ExistsRouter 检查用户路由是否存在
-func (r *RedisUserRouterRepository) ExistsRouter(ctx context.Context, userID string) (bool, error) {
-	cli := r.getClient()
-	if cli == nil {
-		return false, fmt.Errorf("Redis 客户端未初始化")
-	}
+func (r *RedisUserRouterRepository) SaveConnectorRouter(ctx context.Context, userID, connectorTopic string, ttl time.Duration) error {
+	return r.redis.Set(ctx, connectorRouterKey+":"+userID, connectorTopic, ttl)
+}
 
-	key := fmt.Sprintf("%s:%s", userRouterKey, userID)
-	count, err := cli.Exists(ctx, key).Result()
+func (r *RedisUserRouterRepository) GetConnectorRouter(ctx context.Context, userID string) (string, error) {
+	return r.redis.Get(ctx, connectorRouterKey+":"+userID).Result()
+}
+
+func (r *RedisUserRouterRepository) DeleteConnectorRouter(ctx context.Context, userID string) error {
+	return r.redis.Del(ctx, connectorRouterKey+":"+userID)
+}
+
+func (r *RedisUserRouterRepository) DeleteConnectorRouters(ctx context.Context, userIDs []string) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(userIDs))
+	for _, userID := range userIDs {
+		keys = append(keys, connectorRouterKey+":"+userID)
+	}
+	return r.redis.Del(ctx, keys...)
+}
+
+func (r *RedisUserRouterRepository) ExistsConnectorRouter(ctx context.Context, userID string) (bool, error) {
+	count, err := r.redis.Exists(ctx, connectorRouterKey+":"+userID)
 	if err != nil {
-		return false, fmt.Errorf("检查用户路由失败: %w", err)
+		return false, err
 	}
-
 	return count > 0, nil
 }

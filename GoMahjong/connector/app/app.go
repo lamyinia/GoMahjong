@@ -31,7 +31,7 @@ func Run(ctx context.Context) error {
 	}
 	go func() {
 		addr := "localhost:8082"
-		if err := worker.Run(config.ConnectorConfig.ID, 5000, addr); err != nil {
+		if err := worker.Run(config.ConnectorConfig.ID, addr); err != nil {
 			log.Fatal("worker 启动失败: %v", err)
 		}
 	}()

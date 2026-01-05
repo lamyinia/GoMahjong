@@ -33,7 +33,7 @@ func NewGameContainer() *GameContainer {
 	}
 
 	// 创建 game 服务需要的仓储
-	userRepo := persistence.NewMongoUserRepository(base.mongo)
+	userRepo := persistence.NewUserRepository(base.mongo, base.redis)
 	// 创建 GameWorker
 	worker := game.NewWorker(config.GameNodeConfig.ID)
 	// 步骤 1：创建 Engine 原型（使用原型模式，注入 Worker）,目前只支持立直麻将 4 人引擎

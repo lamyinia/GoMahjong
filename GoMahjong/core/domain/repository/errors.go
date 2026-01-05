@@ -16,4 +16,7 @@ var (
 
 	// 用户路由相关错误
 	ErrRouterNotFound = errors.New("user router not found")
+
+	ErrMongodb = errors.New("mongodb error happen")
+	ErrRedis   = errors.New("redis error happen")
 )

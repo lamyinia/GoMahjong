@@ -1,4 +1,4 @@
-package stream
+package transfer
 
 import (
 	"core/infrastructure/message/protocol"

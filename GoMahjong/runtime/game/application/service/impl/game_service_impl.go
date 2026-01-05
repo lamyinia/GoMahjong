@@ -3,9 +3,9 @@ package impl
 import (
 	"common/log"
 	"context"
+	"core/infrastructure/message/transfer"
 	"encoding/json"
 	"fmt"
-	"runtime/dto"
 	"runtime/game"
 	"runtime/game/application/service"
 )
@@ -50,7 +50,7 @@ func (s *GameServiceImpl) CreateRoom(ctx context.Context, req *service.CreateRoo
 	}
 
 	// 推送匹配成功消息给所有玩家
-	matchSuccessMsg := &dto.MatchSuccessDTO{
+	matchSuccessMsg := &transfer.MatchSuccessDTO{
 		GameNodeID: s.worker.NodeID,
 		Players:    req.Players,
 	}
@@ -66,7 +66,7 @@ func (s *GameServiceImpl) CreateRoom(ctx context.Context, req *service.CreateRoo
 
 	// 向每个玩家推送匹配成功消息
 	for userID := range req.Players {
-		if err := s.worker.PushMessage(userID, dto.MatchingSuccess, msgData); err != nil {
+		if err := s.worker.PushMessage(userID, transfer.MatchingSuccess, msgData); err != nil {
 			log.Warn(fmt.Sprintf("GameService 推送消息给玩家 %s 失败: %v", userID, err))
 			// 继续推送其他玩家，不中断
 		}

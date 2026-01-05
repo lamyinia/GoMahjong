@@ -3,7 +3,7 @@ package node
 import (
 	"common/log"
 	"core/infrastructure/message/protocol"
-	"core/infrastructure/message/stream"
+	"core/infrastructure/message/transfer"
 	"encoding/json"
 	"fmt"
 )
@@ -16,7 +16,7 @@ type SubscriberHandler map[string]LogicFunc
 type NatsWorker struct {
 	NatsCli           Client
 	readChan          chan []byte
-	writeChan         chan *stream.ServicePacket
+	writeChan         chan *transfer.ServicePacket
 	subscriberHandler SubscriberHandler
 	pushHandler       PushHandler
 }
@@ -24,7 +24,7 @@ type NatsWorker struct {
 func NewNatsWorker() *NatsWorker {
 	return &NatsWorker{
 		readChan:          make(chan []byte, 1024),
-		writeChan:         make(chan *stream.ServicePacket, 1024),
+		writeChan:         make(chan *transfer.ServicePacket, 1024),
 		subscriberHandler: make(SubscriberHandler),
 	}
 }
@@ -47,7 +47,7 @@ func (worker *NatsWorker) readChanMessage() {
 	for {
 		select {
 		case rawMessage := <-worker.readChan:
-			var packet stream.ServicePacket
+			var packet transfer.ServicePacket
 			err := json.Unmarshal(rawMessage, &packet)
 			if err != nil {
 				log.Warn("NatsWorker-节点通信 packet 解析错误: %#v", packet)
@@ -71,7 +71,7 @@ func (worker *NatsWorker) readChanMessage() {
 							dataResp, _ := json.Marshal(&result)
 							body.Data = dataResp
 							body.Type = protocol.Response
-							messageResp := &stream.ServicePacket{
+							messageResp := &transfer.ServicePacket{
 								Source:      packet.Destination,
 								Destination: packet.Source,
 								Body:        body,
@@ -123,7 +123,7 @@ func (worker *NatsWorker) RegisterPushHandler(handler PushHandler) {
 
 // PushMessage 主动推送消息
 // 将消息写入 writeChan，由 writeChanMessage goroutine 自动发送
-func (worker *NatsWorker) PushMessage(packet *stream.ServicePacket) error {
+func (worker *NatsWorker) PushMessage(packet *transfer.ServicePacket) error {
 	select {
 	case worker.writeChan <- packet:
 		return nil

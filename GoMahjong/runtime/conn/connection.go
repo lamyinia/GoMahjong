@@ -75,7 +75,7 @@ func (con *LongConnection) writeMessage() {
 			}
 			log.Debug("写入消息: %#v", message)
 			if err := con.Conn.WriteMessage(websocket.BinaryMessage, message); err != nil {
-				log.Error("客户端[%s] write stream err :%+v", con.ConnID, err)
+				log.Error("客户端[%s] write transfer err :%+v", con.ConnID, err)
 			}
 		case <-con.pingTicker.C:
 			if err := con.Conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
@@ -131,7 +131,7 @@ func (con *LongConnection) readMessage() {
 				default:
 					atomic.AddInt64(&con.worker.stats.messageErrors, 1)
 					log.Warn("工作池满了，直接处理:\n workerID:%#v\n messagePack:%#v", workerID, pack)
-					con.worker.dealPack(pack)
+					con.worker.DecodeAndHandlePack(pack)
 				}
 			} else {
 				log.Error("不支持的流类型 : %d", messageType)

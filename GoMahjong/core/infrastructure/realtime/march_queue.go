@@ -5,7 +5,6 @@ import (
 	"common/log"
 	"context"
 	"core/domain/repository"
-	"core/domain/vo"
 	"errors"
 	"fmt"
 	"time"
@@ -16,385 +15,313 @@ import (
 const (
 	// 玩家信息过期时间（比队列超时时间长）
 	marchPlayerInfoTTL = 30 * time.Minute
-	// 注意：队列 Key 和玩家信息 Key 现在通过 ranking.GetQueueKey() 和 ranking.GetPlayerInfoKey() 动态生成
-	// 格式：march:queue:rank:{ranking} 和 march:user:info:rank:{ranking}
+	// Redis Key 前缀
+	queueKeyPrefix = "march:queue"     // Sorted Set: march:queue:{poolID}
+	userPoolKey    = "march:user:pool" // Hash: userID -> poolID
 )
 
-// Lua 脚本：原子性地从队列中取出指定数量的玩家
-// KEYS[1]: marchQueueKey (Sorted Set)
-// KEYS[2]: marchPlayerInfoKey (Hash)
-// ARGV[1]: count (需要取出的玩家数量)
-// 返回：字符串数组，格式为 ["userID1", "NodeID1", "userID2", "NodeID2", ...]
-// 在 Go 中解析为 map[userID]NodeID
-// 注意：如果队列中玩家数量不足，则不取出任何玩家，直接返回空数组
+// getQueueKey 生成队列 Key
+func getQueueKey(poolID string) string {
+	return fmt.Sprintf("%s:%s", queueKeyPrefix, poolID)
+}
+
+// joinQueueScript 加入队列的 Lua 脚本（原子操作）
+// KEYS[1] = queueKey (march:queue:{poolID})
+// KEYS[2] = userPoolKey (march:user:pool)
+// ARGV[1] = userID
+// ARGV[2] = score
+// ARGV[3] = poolID
+// 返回：1 表示成功，-1 表示已在其他池中，-2 表示已在同一池的队列中
+var joinQueueScript = `
+local queueKey = KEYS[1]
+local userPoolKey = KEYS[2]
+local userID = ARGV[1]
+local score = tonumber(ARGV[2])
+local poolID = ARGV[3]
+
+-- 1. 检查用户是否已在其他池中
+local existingPool = redis.call('HGET', userPoolKey, userID)
+if existingPool ~= false and existingPool ~= nil and existingPool ~= "" then
+	if existingPool ~= poolID then
+		-- 用户已在其他池中
+		return -1
+	end
+	-- 用户已在同一池中，检查是否在队列中
+	local existingScore = redis.call('ZSCORE', queueKey, userID)
+	if existingScore ~= false and existingScore ~= nil then
+		-- 用户已在队列中
+		return -2
+	end
+end
+
+-- 2. 原子操作：加入队列 + 更新映射
+redis.call('ZADD', queueKey, score, userID)
+redis.call('HSET', userPoolKey, userID, poolID)
+
+return 1
+`
+
+// popPlayersScript 取出玩家的 Lua 脚本（原子操作：取出 + 清理映射）
+// KEYS[1] = queueKey (march:queue:{poolID})
+// KEYS[2] = userPoolKey (march:user:pool)
+// ARGV[1] = count
 var popPlayersScript = `
 local queueKey = KEYS[1]
-local infoKey = KEYS[2]
+local userPoolKey = KEYS[2]
 local count = tonumber(ARGV[1])
-local result = {}
 
--- 先检查队列大小，如果不足 count 人，则不取出，直接返回空数组
+-- 1. 检查队列大小
 local queueSize = redis.call('ZCARD', queueKey)
 if queueSize < count then
-    return {}
+	return {}
 end
 
--- 队列人数足够，从 Sorted Set 中取出 count 个玩家（按分数从低到高）
-local players = redis.call('ZRANGE', queueKey, 0, count - 1, 'WITHSCORES')
-
+-- 2. 取出玩家
+local players = redis.call('ZRANGE', queueKey, 0, count - 1)
 if #players == 0 then
-    return {}
+	return {}
 end
 
--- 处理取出的玩家
-for i = 1, #players, 2 do
-    local userID = players[i]
-    local score = players[i + 1]
-    -- 从 Hash 中获取 NodeID
-    local NodeID = redis.call('HGET', infoKey, userID)
-    if NodeID == false then
-        NodeID = ""
-    end
-    -- 从队列中移除
-    redis.call('ZREM', queueKey, userID)
-    redis.call('HDEL', infoKey, userID)
-    -- 添加到结果数组（userID, NodeID 成对出现）
-    table.insert(result, userID)
-    table.insert(result, NodeID)
+-- 3. 原子操作：从队列移除 + 清理映射
+local result = {}
+for i = 1, #players do
+	local userID = players[i]
+	redis.call('ZREM', queueKey, userID)
+	redis.call('HDEL', userPoolKey, userID)
+	table.insert(result, userID)
 end
 
 return result
 `
 
+// removeFromQueueScript 从队列移除玩家的 Lua 脚本（原子操作）
+// KEYS[1] = userPoolKey (march:user:pool)
+// ARGV[1] = userID
+// 返回：1 表示成功，0 表示用户不在任何池中（幂等）
+var removeFromQueueScript = `
+local userPoolKey = KEYS[1]
+local userID = ARGV[1]
+
+-- 1. 从映射中获取 poolID
+local poolID = redis.call('HGET', userPoolKey, userID)
+if poolID == false or poolID == nil or poolID == "" then
+	-- 用户不在任何池中，返回成功（幂等）
+	return 0
+end
+
+-- 2. 构建队列 Key
+local queueKey = "march:queue:" .. poolID
+
+-- 3. 原子操作：从队列移除 + 删除映射
+redis.call('ZREM', queueKey, userID)
+redis.call('HDEL', userPoolKey, userID)
+
+return 1
+`
+
 // RedisMarchQueueRepository Redis 实现的匹配队列仓储
 type RedisMarchQueueRepository struct {
 	redis *database.RedisManager
-	// 预编译的 Lua 脚本
-	popPlayersSHA string
 }
 
 // NewRedisMarchQueueRepository 创建 Redis 匹配队列仓储
 func NewRedisMarchQueueRepository(redis *database.RedisManager) repository.MarchQueueRepository {
-	repo := &RedisMarchQueueRepository{
-		redis: redis,
-	}
-
-	// 预编译 Lua 脚本
-	ctx := context.Background()
-	if redis.Cli != nil {
-		sha, err := redis.Cli.ScriptLoad(ctx, popPlayersScript).Result()
-		if err != nil {
-			log.Error("预编译 Lua 脚本失败: %v", err)
-		} else {
-			repo.popPlayersSHA = sha
-			log.Info("Lua 脚本预编译成功: %s", sha)
-		}
-	} else if redis.ClusterCli != nil {
-		// 集群模式下，需要在每个节点上加载脚本，这里先不预编译
-		// 后续使用 EVAL 而不是 EVALSHA
-		log.Info("集群模式，Lua 脚本将在运行时加载")
-	}
-
-	return repo
+	return &RedisMarchQueueRepository{redis: redis}
 }
 
-// getClient 获取 Redis 客户端（单机或集群）
-func (r *RedisMarchQueueRepository) getClient() (redis.Cmdable, error) {
-	if r.redis.Cli != nil {
-		return r.redis.Cli, nil
+// JoinQueue 加入匹配队列（使用 Lua 脚本保证原子性）
+func (q *RedisMarchQueueRepository) JoinQueue(ctx context.Context, poolID, userID string, score float64) error {
+	if poolID == "" || userID == "" {
+		return fmt.Errorf("poolID 和 userID 不能为空")
 	}
-	if r.redis.ClusterCli != nil {
-		return r.redis.ClusterCli, nil
-	}
-	return nil, fmt.Errorf("redis 客户端未初始化")
-}
 
-// JoinQueue 加入匹配队列（按段位）
-func (r *RedisMarchQueueRepository) JoinQueue(ctx context.Context, userID, NodeID string, ranking vo.RankingType, score float64) error {
-	cli, err := r.getClient()
+	queueKey := getQueueKey(poolID)
+
+	// 执行 Lua 脚本
+	anyResult, err := q.redis.EvalScript(ctx, "joinQueueScript", joinQueueScript,
+		[]string{queueKey, userPoolKey}, userID, score, poolID)
 	if err != nil {
-		return err
+		return fmt.Errorf("执行 joinQueue Lua 脚本失败: %w", err)
 	}
 
-	// 根据段位生成队列 Key 和玩家信息 Key
-	queueKey := ranking.GetQueueKey()
-	playerInfoKey := ranking.GetPlayerInfoKey()
-
-	// 检查是否已在队列中
-	exists, err := cli.ZScore(ctx, queueKey, userID).Result()
-	if err != nil && !errors.Is(err, redis.Nil) {
-		return fmt.Errorf("检查队列状态失败: %w", err)
+	// 处理返回结果
+	result, ok := anyResult.(int64)
+	if !ok {
+		// 尝试 float64（某些 Redis 客户端可能返回 float64）
+		if f, ok := anyResult.(float64); ok {
+			result = int64(f)
+		} else {
+			return fmt.Errorf("joinQueue 返回类型错误: 期望 int64，实际 %T", anyResult)
+		}
 	}
-	if err == nil && exists > 0 {
+
+	switch result {
+	case 1:
+		// 成功
+		log.Debug("玩家 %s 加入匹配池 %s，分数: %.2f", userID, poolID, score)
+		return nil
+	case -1:
+		// 用户已在其他池中
+		existingPool, _ := q.GetUserPool(ctx, userID)
+		return fmt.Errorf("用户已在匹配池 %s 中，无法加入 %s", existingPool, poolID)
+	case -2:
+		// 用户已在同一池的队列中
 		return repository.ErrPlayerAlreadyInQueue
+	default:
+		return fmt.Errorf("joinQueue 返回未知结果: %d", result)
 	}
-
-	// 使用 Pipeline 保证原子性
-	pipe := cli.Pipeline()
-	// 1. 添加到 Sorted Set（分数为等待时间戳）
-	pipe.ZAdd(ctx, queueKey, redis.Z{
-		Score:  score,
-		Member: userID,
-	})
-	// 2. 保存玩家信息到 Hash
-	pipe.HSet(ctx, playerInfoKey, userID, NodeID)
-	// 3. 设置 Hash 过期时间（防止内存泄漏）
-	pipe.Expire(ctx, playerInfoKey, marchPlayerInfoTTL)
-
-	_, err = pipe.Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("加入队列失败: %w", err)
-	}
-
-	log.Debug(fmt.Sprintf("玩家 %s 加入段位 %s 匹配队列，分数: %.2f", userID, ranking.GetDisplayName(), score))
-	return nil
 }
 
-// RemoveFromQueue 从队列中移除玩家（按段位）
-func (r *RedisMarchQueueRepository) RemoveFromQueue(ctx context.Context, userID string, ranking vo.RankingType) error {
-	cli, err := r.getClient()
-	if err != nil {
-		return err
+// RemoveFromQueue 从队列中移除玩家（使用 Lua 脚本保证原子性）
+func (q *RedisMarchQueueRepository) RemoveFromQueue(ctx context.Context, userID string) error {
+	if userID == "" {
+		return fmt.Errorf("userID 不能为空")
 	}
 
-	// 根据段位生成队列 Key 和玩家信息 Key
-	queueKey := ranking.GetQueueKey()
-	playerInfoKey := ranking.GetPlayerInfoKey()
-
-	pipe := cli.Pipeline()
-	pipe.ZRem(ctx, queueKey, userID)
-	pipe.HDel(ctx, playerInfoKey, userID)
-
-	_, err = pipe.Exec(ctx)
+	// 执行 Lua 脚本
+	anyResult, err := q.redis.EvalScript(ctx, "removeFromQueueScript", removeFromQueueScript,
+		[]string{userPoolKey}, userID)
 	if err != nil {
-		return fmt.Errorf("从队列移除玩家失败: %w", err)
+		return fmt.Errorf("执行 removeFromQueue Lua 脚本失败: %w", err)
 	}
 
-	log.Debug(fmt.Sprintf("玩家 %s 从段位 %s 匹配队列移除", userID, ranking.GetDisplayName()))
-	return nil
+	// 处理返回结果
+	result, ok := anyResult.(int64)
+	if !ok {
+		// 尝试 float64（某些 Redis 客户端可能返回 float64）
+		if f, ok := anyResult.(float64); ok {
+			result = int64(f)
+		} else {
+			return fmt.Errorf("removeFromQueue 返回类型错误: 期望 int64，实际 %T", anyResult)
+		}
+	}
+
+	switch result {
+	case 1:
+		// 成功移除
+		log.Debug("玩家 %s 从匹配队列移除", userID)
+		return nil
+	case 0:
+		// 用户不在任何池中（幂等，返回成功）
+		return nil
+	default:
+		return fmt.Errorf("removeFromQueue 返回未知结果: %d", result)
+	}
 }
 
-// PopPlayers 从队列中取出指定数量的玩家（按段位，使用 Lua 脚本保证原子性）
-func (r *RedisMarchQueueRepository) PopPlayers(ctx context.Context, ranking vo.RankingType, count int) (map[string]string, error) {
+// IsInQueue 检查玩家是否在队列中（自动查找 poolID）
+func (q *RedisMarchQueueRepository) IsInQueue(ctx context.Context, userID string) (bool, string, error) {
+	if userID == "" {
+		return false, "", fmt.Errorf("userID 不能为空")
+	}
+
+	cli, err := q.redis.GetClient()
+	if err != nil {
+		return false, "", err
+	}
+
+	// 1. 从映射中获取 poolID
+	poolID, err := cli.HGet(ctx, userPoolKey, userID).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return false, "", nil // 用户不在任何池中
+		}
+		return false, "", fmt.Errorf("获取用户池映射失败: %w", err)
+	}
+
+	if poolID == "" {
+		return false, "", nil
+	}
+
+	// 2. 检查是否在队列中
+	queueKey := getQueueKey(poolID)
+	score, err := cli.ZScore(ctx, queueKey, userID).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return false, poolID, nil // 在映射中但不在队列中（异常情况，但返回 false）
+		}
+		return false, poolID, fmt.Errorf("检查队列状态失败: %w", err)
+	}
+
+	return score > 0, poolID, nil
+}
+
+// GetUserPool 获取用户所在的匹配池
+func (q *RedisMarchQueueRepository) GetUserPool(ctx context.Context, userID string) (string, error) {
+	if userID == "" {
+		return "", fmt.Errorf("userID 不能为空")
+	}
+
+	cli, err := q.redis.GetClient()
+	if err != nil {
+		return "", err
+	}
+
+	poolID, err := cli.HGet(ctx, userPoolKey, userID).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return "", nil // 用户不在任何池中
+		}
+		return "", fmt.Errorf("获取用户池映射失败: %w", err)
+	}
+
+	return poolID, nil
+}
+
+// PopPlayers 从队列中取出指定数量的玩家（使用 Lua 脚本保证原子性）
+func (q *RedisMarchQueueRepository) PopPlayers(ctx context.Context, poolID string, count int) ([]string, error) {
 	if count <= 0 {
-		return make(map[string]string), nil
-	}
-
-	// 根据段位生成队列 Key 和玩家信息 Key
-	queueKey := ranking.GetQueueKey()
-	playerInfoKey := ranking.GetPlayerInfoKey()
-
-	var strArray []string
-	var err error
-
-	// 优先使用预编译的脚本（仅单机模式）
-	if r.popPlayersSHA != "" && r.redis.Cli != nil {
-		result, evalErr := r.redis.Cli.EvalSha(ctx, r.popPlayersSHA, []string{queueKey, playerInfoKey}, count).Result()
-		if evalErr != nil {
-			errStr := evalErr.Error()
-			if errStr == "NOSCRIPT No matching script. Use EVAL." {
-				// 脚本未找到，重新加载
-				sha, loadErr := r.redis.Cli.ScriptLoad(ctx, popPlayersScript).Result()
-				if loadErr != nil {
-					return nil, fmt.Errorf("重新加载 Lua 脚本失败: %w", loadErr)
-				}
-				r.popPlayersSHA = sha
-				result, evalErr = r.redis.Cli.EvalSha(ctx, r.popPlayersSHA, []string{queueKey, playerInfoKey}, count).Result()
-			}
-			if evalErr != nil {
-				err = evalErr
-			} else {
-				// 类型断言：Lua 脚本返回数组
-				if arr, ok := result.([]interface{}); ok {
-					strArray = make([]string, 0, len(arr))
-					for _, v := range arr {
-						if s, ok := v.(string); ok {
-							strArray = append(strArray, s)
-						}
-					}
-				}
-			}
-		} else {
-			// 类型断言：Lua 脚本返回数组
-			if arr, ok := result.([]interface{}); ok {
-				strArray = make([]string, 0, len(arr))
-				for _, v := range arr {
-					if s, ok := v.(string); ok {
-						strArray = append(strArray, s)
-					}
-				}
-			}
-		}
-	} else {
-		// 使用原始脚本（集群模式或未预编译）
-		cli, cliErr := r.getClient()
-		if cliErr != nil {
-			return nil, cliErr
-		}
-
-		result, evalErr := cli.Eval(ctx, popPlayersScript, []string{queueKey, playerInfoKey}, count).Result()
-		if evalErr != nil {
-			err = evalErr
-		} else {
-			// 类型断言：Lua 脚本返回数组
-			if arr, ok := result.([]interface{}); ok {
-				strArray = make([]string, 0, len(arr))
-				for _, v := range arr {
-					if s, ok := v.(string); ok {
-						strArray = append(strArray, s)
-					}
-				}
-			}
-		}
-	}
-
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return make(map[string]string), nil
-		}
-		return nil, fmt.Errorf("执行 Lua 脚本失败: %w", err)
-	}
-
-	// 转换为 map（成对解析）
-	resultMap := make(map[string]string, len(strArray)/2)
-	for i := 0; i < len(strArray); i += 2 {
-		if i+1 < len(strArray) {
-			userID := strArray[i]
-			NodeID := strArray[i+1]
-			resultMap[userID] = NodeID
-		}
-	}
-
-	log.Debug(fmt.Sprintf("从段位 %s 匹配队列取出 %d 个玩家", ranking.GetDisplayName(), len(resultMap)))
-	return resultMap, nil
-}
-
-// GetQueueSize 获取队列当前大小（按段位）
-func (r *RedisMarchQueueRepository) GetQueueSize(ctx context.Context, ranking vo.RankingType) (int, error) {
-	cli, err := r.getClient()
-	if err != nil {
-		return 0, err
-	}
-
-	queueKey := ranking.GetQueueKey()
-	count, err := cli.ZCard(ctx, queueKey).Result()
-	if err != nil {
-		return 0, fmt.Errorf("获取队列大小失败: %w", err)
-	}
-
-	return int(count), nil
-}
-
-// IsInQueue 检查玩家是否在队列中（按段位）
-func (r *RedisMarchQueueRepository) IsInQueue(ctx context.Context, userID string, ranking vo.RankingType) (bool, error) {
-	cli, err := r.getClient()
-	if err != nil {
-		return false, err
-	}
-
-	queueKey := ranking.GetQueueKey()
-	score, err := cli.ZScore(ctx, queueKey, userID).Result()
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return false, nil
-		}
-		return false, fmt.Errorf("检查队列状态失败: %w", err)
-	}
-
-	return score > 0, nil
-}
-
-// GetPlayerScore 获取玩家在队列中的分数（按段位）
-func (r *RedisMarchQueueRepository) GetPlayerScore(ctx context.Context, userID string, ranking vo.RankingType) (float64, error) {
-	cli, err := r.getClient()
-	if err != nil {
-		return 0, err
-	}
-
-	queueKey := ranking.GetQueueKey()
-	score, err := cli.ZScore(ctx, queueKey, userID).Result()
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return 0, repository.ErrPlayerNotInQueue
-		}
-		return 0, fmt.Errorf("获取玩家分数失败: %w", err)
-	}
-
-	return score, nil
-}
-
-// UpdatePlayerScore 更新玩家在队列中的分数（按段位）
-func (r *RedisMarchQueueRepository) UpdatePlayerScore(ctx context.Context, userID string, ranking vo.RankingType, score float64) error {
-	cli, err := r.getClient()
-	if err != nil {
-		return err
-	}
-
-	queueKey := ranking.GetQueueKey()
-	// 检查玩家是否在队列中
-	exists, err := cli.ZScore(ctx, queueKey, userID).Result()
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return repository.ErrPlayerNotInQueue
-		}
-		return fmt.Errorf("检查队列状态失败: %w", err)
-	}
-	if exists == 0 {
-		return repository.ErrPlayerNotInQueue
-	}
-
-	// 更新分数
-	err = cli.ZAdd(ctx, queueKey, redis.Z{
-		Score:  score,
-		Member: userID,
-	}).Err()
-	if err != nil {
-		return fmt.Errorf("更新玩家分数失败: %w", err)
-	}
-
-	log.Debug(fmt.Sprintf("更新玩家 %s 在段位 %s 队列的分数为: %.2f", userID, ranking.GetDisplayName(), score))
-	return nil
-}
-
-// RemoveExpiredPlayers 移除过期的玩家（等待时间超过指定时间，按段位）
-func (r *RedisMarchQueueRepository) RemoveExpiredPlayers(ctx context.Context, ranking vo.RankingType, maxWaitTime time.Duration) ([]string, error) {
-	cli, err := r.getClient()
-	if err != nil {
-		return nil, err
-	}
-
-	// 根据段位生成队列 Key 和玩家信息 Key
-	queueKey := ranking.GetQueueKey()
-	playerInfoKey := ranking.GetPlayerInfoKey()
-
-	// 计算过期时间戳（当前时间 - 最大等待时间）
-	expiredScore := float64(time.Now().Add(-maxWaitTime).Unix())
-
-	// 获取所有分数小于过期分数的玩家（使用 ZRANGEBYSCORE）
-	expiredPlayers, err := cli.ZRangeByScore(ctx, queueKey, &redis.ZRangeBy{
-		Min: "0",
-		Max: fmt.Sprintf("%.0f", expiredScore),
-	}).Result()
-	if err != nil {
-		return nil, fmt.Errorf("查询过期玩家失败: %w", err)
-	}
-
-	if len(expiredPlayers) == 0 {
 		return []string{}, nil
 	}
 
-	// 批量移除
-	pipe := cli.Pipeline()
-	for _, userID := range expiredPlayers {
-		pipe.ZRem(ctx, queueKey, userID)
-		pipe.HDel(ctx, playerInfoKey, userID)
+	if poolID == "" {
+		return nil, fmt.Errorf("poolID 不能为空")
 	}
 
-	_, err = pipe.Exec(ctx)
+	queueKey := getQueueKey(poolID)
+
+	// 执行 Lua 脚本
+	anyResult, err := q.redis.EvalScript(ctx, "popPlayersScript", popPlayersScript, []string{queueKey, userPoolKey}, count)
 	if err != nil {
-		return nil, fmt.Errorf("移除过期玩家失败: %w", err)
+		if errors.Is(err, redis.Nil) {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("执行 popPlayers Lua 脚本失败: %w", err)
 	}
 
-	log.Info(fmt.Sprintf("从段位 %s 移除 %d 个过期玩家（等待时间超过 %v）", ranking.GetDisplayName(), len(expiredPlayers), maxWaitTime))
-	return expiredPlayers, nil
+	if anyResult == nil {
+		return []string{}, nil
+	}
+
+	// 类型转换
+	arr, ok := anyResult.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("popPlayers 返回类型错误: 期望 []interface{}，实际 %T", anyResult)
+	}
+
+	// 转换为 []string
+	userIDs := make([]string, 0, len(arr))
+	for _, v := range arr {
+		if s, ok := v.(string); ok {
+			userIDs = append(userIDs, s)
+		} else {
+			log.Warn("popPlayers 返回了非字符串元素: %v (类型: %T)", v, v)
+		}
+	}
+
+	log.Debug("从匹配池 %s 取出 %d 个玩家", poolID, len(userIDs))
+	return userIDs, nil
+}
+
+// GetQueueSize 获取队列当前大小
+func (q *RedisMarchQueueRepository) GetQueueSize(ctx context.Context, poolID string) (int, error) {
+	if poolID == "" {
+		return 0, fmt.Errorf("poolID 不能为空")
+	}
+
+	cli, err := q.redis.GetClient()
+	if err != nil {
+		return 0, err
+	}
+	return int(cli.ZCard(ctx, getQueueKey(poolID)).Val()), nil
 }

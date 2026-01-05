@@ -28,8 +28,8 @@ func Run(ctx context.Context) error {
 
 	// 创建 grpc 注册依赖 -> 拿到监听端口 -> 注册 etcd -> 监听 grpc
 	grpcSrv := grpc.NewServer()
-	matchServer := grpcserver.NewMatchProvider(marchContainer.MatchService)
-	pb.RegisterMatchServiceServer(grpcSrv, matchServer)
+	matchProvider := grpcserver.NewMatchProvider(marchContainer.MatchService)
+	pb.RegisterMatchServiceServer(grpcSrv, matchProvider)
 
 	var (
 		registry *discovery.Registry

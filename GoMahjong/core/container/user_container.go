@@ -24,7 +24,7 @@ func NewUserContainer() *UserContainer {
 	}
 
 	// 创建 user 服务需要的仓储
-	userRepo := persistence.NewMongoUserRepository(base.mongo)
+	userRepo := persistence.NewUserRepository(base.mongo, base.redis)
 
 	return &UserContainer{
 		BaseContainer:  base,

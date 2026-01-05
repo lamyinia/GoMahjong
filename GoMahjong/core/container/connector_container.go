@@ -4,16 +4,17 @@ import (
 	"common/config"
 	"common/log"
 	"common/utils"
+	"core/domain/repository"
+	"core/infrastructure/cache"
 	"core/infrastructure/message/node"
+	"core/infrastructure/realtime"
 	"runtime/conn"
 )
 
 type ConnectorContainer struct {
 	*BaseContainer
-	worker          *conn.Worker
-	natsWorker      *node.NatsWorker
-	connectorConfig interface{} // 使用 interface{} 避免循环导入
-	rateLimiter     *utils.RateLimiter
+	worker     *conn.Worker
+	natsWorker *node.NatsWorker
 }
 
 func NewConnectorContainer() *ConnectorContainer {
@@ -32,31 +33,59 @@ func NewConnectorContainer() *ConnectorContainer {
 func (c *ConnectorContainer) GetNatsWorker() *node.NatsWorker {
 	if c.natsWorker == nil {
 		c.natsWorker = node.NewNatsWorker()
-		if c.natsWorker == nil {
-			log.Fatal("NATS Worker 初始化失败")
-		}
 	}
 	return c.natsWorker
-}
-
-// GetRateLimiter 获取或创建速率限制器
-func (c *ConnectorContainer) GetRateLimiter() *utils.RateLimiter {
-	if c.rateLimiter == nil {
-		// 100 个连接/秒的限制
-		c.rateLimiter = utils.NewRateLimiter(100, 1)
-	}
-	return c.rateLimiter
 }
 
 // GetWorker 获取或创建 Worker
 func (c *ConnectorContainer) GetWorker() *conn.Worker {
 	if c.worker == nil {
-		c.worker = conn.NewWorkerWithDeps(c.GetNatsWorker(), c.GetRateLimiter())
+		var opts []conn.WorkerOption
+		userRepository := realtime.NewRedisUserRouterRepository(c.redis)
+
+		opts = append(opts, WithNatsWorker())
+		opts = append(opts, WithRateLimiter(100, 1))
+		opts = append(opts, WithGameRouteCache())
+		opts = append(opts, WithUserRoute(userRepository))
+
+		c.worker = conn.NewWorkerWithDeps(opts...)
 		if c.worker == nil {
 			log.Fatal("Worker 初始化失败")
 		}
 	}
 	return c.worker
+}
+
+func WithNatsWorker() conn.WorkerOption {
+	return func(w *conn.Worker) error {
+		w.MiddleWorker = node.NewNatsWorker()
+		return nil
+	}
+}
+
+func WithRateLimiter(rate, burst int) conn.WorkerOption {
+	return func(w *conn.Worker) error {
+		w.ConnectionRateLimiter = utils.NewRateLimiter(rate, burst)
+		return nil
+	}
+}
+
+func WithGameRouteCache() conn.WorkerOption {
+	return func(w *conn.Worker) error {
+		gameCache, err := cache.NewGameRouteCache()
+		if err != nil {
+			return err
+		}
+		w.GameRouteCache = gameCache
+		return nil
+	}
+}
+
+func WithUserRoute(repository repository.UserRouterRepository) conn.WorkerOption {
+	return func(w *conn.Worker) error {
+		w.UserRouter = repository
+		return nil
+	}
 }
 
 // Close 关闭所有资源

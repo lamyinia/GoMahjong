@@ -10,31 +10,25 @@ service MatchService {
 
 message JoinQueueRequest {
   string userID = 1;          // 必填，用户唯一 ID
-  string nodeID = 2;          // connector 节点 ID（如 connector-001）
-  string ranking = 3;         // 可选，如果客户端指定段位；否则由 march 查询用户信息
-  string traceID = 4;         // 可选，用于链路跟踪/日志
+  string poolID = 2;          // 必填，匹配池ID（如 "classic:rank4", "classic:casual4", "classic:casual3"）
+  string traceID = 3;         // 可选，用于链路跟踪/日志
 }
 
 message JoinQueueResponse {
-  bool success = 1;
-  string message = 2;
-  string queueID = 3;         // 可选，用于 QueryStatus
-  int32 estimatedSeconds = 4; // 估计等待时间
+  string message = 1;
+  int32 estimatedSeconds = 2; // 估计等待时间
 }
 
 message LeaveQueueRequest {
   string userID = 1;
-  string queueID = 2;         // 与上面对应，也可以直接根据 userID 查询
 }
 
 message LeaveQueueResponse {
-  bool success = 1;
-  string message = 2;
+  string message = 1;
 }
 
 message QueryStatusRequest {
   string userID = 1;
-  string queueID = 2;
 }
 
 message QueryStatusResponse {

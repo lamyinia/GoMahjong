@@ -1,15 +1,18 @@
 package march
 
 import (
+	"common/config"
+	"common/discovery"
 	"common/log"
 	"context"
+	"core/domain/repository"
 	"core/infrastructure/message/node"
 	"fmt"
 	"runtime/march/application/service"
+	"strings"
 	"sync"
 	"time"
 
-	"core/domain/vo"
 	pb "game/pb"
 )
 
@@ -28,26 +31,56 @@ const (
 )
 
 type Worker struct {
-	matchService  service.MatchService
-	natsWorker    *node.NatsWorker
-	gameConnPool  *GameConnPool                    // gRPC 连接池
-	NodeID        string                           // 当前 march 节点 ID（用于 NATS topic）
-	stopChan      chan struct{}                    // 停止信号
-	matchTriggers map[vo.RankingType]chan struct{} // 段位 -> 匹配触发 channel
-	wg            sync.WaitGroup                   // 等待所有 goroutine 结束
+	NodeID          string
+	matchService    service.MatchService
+	natsWorker      *node.NatsWorker
+	gameConnPool    *GameConnPool // gRPC 连接池
+	matchPools      []*MatchPool
+	matchResultChan chan *service.MatchResult // 统一的结果 channel
+	stopChan        chan struct{}             // 停止信号
+	wg              sync.WaitGroup            // 等待所有 goroutine 结束
 }
 
 func NewWorker(matchService service.MatchService, nodeID string) *Worker {
 	return &Worker{
-		matchService: matchService,
-		natsWorker:   node.NewNatsWorker(),
-		gameConnPool: NewGameConnPool(),
-		NodeID:       nodeID,
-		stopChan:     make(chan struct{}),
+		NodeID:          nodeID,
+		matchService:    matchService,
+		natsWorker:      node.NewNatsWorker(),
+		gameConnPool:    NewGameConnPool(),
+		matchResultChan: make(chan *service.MatchResult, 1024),
+		stopChan:        make(chan struct{}),
 	}
 }
 
-// Start 启动 nats 服务
+// InitMatchPools 从配置初始化匹配池
+func (w *Worker) InitMatchPools(queueRepo repository.MarchQueueRepository, routerRepo repository.UserRouterRepository, nodeSelector *discovery.NodeSelector) error {
+	if len(config.MarchNodeConfig.MarchPoolConfigs) == 0 {
+		log.Warn("配置中没有匹配池配置")
+		return nil
+	}
+
+	pools := make([]*MatchPool, 0, len(config.MarchNodeConfig.MarchPoolConfigs))
+	for _, poolConfig := range config.MarchNodeConfig.MarchPoolConfigs {
+		pool, err := NewMatchPool(
+			poolConfig,
+			queueRepo,
+			routerRepo,
+			nodeSelector,
+			w.matchResultChan,
+		)
+		if err != nil {
+			return fmt.Errorf("创建匹配池 [%s] 失败: %w", poolConfig.PoolID, err)
+		}
+		pools = append(pools, pool)
+		log.Info("匹配池 [%s] 初始化成功", poolConfig.PoolID)
+	}
+
+	w.matchPools = pools
+	log.Info(fmt.Sprintf("March Worker[%s] 初始化 %d 个匹配池", w.NodeID, len(pools)))
+	return nil
+}
+
+// Start 启动 nats 服务和匹配结果处理
 func (w *Worker) Start(ctx context.Context, natsURL string) error {
 	err := w.natsWorker.Run(natsURL, w.NodeID)
 	if err != nil {
@@ -55,66 +88,40 @@ func (w *Worker) Start(ctx context.Context, natsURL string) error {
 	}
 	log.Info(fmt.Sprintf("March Worker[%s] 启动 NATS 监听成功, topic: %s", w.NodeID, w.NodeID))
 
-	w.matchTriggers = make(map[vo.RankingType]chan struct{})
-	rankings := vo.GetAllRankings()
-	for _, ranking := range rankings {
-		w.matchTriggers[ranking] = make(chan struct{})
-	}
-
-	w.matchService.SetMatchTriggers(w.matchTriggers)
-
-	for _, ranking := range rankings {
-		w.wg.Add(1)
-		go w.matchLoopByRanking(ctx, ranking)
+	go w.processMatchResults(ctx)
+	for _, pool := range w.matchPools {
+		pool.Start()
 	}
 
 	go w.cleanupExpiredPlayers(ctx)
 
-	log.Info(fmt.Sprintf("March Worker[%s] 启动成功", w.NodeID))
+	log.Info(fmt.Sprintf("March Worker[%s] 启动成功，已启动 %d 个匹配池", w.NodeID, len(w.matchPools)))
 	return nil
 }
 
-// matchLoopByRanking 按段位的匹配循环（事件驱动 + 定时兜底）
-func (w *Worker) matchLoopByRanking(ctx context.Context, ranking vo.RankingType) {
+// processMatchResults 统一处理所有匹配结果
+func (w *Worker) processMatchResults(ctx context.Context) {
+	w.wg.Add(1)
 	defer w.wg.Done()
 
-	ticker := time.NewTicker(matchInterval)
-	defer ticker.Stop()
-
-	matchTrigger := w.matchTriggers[ranking]
-	displayName := ranking.GetDisplayName()
-
-	log.Info(fmt.Sprintf("March Worker[%s] 段位 %s 匹配循环启动，间隔: %v", w.NodeID, displayName, matchInterval))
+	log.Info(fmt.Sprintf("March Worker[%s] 匹配结果处理启动", w.NodeID))
 
 	for {
 		select {
-		case <-matchTrigger:
-			w.doMatch(ctx, ranking, displayName)
-		case <-ticker.C:
-			w.doMatch(ctx, ranking, displayName)
+		case result := <-w.matchResultChan:
+			if result == nil {
+				continue
+			}
+			if err := w.handleMatchSuccess(ctx, result); err != nil {
+				log.Error(fmt.Sprintf("March Worker[%s] 处理匹配结果失败: %v", w.NodeID, err))
+				// TODO: 通知客户端匹配失败
+			}
 		case <-w.stopChan:
-			log.Info(fmt.Sprintf("March Worker[%s] 段位 %s 匹配循环停止", w.NodeID, displayName))
+			log.Info(fmt.Sprintf("March Worker[%s] 匹配结果处理收到停止信号", w.NodeID))
 			return
 		case <-ctx.Done():
-			log.Info(fmt.Sprintf("March Worker[%s] 段位 %s 收到上下文取消信号，停止匹配循环", w.NodeID, displayName))
+			log.Info(fmt.Sprintf("March Worker[%s] 匹配结果处理收到上下文取消信号", w.NodeID))
 			return
-		}
-	}
-}
-
-// doMatch 对某一种匹配队列，执行一次匹配
-func (w *Worker) doMatch(ctx context.Context, rankingType vo.RankingType, displayName string) {
-	result, err := w.matchService.MatchByRanking(ctx, rankingType)
-	if err != nil {
-		log.Error(fmt.Sprintf("March Worker 段位 %s 匹配失败: %v", displayName, err))
-		return
-	}
-
-	// 匹配成功，处理结果
-	if result != nil {
-		if err := w.handleMatchSuccess(ctx, result); err != nil {
-			log.Error(fmt.Sprintf("March Worker 段位 %s 处理匹配成功失败: %v", displayName, err))
-			// 注意：这里不 return，因为匹配已经成功，只是推送失败，可以考虑重试机制或回滚匹配
 		}
 	}
 }
@@ -122,30 +129,29 @@ func (w *Worker) doMatch(ctx context.Context, rankingType vo.RankingType, displa
 // handleMatchSuccess 处理匹配成功
 // 通过 gRPC 调用 Game 节点创建房间
 func (w *Worker) handleMatchSuccess(ctx context.Context, result *service.MatchResult) error {
-	err := w.callGameCreateRoom(ctx, result.GameNodeAddr, result.Players)
-	if err != nil {
-		// 这里可以考虑重新放进匹配队列，或者通知匹配异常
+	if err := w.callGameCreateRoom(ctx, result); err != nil {
+		// todo 通知匹配异常
 		return fmt.Errorf("调用 Game 创建房间失败: %w", err)
 	}
-
-	log.Info(fmt.Sprintf("March Worker 匹配成功处理完成: gameNode=%s, players=%d", result.GameNodeAddr, len(result.Players)))
+	log.Info(fmt.Sprintf("March Worker 匹配成功处理完成: poolID=%s, gameNode=%s, players=%d", result.PoolID, result.GameNodeAddr, len(result.Players)))
 	return nil
 }
 
 // callGameCreateRoom 通过 gRPC 调用 Game 节点创建房间
-func (w *Worker) callGameCreateRoom(ctx context.Context, gameNodeAddr string, players map[string]string) error {
-	// 使用立直麻将 4 人引擎（暂时硬编码，后续可配置）
-	const RIICHI_MAHJONG_4P_ENGINE = int32(0)
+func (w *Worker) callGameCreateRoom(ctx context.Context, result *service.MatchResult) error {
+	// 根据 poolID 推断引擎类型
+	engineType := inferEngineType(result.PoolID)
 
 	// 获取 Game 节点的 gRPC 客户端
-	client, err := w.gameConnPool.GetClient(gameNodeAddr)
+	client, err := w.gameConnPool.GetClient(result.GameNodeAddr)
 	if err != nil {
+		// 考虑推送匹配失败
 		return fmt.Errorf("获取 Game 客户端失败: %v", err)
 	}
 
 	req := &pb.CreateRoomRequest{
-		Players:    players,
-		EngineType: RIICHI_MAHJONG_4P_ENGINE,
+		Players:    result.Players,
+		EngineType: engineType,
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -159,8 +165,20 @@ func (w *Worker) callGameCreateRoom(ctx context.Context, gameNodeAddr string, pl
 		return fmt.Errorf("Game 创建房间失败: %s", resp.Message)
 	}
 
-	log.Info(fmt.Sprintf("March Worker 通过 gRPC 创建房间成功: gameNodeAddr=%s, roomID=%s, players=%d", gameNodeAddr, resp.RoomID, len(players)))
+	log.Info(fmt.Sprintf("March Worker 通过 gRPC 创建房间成功: poolID=%s, gameNodeAddr=%s, roomID=%s, players=%d",
+		result.PoolID, result.GameNodeAddr, resp.RoomID, len(result.Players)))
 	return nil
+}
+
+// inferEngineType 根据 poolID 推断引擎类型
+func inferEngineType(poolID string) int32 {
+	const RIICHI_MAHJONG_4P_ENGINE = int32(0)
+	const RIICHI_MAHJONG_3P_ENGINE = int32(1) // 假设 3 人引擎类型为 1
+
+	if strings.Contains(poolID, "casual3") {
+		return RIICHI_MAHJONG_3P_ENGINE
+	}
+	return RIICHI_MAHJONG_4P_ENGINE
 }
 
 // cleanupExpiredPlayers 清理过期玩家（每5分钟执行一次）
@@ -187,26 +205,20 @@ func (w *Worker) cleanupExpiredPlayers(ctx context.Context) {
 
 // Close 关闭 Worker
 func (w *Worker) Close() error {
-	// 1. 关闭停止信号 channel
-	close(w.stopChan)
-
-	// 2. 关闭所有匹配触发 channel
-	for ranking, trigger := range w.matchTriggers {
-		close(trigger)
-		log.Debug(fmt.Sprintf("March Worker[%s] 关闭段位 %s 的匹配触发 channel", w.NodeID, ranking.GetDisplayName()))
+	// 停止所有匹配池
+	for _, pool := range w.matchPools {
+		pool.Stop()
 	}
 
-	// 3. 等待所有匹配循环 goroutine 结束
+	close(w.stopChan)
 	w.wg.Wait()
 
-	// 4. 关闭 gRPC 连接池
 	if w.gameConnPool != nil {
 		if err := w.gameConnPool.Close(); err != nil {
 			log.Error(fmt.Sprintf("March Worker[%s] 关闭 gRPC 连接池失败: %v", w.NodeID, err))
 		}
 	}
 
-	// 5. 关闭 NATS Worker
 	if w.natsWorker != nil {
 		w.natsWorker.Close()
 	}

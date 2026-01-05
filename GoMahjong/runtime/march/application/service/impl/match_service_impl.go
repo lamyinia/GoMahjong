@@ -1,173 +1,92 @@
 package impl
 
 import (
-	"common/discovery"
 	"common/log"
 	"context"
 	"core/domain/repository"
 	"core/domain/vo"
+	"errors"
 	"fmt"
 	"runtime/march/application/service"
-	"sync"
+	"strings"
 	"time"
 )
 
 const (
-	playersPerMatch = 4             // 麻将需要4个玩家
-	routerTTL       = 2 * time.Hour // 路由过期时间（游戏结束后清理）
+	rank4Prefix = "classic:rank4" // 排位4人模式前缀
 )
 
 type MatchServiceImpl struct {
-	userRepo      repository.UserRepository
-	queueRepo     repository.MarchQueueRepository
-	routerRepo    repository.UserRouterRepository
-	nodeSelector  *discovery.NodeSelector
-	matchTriggers map[vo.RankingType]chan struct{} // 段位 -> 匹配触发 channel（由 Worker 创建）
-	mu            sync.RWMutex                     // 保护 matchTriggers 的并发访问
+	queueRepo repository.MarchQueueRepository
+	userRepo  repository.UserRepository
 }
 
-func NewMatchService(
-	userRepo repository.UserRepository,
-	queueRepo repository.MarchQueueRepository,
-	routerRepo repository.UserRouterRepository,
-	nodeSelector *discovery.NodeSelector,
-) service.MatchService {
+func NewMatchService(queueRepo repository.MarchQueueRepository, userRepo repository.UserRepository) service.MatchService {
 	return &MatchServiceImpl{
-		userRepo:      userRepo,
-		queueRepo:     queueRepo,
-		routerRepo:    routerRepo,
-		nodeSelector:  nodeSelector,
-		matchTriggers: make(map[vo.RankingType]chan struct{}),
+		queueRepo: queueRepo,
+		userRepo:  userRepo,
 	}
 }
 
-// SetMatchTriggers 设置匹配触发 channel（由 Worker 调用）
-func (s *MatchServiceImpl) SetMatchTriggers(matchTriggers map[vo.RankingType]chan struct{}) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.matchTriggers = matchTriggers
-	log.Info("MatchService 设置匹配触发 channel，段位数: %d", len(matchTriggers))
-}
-
-func (s *MatchServiceImpl) JoinQueue(ctx context.Context, userID, connectorNodeID string) error {
-	user, err := s.userRepo.FindByID(ctx, userID)
+func (s *MatchServiceImpl) JoinQueue(ctx context.Context, poolID, userID string) error {
+	// 1. 检查是否已在队列中
+	inQueue, existPool, err := s.queueRepo.IsInQueue(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("查询用户失败: %w", err)
-	}
-
-	ranking := user.GetRanking()
-
-	inQueue, err := s.queueRepo.IsInQueue(ctx, userID, ranking)
-	if err != nil {
-		return fmt.Errorf("检查队列状态失败: %w", err)
+		return fmt.Errorf("检查队列状态失败:  %s", err)
 	}
 	if inQueue {
-		return repository.ErrPlayerAlreadyInQueue
+		return errors.Join(repository.ErrPlayerAlreadyInQueue, fmt.Errorf("已在匹配队列: %s", existPool))
 	}
 
+	// 2. 如果是排位模式，需要根据用户 ranking 转换成具体的段位池
+	finalPoolID, err := s.resolvePoolID(ctx, poolID, userID)
+	if err != nil {
+		return fmt.Errorf("解析匹配池ID失败: %w", err)
+	}
+
+	// 3. 使用时间戳作为 score（先来先服务）
 	score := float64(time.Now().Unix())
-	if err := s.queueRepo.JoinQueue(ctx, userID, connectorNodeID, ranking, score); err != nil {
+
+	if err := s.queueRepo.JoinQueue(ctx, finalPoolID, userID, score); err != nil {
 		return fmt.Errorf("加入队列失败: %w", err)
 	}
 
-	s.triggerMatch(ranking)
-
-	log.Info(fmt.Sprintf("玩家 %s 加入段位 %s 匹配队列", userID, ranking.GetDisplayName()))
+	log.Info("玩家 %s 加入匹配池 %s (原始: %s)", userID, finalPoolID, poolID)
 	return nil
 }
 
-func (s *MatchServiceImpl) triggerMatch(ranking vo.RankingType) {
-	s.mu.RLock()
-	trigger, exists := s.matchTriggers[ranking]
-	s.mu.RUnlock()
-
-	if !exists {
-		return
+// resolvePoolID 解析匹配池ID
+// 如果是排位模式（classic:rank4），根据用户 ranking 转换成具体的段位池
+// 否则直接返回原始 poolID
+func (s *MatchServiceImpl) resolvePoolID(ctx context.Context, poolID, userID string) (string, error) {
+	// 如果不是排位模式，直接返回
+	if !strings.HasPrefix(poolID, rank4Prefix) {
+		return poolID, nil
 	}
 
-	select {
-	case trigger <- struct{}{}:
-		// 成功发送触发信号
-	default:
-		// channel 已关闭或已满，忽略（避免阻塞）
+	// 排位模式：需要查询用户 ranking 并转换成具体段位池
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("查询用户信息失败: %w", err)
 	}
+
+	// 根据 ranking 分数获取段位类型
+	rankingType := vo.GetRankingByScore(user.Ranking)
+	rankingString := rankingType.String()
+
+	// 构建具体的段位池ID：classic:rank4:novice, classic:rank4:guard 等
+	finalPoolID := fmt.Sprintf("%s:%s", rank4Prefix, rankingString)
+
+	log.Info("玩家 %s ranking=%d, 段位=%s, 匹配池=%s", userID, user.Ranking, rankingString, finalPoolID)
+	return finalPoolID, nil
 }
 
 func (s *MatchServiceImpl) LeaveQueue(ctx context.Context, userID string) error {
-	user, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("查询用户失败: %w", err)
+	// 从队列中移除玩家
+	if err := s.queueRepo.RemoveFromQueue(ctx, userID); err != nil {
+		return fmt.Errorf("离开队列失败: %w", err)
 	}
 
-	ranking := user.GetRanking()
-
-	if err := s.queueRepo.RemoveFromQueue(ctx, userID, ranking); err != nil {
-		return fmt.Errorf("从队列移除失败: %w", err)
-	}
-
-	log.Info(fmt.Sprintf("玩家 %s 离开段位 %s 匹配队列", userID, ranking.GetDisplayName()))
+	log.Info("玩家 %s 离开匹配队列", userID)
 	return nil
-}
-
-// MatchByRanking 按段位执行一次匹配
-func (s *MatchServiceImpl) MatchByRanking(ctx context.Context, ranking vo.RankingType) (*service.MatchResult, error) {
-	players, err := s.queueRepo.PopPlayers(ctx, ranking, playersPerMatch)
-	if err != nil {
-		return nil, fmt.Errorf("从队列取出玩家失败: %w", err)
-	}
-
-	// Lua 脚本已保证，如果队列中玩家不足，不会取出任何玩家，直接返回空，所以这里如果 players 为空，说明队列中玩家不足
-	if len(players) == 0 {
-		return nil, nil
-	}
-
-	// 防御性检查
-	if len(players) < playersPerMatch {
-		log.Warn(fmt.Sprintf("段位 %s 取出玩家数量异常: 期望 %d 人，实际 %d 人", ranking.GetDisplayName(), playersPerMatch, len(players)))
-		return nil, nil
-	}
-
-	gameNode, err := s.nodeSelector.SelectGameNode(ctx)
-	if err != nil {
-		// 选择节点失败，需要将玩家重新放回队列，后续可以实现 Rollback
-		return nil, fmt.Errorf("选择 game 节点失败: %w", err)
-	}
-
-	nodeID := gameNode.NodeID
-
-	//保存用户路由（用于断线重连）
-	for userID, connectorTopic := range players {
-		routerInfo := &repository.UserRouterInfo{
-			GameTopic:      nodeID,
-			ConnectorTopic: connectorTopic,
-		}
-		if err := s.routerRepo.SaveRouter(ctx, userID, routerInfo, routerTTL); err != nil {
-			log.Error(fmt.Sprintf("保存用户路由失败: userID=%s, err=%v", userID, err))
-		}
-	}
-
-	log.Info(fmt.Sprintf("段位 %s 匹配成功: gameNode=%s, players=%d", ranking.GetDisplayName(), gameNode.Addr, len(players)))
-
-	return &service.MatchResult{
-		Players:      players,
-		GameNodeID:   nodeID,
-		GameNodeAddr: gameNode.Addr,
-	}, nil
-}
-
-// Match 执行一次匹配（遍历所有段位）
-func (s *MatchServiceImpl) Match(ctx context.Context) (*service.MatchResult, error) {
-	rankings := vo.GetAllRankings()
-	for _, ranking := range rankings {
-		result, err := s.MatchByRanking(ctx, ranking)
-		if err != nil {
-			log.Error(fmt.Sprintf("段位 %s 匹配失败: %v", ranking.GetDisplayName(), err))
-			continue
-		}
-		if result != nil {
-			return result, nil
-		}
-	}
-
-	return nil, nil
 }

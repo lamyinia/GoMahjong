@@ -7,7 +7,7 @@ import (
 	"context"
 	"core/infrastructure/message/node"
 	"core/infrastructure/message/protocol"
-	"core/infrastructure/message/stream"
+	"core/infrastructure/message/transfer"
 	"fmt"
 	svc "runtime/game/application/service"
 	"sync"
@@ -140,7 +140,7 @@ func (w *Worker) PushConnector(connectorNodeID, route string, data []byte) error
 	}
 
 	// 构建 ServicePacket
-	packet := &stream.ServicePacket{
+	packet := &transfer.ServicePacket{
 		Source:      w.NodeID,
 		Destination: connectorNodeID,
 		Route:       route,
@@ -170,7 +170,7 @@ func (w *Worker) PushMessage(userID, route string, data []byte) error {
 	}
 
 	// 构建 ServicePacket
-	packet := &stream.ServicePacket{
+	packet := &transfer.ServicePacket{
 		Source:      w.NodeID,
 		Destination: dest,
 		Route:       route,

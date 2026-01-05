@@ -3,9 +3,7 @@ package grpc
 import (
 	"common/log"
 	"context"
-	"fmt"
 	"runtime/march/application/service"
-	"time"
 
 	"march/pb"
 )
@@ -24,27 +22,28 @@ func NewMatchProvider(matchService service.MatchService) *MatchProvider {
 
 // JoinQueue 处理玩家加入匹配队列
 func (p *MatchProvider) JoinQueue(ctx context.Context, req *pb.JoinQueueRequest) (*pb.JoinQueueResponse, error) {
-	if req.GetUserID() == "" || req.GetNodeID() == "" {
+	if req.GetUserID() == "" {
 		return &pb.JoinQueueResponse{
-			Success: false,
-			Message: "userID 和 nodeID 不能为空",
+			Message: "userID 不能为空",
 		}, nil
 	}
 
-	if err := p.matchService.JoinQueue(ctx, req.GetUserID(), req.GetNodeID()); err != nil {
-		log.Warn("进入匹配队列失败: %#v", req)
+	poolID := req.GetPoolID()
+	if poolID == "" {
 		return &pb.JoinQueueResponse{
-			Success: false,
+			Message: "poolID 不能为空",
+		}, nil
+	}
+
+	if err := p.matchService.JoinQueue(ctx, poolID, req.GetUserID()); err != nil {
+		log.Warn("进入匹配队列失败: userID=%s, poolID=%s, err=%v", req.GetUserID(), poolID, err)
+		return &pb.JoinQueueResponse{
 			Message: err.Error(),
 		}, nil
 	}
 
-	queueID := fmt.Sprintf("%p:%d", req.GetUserID(), time.Now().UnixNano())
-
 	return &pb.JoinQueueResponse{
-		Success:          true,
 		Message:          "加入匹配队列成功",
-		QueueID:          queueID,
 		EstimatedSeconds: 0,
 	}, nil
 }
@@ -53,20 +52,17 @@ func (p *MatchProvider) JoinQueue(ctx context.Context, req *pb.JoinQueueRequest)
 func (p *MatchProvider) LeaveQueue(ctx context.Context, req *pb.LeaveQueueRequest) (*pb.LeaveQueueResponse, error) {
 	if req.GetUserID() == "" {
 		return &pb.LeaveQueueResponse{
-			Success: false,
 			Message: "userID 不能为空",
 		}, nil
 	}
 
 	if err := p.matchService.LeaveQueue(ctx, req.GetUserID()); err != nil {
 		return &pb.LeaveQueueResponse{
-			Success: false,
 			Message: err.Error(),
 		}, nil
 	}
 
 	return &pb.LeaveQueueResponse{
-		Success: true,
 		Message: "已取消匹配",
 	}, nil
 }

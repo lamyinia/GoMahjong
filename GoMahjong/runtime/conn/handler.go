@@ -3,13 +3,14 @@ package conn
 import (
 	"core/infrastructure/message/node"
 	"core/infrastructure/message/protocol"
-	"runtime/dto"
+	"core/infrastructure/message/transfer"
 )
 
 type HandlerFunc func(session *Session, body []byte) (any, error)
 
 type MessageTypeHandler map[string]HandlerFunc
 
+// 玩家消息路由
 func (w *Worker) injectDefaultHandlers() {
 	w.clientHandlers[protocol.Handshake] = w.handshakeHandler
 	w.clientHandlers[protocol.HandshakeAck] = w.handshakeAckHandler
@@ -17,13 +18,14 @@ func (w *Worker) injectDefaultHandlers() {
 	w.clientHandlers[protocol.Data] = w.messageHandler
 	w.clientHandlers[protocol.Kick] = w.kickHandler
 
-	w.MessageTypeHandlers[dto.JoinQueue] = joinQueueHandler
+	w.MessageTypeHandlers[transfer.JoinQueue] = joinQueueHandler
 }
 
+// nats 消息路由
 func (w *Worker) injectMiddleWorkerHandler() {
 	subHandler := make(node.SubscriberHandler)
-	subHandler[dto.MatchingSuccess] = w.handlerMatchSuccess
+	subHandler[transfer.MatchingSuccess] = w.handlerMatchSuccess
 
-	w.MiddleWorker.RegisterPushHandler(w.handlePush) // 注册推送路由
+	w.MiddleWorker.RegisterPushHandler(w.handlePush)
 	w.MiddleWorker.RegisterHandlers(subHandler)
 }

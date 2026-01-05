@@ -12,7 +12,6 @@ type User struct {
 	ID        primitive.ObjectID
 	Account   vo.Account
 	Password  vo.Password
-	Platform  int32
 	Ranking   int // 段位数值（0-299: 见习, 300-599: 雀士, 600-1199: 豪杰, 1200-1799: 雀圣, 1800+: 魂天）
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -20,7 +19,7 @@ type User struct {
 }
 
 // NewUser 工厂方法：创建新用户
-func NewUser(account, password string, platform int32) (*User, error) {
+func NewUser(account, password string) (*User, error) {
 	// 验证 Account
 	acc, err := vo.NewAccount(account)
 	if err != nil {
@@ -37,7 +36,6 @@ func NewUser(account, password string, platform int32) (*User, error) {
 		ID:        primitive.NewObjectID(),
 		Account:   acc,
 		Password:  pwd,
-		Platform:  platform,
 		Ranking:   0, // 默认段位：见习（0-299）
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),

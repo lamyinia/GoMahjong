@@ -1,4 +1,4 @@
-package dto
+package transfer
 
 type MatchSuccessDTO struct {
 	GameNodeID string            `json:"gameNodeID"`

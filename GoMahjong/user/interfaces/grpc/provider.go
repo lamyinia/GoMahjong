@@ -31,7 +31,6 @@ func NewAuthProvider(authService *service.AuthService) *AuthProvider {
 func (h *AuthProvider) Register(ctx context.Context, in *pb.RegisterParams) (*pb.RegisterResponse, error) {
 	// 1. 参数验证
 	if err := validateRegisterParams(in); err != nil {
-		log.Warn("参数验证失败: %v", err)
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -56,7 +55,6 @@ func (h *AuthProvider) Register(ctx context.Context, in *pb.RegisterParams) (*pb
 func (h *AuthProvider) Login(ctx context.Context, in *pb.LoginParams) (*pb.LoginResponse, error) {
 	// 1. 参数验证
 	if err := validateLoginParams(in); err != nil {
-		log.Warn("参数验证失败: %v", err)
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -80,7 +78,6 @@ func (h *AuthProvider) Login(ctx context.Context, in *pb.LoginParams) (*pb.Login
 func (h *AuthProvider) GetSMSCode(ctx context.Context, in *pb.GetSMSCodeParams) (*pb.Empty, error) {
 	// 1. 参数验证
 	if err := validateGetSMSCodeParams(in); err != nil {
-		log.Warn("参数验证失败: %v", err)
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
