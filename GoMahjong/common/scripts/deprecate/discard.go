@@ -1,4 +1,7 @@
-package main
+package deprecate
+
+/*
+废弃的 cmd 测试
 
 import (
 	"bufio"
@@ -22,7 +25,7 @@ func InteractiveClientMode() {
 	}
 
 	// 第 2 步：创建客户端并连接
-	client := NewTestClient(userID)
+	client := main.NewTestClient(userID)
 	if err := client.Connect(); err != nil {
 		log.Fatalf("connect failed: %v", err)
 	}
@@ -77,7 +80,7 @@ func getUserID() string {
 }
 
 // inputLoop 处理用户输入的命令
-func inputLoop(ctx context.Context, client *TestClient) {
+func inputLoop(ctx context.Context, client *main.TestClient) {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -113,7 +116,7 @@ func inputLoop(ctx context.Context, client *TestClient) {
 }
 
 // messageLoop：后台处理服务器推送的消息
-func messageLoop(ctx context.Context, client *TestClient) {
+func messageLoop(ctx context.Context, client *main.TestClient) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -131,3 +134,5 @@ func messageLoop(ctx context.Context, client *TestClient) {
 		}
 	}
 }
+
+*/

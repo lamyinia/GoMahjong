@@ -43,24 +43,19 @@ func NewUser(account, password string) (*User, error) {
 	}, nil
 }
 
-// VerifyPassword 业务方法：验证密码
 func (u *User) VerifyPassword(plainPassword string) bool {
 	return u.Password.Verify(plainPassword)
 }
 
-// UpdateLastLogin 业务方法：更新最后登录时间
 func (u *User) UpdateLastLogin() {
 	u.LastLogin = time.Now()
 	u.UpdatedAt = time.Now()
 }
 
-// GetRanking 获取段位枚举（根据数值计算）
 func (u *User) GetRanking() vo.RankingType {
 	return vo.GetRankingByScore(u.Ranking)
 }
 
-// UpdateRanking 更新段位数值（游戏结束后调用，立即生效）
-// ranking: 新的段位数值
 func (u *User) UpdateRanking(ranking int) {
 	if ranking < 0 {
 		ranking = 0 // 段位不能为负数

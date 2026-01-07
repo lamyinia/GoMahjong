@@ -31,9 +31,6 @@ type Engine interface {
 	// Clone 克隆引擎实例（用于原型模式）
 	Clone() Engine
 
-	// Terminate 触发销毁房间（异步请求）
-	Terminate()
-
 	// Close 释放引擎内部资源
 	Close()
 }

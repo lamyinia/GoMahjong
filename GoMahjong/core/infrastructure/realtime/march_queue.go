@@ -5,6 +5,7 @@ import (
 	"common/log"
 	"context"
 	"core/domain/repository"
+	"core/infrastructure/message/transfer"
 	"errors"
 	"fmt"
 	"time"
@@ -166,7 +167,7 @@ func (q *RedisMarchQueueRepository) JoinQueue(ctx context.Context, poolID, userI
 		return fmt.Errorf("用户已在匹配池 %s 中，无法加入 %s", existingPool, poolID)
 	case -2:
 		// 用户已在同一池的队列中
-		return repository.ErrPlayerAlreadyInQueue
+		return transfer.ErrPlayerAlreadyInQueue
 	default:
 		return fmt.Errorf("joinQueue 返回未知结果: %d", result)
 	}

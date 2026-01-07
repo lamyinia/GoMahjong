@@ -8,6 +8,7 @@ import (
 	"core/domain/entity"
 	"core/domain/repository"
 	"core/domain/vo"
+	"core/infrastructure/message/transfer"
 	"errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -45,10 +46,10 @@ func (r *UserRepository) Save(ctx context.Context, user *entity.User) error {
 
 	_, err = collection.InsertOne(ctx, doc)
 	if mongo.IsDuplicateKeyError(err) {
-		return repository.ErrAccountAlreadyExists
+		return transfer.ErrAccountAlreadyExists
 	}
 	if err != nil {
-		return repository.ErrMongodb
+		return transfer.ErrMongodb
 	}
 	return nil
 }
@@ -60,7 +61,7 @@ func (r *UserRepository) FindByAccount(ctx context.Context, account string) (*en
 	err := collection.FindOne(ctx, bson.M{"account": account}).Decode(&doc)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, repository.ErrUserNotFound
+			return nil, transfer.ErrUserNotFound
 		}
 		log.Error("查询用户失败: %v", err)
 		return nil, err
@@ -74,18 +75,36 @@ func (r *UserRepository) FindByID(ctx context.Context, id string) (*entity.User,
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		return nil, repository.ErrUserNotFound
+		return nil, transfer.ErrUserNotFound
 	}
 
 	var doc bson.M
 	err = collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&doc)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, repository.ErrUserNotFound
+			return nil, transfer.ErrUserNotFound
 		}
 		return nil, err
 	}
 	return r.docToEntity(doc), nil
+}
+
+func (r *UserRepository) UpdateLastLogin(ctx context.Context, user *entity.User) error {
+	collection := r.mongo.Db.Collection("users")
+	filter := bson.M{"_id": user.ID}
+	user.UpdateLastLogin()
+	update := bson.M{
+		"$set": bson.M{
+			"last_login": user.LastLogin,
+			"updated_at": user.UpdatedAt,
+		},
+	}
+
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil || result.MatchedCount == 0 {
+		return transfer.ErrMongodb
+	}
+	return nil
 }
 
 func (r *UserRepository) docToEntity(doc bson.M) *entity.User {

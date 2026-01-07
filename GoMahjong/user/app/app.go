@@ -17,9 +17,7 @@ import (
 	"user/pb"
 )
 
-// Run 1.启用数据库。2.启动 grpc 服务，优雅启停。 3.启用 Etcd。
 func Run(ctx context.Context) error {
-	// 1. 初始化 user 服务专用容器
 	playerContainer := container.NewUserContainer()
 	if playerContainer == nil {
 		log.Fatal("user 容器初始化失败")
@@ -27,13 +25,9 @@ func Run(ctx context.Context) error {
 	}
 	defer playerContainer.Close()
 
-	// 2. 创建 gRPC 服务器
 	server := grpc.NewServer()
-
-	// 3. 创建服务发现注册器
 	registry := discovery.NewRegistry()
 
-	// 4. 启动 gRPC 服务
 	go func() {
 		log.Info("启动 gRPC 服务、etcd 服务...")
 
@@ -73,7 +67,6 @@ func Run(ctx context.Context) error {
 		log.Info("user 服务已关闭")
 	}
 
-	// 6. 监听信号
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGHUP)
 

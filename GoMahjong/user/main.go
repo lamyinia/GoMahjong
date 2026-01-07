@@ -6,9 +6,10 @@ import (
 	"common/metrics"
 	"context"
 	"fmt"
-	"github.com/spf13/cobra"
 	"os"
 	"user/app"
+
+	"github.com/spf13/cobra"
 )
 
 // 加载配置 -> 启动监控 -> 启动 grpc 服务

@@ -5,6 +5,7 @@ import (
 	"context"
 	"core/domain/repository"
 	"core/domain/vo"
+	"core/infrastructure/message/transfer"
 	"errors"
 	"fmt"
 	"runtime/march/application/service"
@@ -35,7 +36,7 @@ func (s *MatchServiceImpl) JoinQueue(ctx context.Context, poolID, userID string)
 		return fmt.Errorf("检查队列状态失败:  %s", err)
 	}
 	if inQueue {
-		return errors.Join(repository.ErrPlayerAlreadyInQueue, fmt.Errorf("已在匹配队列: %s", existPool))
+		return errors.Join(transfer.ErrPlayerAlreadyInQueue, fmt.Errorf("已在匹配队列: %s", existPool))
 	}
 
 	// 2. 如果是排位模式，需要根据用户 ranking 转换成具体的段位池

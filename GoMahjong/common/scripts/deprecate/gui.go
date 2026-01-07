@@ -1,6 +1,10 @@
-package main
+package deprecate
+
+/*
+废弃的 gui 测试
 
 import (
+	"common/scripts"
 	"fmt"
 	"image/color"
 	"sync"
@@ -37,7 +41,7 @@ func (t *ChineseTheme) Size(name fyne.ThemeSizeName) float32 {
 // PlayerWindow 代表一个玩家的 GUI 窗口
 type PlayerWindow struct {
 	userID       string
-	client       *TestClient
+	client       *main.TestClient
 	window       fyne.Window
 	logLabel     *widget.Label
 	commandEntry *widget.Entry
@@ -142,7 +146,7 @@ func (pw *PlayerWindow) createUI() {
 
 // Connect 连接到服务器
 func (pw *PlayerWindow) Connect() error {
-	pw.client = NewTestClient(pw.userID)
+	pw.client = main.NewTestClient(pw.userID)
 	if err := pw.client.Connect(); err != nil {
 		pw.addLog("ERROR", fmt.Sprintf("Connect failed: %v", err))
 		return err
@@ -262,3 +266,5 @@ func (pw *PlayerWindow) Close() {
 	}
 	pw.window.Close()
 }
+
+*/

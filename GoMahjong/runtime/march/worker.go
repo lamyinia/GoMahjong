@@ -93,8 +93,6 @@ func (w *Worker) Start(ctx context.Context, natsURL string) error {
 		pool.Start()
 	}
 
-	go w.cleanupExpiredPlayers(ctx)
-
 	log.Info(fmt.Sprintf("March Worker[%s] 启动成功，已启动 %d 个匹配池", w.NodeID, len(w.matchPools)))
 	return nil
 }
@@ -114,7 +112,7 @@ func (w *Worker) processMatchResults(ctx context.Context) {
 			}
 			if err := w.handleMatchSuccess(ctx, result); err != nil {
 				log.Error(fmt.Sprintf("March Worker[%s] 处理匹配结果失败: %v", w.NodeID, err))
-				// TODO: 通知客户端匹配失败
+				// fixme 通知客户端匹配失败
 			}
 		case <-w.stopChan:
 			log.Info(fmt.Sprintf("March Worker[%s] 匹配结果处理收到停止信号", w.NodeID))
@@ -130,7 +128,7 @@ func (w *Worker) processMatchResults(ctx context.Context) {
 // 通过 gRPC 调用 Game 节点创建房间
 func (w *Worker) handleMatchSuccess(ctx context.Context, result *service.MatchResult) error {
 	if err := w.callGameCreateRoom(ctx, result); err != nil {
-		// todo 通知匹配异常
+		// fixme 通知匹配异常
 		return fmt.Errorf("调用 Game 创建房间失败: %w", err)
 	}
 	log.Info(fmt.Sprintf("March Worker 匹配成功处理完成: poolID=%s, gameNode=%s, players=%d", result.PoolID, result.GameNodeAddr, len(result.Players)))
@@ -141,7 +139,6 @@ func (w *Worker) handleMatchSuccess(ctx context.Context, result *service.MatchRe
 func (w *Worker) callGameCreateRoom(ctx context.Context, result *service.MatchResult) error {
 	// 根据 poolID 推断引擎类型
 	engineType := inferEngineType(result.PoolID)
-
 	// 获取 Game 节点的 gRPC 客户端
 	client, err := w.gameConnPool.GetClient(result.GameNodeAddr)
 	if err != nil {
@@ -162,7 +159,7 @@ func (w *Worker) callGameCreateRoom(ctx context.Context, result *service.MatchRe
 	}
 
 	if !resp.Success {
-		return fmt.Errorf("Game 创建房间失败: %s", resp.Message)
+		return fmt.Errorf("game 创建房间失败: %s", resp.Message)
 	}
 
 	log.Info(fmt.Sprintf("March Worker 通过 gRPC 创建房间成功: poolID=%s, gameNodeAddr=%s, roomID=%s, players=%d",
@@ -179,28 +176,6 @@ func inferEngineType(poolID string) int32 {
 		return RIICHI_MAHJONG_3P_ENGINE
 	}
 	return RIICHI_MAHJONG_4P_ENGINE
-}
-
-// cleanupExpiredPlayers 清理过期玩家（每5分钟执行一次）
-func (w *Worker) cleanupExpiredPlayers(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	log.Info(fmt.Sprintf("March Worker[%s] 过期玩家清理启动，间隔: 5分钟", w.NodeID))
-
-	for {
-		select {
-		case <-ticker.C:
-			// TODO: 调用 MatchService 匹配超时的玩家，先占位
-			log.Debug("March Worker 执行过期玩家清理")
-		case <-w.stopChan:
-			log.Info(fmt.Sprintf("March Worker[%s] 过期玩家清理停止", w.NodeID))
-			return
-		case <-ctx.Done():
-			log.Info(fmt.Sprintf("March Worker[%s] 收到上下文取消信号，停止过期玩家清理", w.NodeID))
-			return
-		}
-	}
 }
 
 // Close 关闭 Worker

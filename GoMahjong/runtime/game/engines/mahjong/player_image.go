@@ -79,6 +79,7 @@ func (p *PlayerImage) AddTile(tile Tile) {
 	p.Tiles = append(p.Tiles, tile)
 }
 
+// DrawTile 摸牌
 func (p *PlayerImage) DrawTile(tile Tile) {
 	p.Tiles = append(p.Tiles, tile)
 	newest := tile

@@ -87,7 +87,6 @@ func healthCheckMarch(connectorID string) error {
 	if resp.GetStatus() == matchpb.QueryStatusResponse_STATUS_UNKNOWN {
 		joinReq := &matchpb.JoinQueueRequest{
 			UserID: "health-check",
-			NodeID: connectorID,
 		}
 		if _, err := rpc.MatchClient.JoinQueue(ctx, joinReq); err != nil {
 			return fmt.Errorf("JoinQueue 调用失败: %w", err)
@@ -118,7 +117,7 @@ func rpcSelfTest(connectorID string) error {
 	leaveResp, err := rpc.MatchClient.LeaveQueue(ctx, &matchpb.LeaveQueueRequest{
 		UserID: userID,
 	})
-	if err != nil || !leaveResp.GetSuccess() {
+	if err != nil {
 		return fmt.Errorf("LeaveQueue 失败, resp=%+v err=%w", leaveResp, err)
 	}
 	return nil

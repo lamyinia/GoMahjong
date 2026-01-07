@@ -20,53 +20,41 @@ const (
 type TurnState int // 空闲、收集、等待出牌者反应、等待非出牌者反应
 
 const (
-	StateWaiting   TurnState = iota // 等待开始
-	StateDropping                   // 等待出牌、立直
-	StateSelecting                  // 吃碰杠收集
-	StateReacting                   // 等待反应（吃碰杠和）
-	StateChoosing                   // 吃碰杠收集等算法执行
+	TurnStateIdle           TurnState = iota // 等待开始
+	TurnStateWaitMain                        // 等待出牌、立直
+	TurnStateSelecting                       // 吃、碰、杠、立直收集
+	TurnStateWaitReactions                   // 等待反应（吃碰杠和）
+	TurnStateApplyOperation                  // 棋牌格局归属改变，如洗牌、打牌、鸣牌
 )
 
 type TurnManager struct {
 	TurnPointer int       // 当前出牌玩家座位
 	State       TurnState // 当前回合状态
 	Tickers     [4]*PlayerTicker
-
-	// 并发控制
-	sync.RWMutex
 }
 
 // NewTurnManager 创建新的回合管理器
 func NewTurnManager(tickers [4]*PlayerTicker) *TurnManager {
 	return &TurnManager{
 		TurnPointer: 0,
-		State:       StateWaiting,
+		State:       TurnStateIdle,
 		Tickers:     tickers,
 	}
 }
 
 // NextTurn 下一个玩家出牌
 func (tm *TurnManager) NextTurn() int {
-	tm.Lock()
-	defer tm.Unlock()
-
 	tm.TurnPointer = (tm.TurnPointer + 1) % 4
 	return tm.TurnPointer
 }
 
 // GetCurrentPlayer 获取当前出牌玩家座位
 func (tm *TurnManager) GetCurrentPlayer() int {
-	tm.RLock()
-	defer tm.RUnlock()
-
 	return tm.TurnPointer
 }
 
 // GetState 获取当前回合状态
 func (tm *TurnManager) GetState() TurnState {
-	tm.RLock()
-	defer tm.RUnlock()
-
 	return tm.State
 }
 
@@ -79,19 +67,15 @@ func (tm *TurnManager) stopAllTickers() {
 }
 
 // EnterDropPhase 进入出牌阶段
-// seatIndex: 出牌玩家座位
 // roundCompensation: 本回合补偿时间（秒），默认 5 秒
 func (tm *TurnManager) EnterDropPhase(seatIndex int, roundCompensation int) error {
-	tm.Lock()
-	defer tm.Unlock()
-
 	if seatIndex < 0 || seatIndex >= 4 {
 		return fmt.Errorf("无效的座位索引: %d", seatIndex)
 	}
 
 	tm.stopAllTickers()
 	tm.TurnPointer = seatIndex
-	tm.State = StateDropping
+	tm.State = TurnStateWaitMain
 
 	// 启动出牌玩家的计时
 	// 分配时间 = 玩家总剩余时间 + 本回合补偿
@@ -101,7 +85,6 @@ func (tm *TurnManager) EnterDropPhase(seatIndex int, roundCompensation int) erro
 		allocatedTime = DefaultMaxRoundTime
 	}
 	ticker.SetAvailable(allocatedTime)
-
 	if err := ticker.Start(allocatedTime); err != nil {
 		return fmt.Errorf("启动出牌计时失败: %v", err)
 	}
@@ -112,43 +95,31 @@ func (tm *TurnManager) EnterDropPhase(seatIndex int, roundCompensation int) erro
 // EnterSelectingPhase 进入收集阶段（吃碰杠）
 // 此阶段不需要计时
 func (tm *TurnManager) EnterSelectingPhase() {
-	tm.Lock()
-	defer tm.Unlock()
 	tm.stopAllTickers()
-	tm.State = StateSelecting
+	tm.State = TurnStateSelecting
 }
 
 // EnterReactingPhase 进入等待反应阶段（吃碰杠）
 // 此阶段不需要计时
 func (tm *TurnManager) EnterReactingPhase() {
-	tm.Lock()
-	defer tm.Unlock()
 	tm.stopAllTickers()
-	tm.State = StateReacting
+	tm.State = TurnStateWaitReactions
 }
 
 // EnterChoosingPhase 进入选择阶段（吃碰杠）
 // 此阶段不需要计时
 func (tm *TurnManager) EnterChoosingPhase() {
-	tm.Lock()
-	defer tm.Unlock()
 	tm.stopAllTickers()
-	tm.State = StateChoosing
+	tm.State = TurnStateApplyOperation
 }
 
 // GetPlayerTicker 获取玩家的计时器
 func (tm *TurnManager) GetPlayerTicker(seatIndex int) *PlayerTicker {
-	tm.RLock()
-	defer tm.RUnlock()
-
 	return tm.Tickers[seatIndex]
 }
 
 // GetAllPlayerTimerStates 获取所有玩家的计时器状态
 func (tm *TurnManager) GetAllPlayerTimerStates() [4]TickerState {
-	tm.RLock()
-	defer tm.RUnlock()
-
 	var states [4]TickerState
 	for i := 0; i < 4; i++ {
 		states[i] = tm.Tickers[i].GetState()
@@ -217,12 +188,10 @@ func (pt *PlayerTicker) Start(duration int) error {
 func (pt *PlayerTicker) timerLoop(duration int) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(duration)*time.Second)
 	defer cancel()
-
 	pt.Lock()
 	pt.ctx = ctx
 	pt.cancel = cancel
 	pt.Unlock()
-
 	<-ctx.Done()
 
 	pt.Lock()
@@ -273,9 +242,7 @@ func (pt *PlayerTicker) Stop() bool {
 func (pt *PlayerTicker) SetAvailable(Available int) int {
 	pt.Lock()
 	defer pt.Unlock()
-
 	pt.Available = Available
-
 	return pt.Available
 }
 
@@ -283,7 +250,6 @@ func (pt *PlayerTicker) SetAvailable(Available int) int {
 func (pt *PlayerTicker) GetState() TickerState {
 	pt.RLock()
 	defer pt.RUnlock()
-
 	return pt.State
 }
 
@@ -291,7 +257,6 @@ func (pt *PlayerTicker) GetState() TickerState {
 func (pt *PlayerTicker) SetOnTimeout(callback func()) {
 	pt.Lock()
 	defer pt.Unlock()
-
 	pt.onTimeout = callback
 }
 
@@ -299,7 +264,6 @@ func (pt *PlayerTicker) SetOnTimeout(callback func()) {
 func (pt *PlayerTicker) SetOnStop(callback func()) {
 	pt.Lock()
 	defer pt.Unlock()
-
 	pt.onStop = callback
 }
 
@@ -307,7 +271,6 @@ func (pt *PlayerTicker) SetOnStop(callback func()) {
 func (pt *PlayerTicker) SetOnStateChange(callback func(oldState, newState TickerState)) {
 	pt.Lock()
 	defer pt.Unlock()
-
 	pt.onStateChange = callback
 }
 

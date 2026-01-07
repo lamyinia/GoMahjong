@@ -8,7 +8,7 @@ type Hand34 [34]uint8
 
 type Candidate struct {
 	DiscardType    TileType
-	DiscardOptions []Tile     // 实体牌：红5/普通5供 UI 选择
+	DiscardOptions []Tile     // 实体牌
 	Waits          []TileType // 听哪些牌
 	Ukeire         int        // 有效张数
 }
@@ -30,23 +30,18 @@ func NewSearcher() *Searcher {
 
 // SeekCandidates 弃牌后,有哪些牌听牌，是否允许立直由引擎层判断
 func (s *Searcher) SeekCandidates(hand14 []Tile, fixedMelds int, visible *[34]uint8) []Candidate {
-
 	h14, discardOpts := Hand34FromTiles(hand14)
 	var out []Candidate
-
 	for i := 0; i < 34; i++ {
 		if h14[i] == 0 {
 			continue
 		}
-
 		h13 := h14
 		h13[i]--
-
 		waits, ukeire := s.WaitsAndUkeire(h13, fixedMelds, visible)
 		if len(waits) == 0 {
 			continue
 		}
-
 		out = append(out, Candidate{
 			DiscardType:    TileType(i),
 			DiscardOptions: discardOpts[TileType(i)],

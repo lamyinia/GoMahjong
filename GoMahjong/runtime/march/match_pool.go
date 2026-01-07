@@ -77,7 +77,7 @@ func (p *MatchPool) matchLoop() {
 		case <-ticker.C:
 			p.doBatchMatch()
 		case <-p.stopChan:
-			log.Info("匹配池 [%s] 收到停止信号", p.poolID)
+			log.Debug("匹配池 [%s] 收到停止信号", p.poolID)
 			return
 		}
 	}
@@ -96,14 +96,14 @@ func (p *MatchPool) doBatchMatch() {
 			break
 		}
 
-		// 发送匹配结果到 channel（非阻塞，如果 channel 满了可以优先考虑阻塞）
 		select {
 		case p.resultChan <- result:
 		case <-p.stopChan:
+			// 一般不会出现主动关闭匹配池时，还有玩家在匹配的情况
 			log.Warn("匹配池 [%s] 收到停止信号，丢弃匹配结果", p.poolID)
 			return
-			//default:
-			//	log.Error("匹配池 [%s] 匹配结果 channel 已满，丢弃匹配结果: %d 个玩家", p.poolID, len(result.Players))
+		default:
+			// fixme 通知玩家匹配异常
 		}
 	}
 }

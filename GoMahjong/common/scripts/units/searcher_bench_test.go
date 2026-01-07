@@ -1,4 +1,4 @@
-package main
+package units
 
 import (
 	"runtime/game/engines/mahjong"
@@ -90,10 +90,11 @@ func BenchmarkWaitsAndUkeire_ChiitoiTenpai_Cached(b *testing.B) {
 	}
 }
 
-func BenchmarkRiichiCandidates_Cached(b *testing.B) {
-	s, _, _, hand14 := makeSearcherAndHands()
+func BenchmarkRiichiCandidates_NO_Cached(b *testing.B) {
+	_, _, _, hand14 := makeSearcherAndHands()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		s := mahjong.NewSearcher()
 		_ = s.SeekCandidates(hand14, 0, nil)
 	}
 }
