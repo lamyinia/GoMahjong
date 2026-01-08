@@ -1,8 +1,9 @@
 package utils
 
 import (
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func ToTime(value interface{}) time.Time {
@@ -59,4 +60,50 @@ func Contains[T int | string](data []T, value T) bool {
 		}
 	}
 	return false
+}
+
+func ToString(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case *string:
+		if v != nil {
+			return *v
+		}
+	default:
+		return ""
+	}
+	return ""
+}
+
+func ToIntArray(value interface{}) [4]int {
+	var result [4]int
+	switch v := value.(type) {
+	case []interface{}:
+		for i := 0; i < 4 && i < len(v); i++ {
+			result[i] = ToInt(v[i])
+		}
+	case []int:
+		for i := 0; i < 4 && i < len(v); i++ {
+			result[i] = v[i]
+		}
+	case [4]int:
+		return v
+	}
+	return result
+}
+
+func ToStringArray(value interface{}) []string {
+	switch v := value.(type) {
+	case []interface{}:
+		result := make([]string, len(v))
+		for i, item := range v {
+			result[i] = ToString(item)
+		}
+		return result
+	case []string:
+		return v
+	default:
+		return []string{}
+	}
 }

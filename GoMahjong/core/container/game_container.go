@@ -18,10 +18,11 @@ import (
 // 继承 BaseContainer 的数据库连接，添加 game 服务特定的依赖
 type GameContainer struct {
 	*BaseContainer
-	userRepository repository.UserRepository
-	GameWorker     *game.Worker
-	closed         bool
-	mu             sync.Mutex
+	userRepository       repository.UserRepository
+	gameRecordRepository repository.GameRecordRepository
+	GameWorker           *game.Worker
+	closed               bool
+	mu                   sync.Mutex
 }
 
 // NewGameContainer 创建 game 服务容器
@@ -34,8 +35,11 @@ func NewGameContainer() *GameContainer {
 
 	// 创建 game 服务需要的仓储
 	userRepo := persistence.NewUserRepository(base.mongo, base.redis)
+	gameRecordRepo := persistence.NewGameRecordRepository(base.mongo)
 	// 创建 GameWorker
 	worker := game.NewWorker(config.GameNodeConfig.ID)
+	// 注入 GameRecordRepository 到 Worker
+	worker.SetGameRecordRepository(gameRecordRepo)
 	// 步骤 1：创建 Engine 原型（使用原型模式，注入 Worker）,目前只支持立直麻将 4 人引擎
 	enginePrototypes := createEnginePrototypes(worker)
 	// 步骤 2：注入 Engine 原型到 RoomManager
@@ -51,9 +55,10 @@ func NewGameContainer() *GameContainer {
 	worker.SetGameService(gameService)
 
 	return &GameContainer{
-		BaseContainer:  base,
-		userRepository: userRepo,
-		GameWorker:     worker,
+		BaseContainer:        base,
+		userRepository:       userRepo,
+		gameRecordRepository: gameRecordRepo,
+		GameWorker:           worker,
 	}
 }
 

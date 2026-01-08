@@ -171,29 +171,6 @@ var RiichiMahjong4pYakuRegistry = []YakuChecker{
 	yakuCheckerFunc{id: YakuKokushi, check: func(ctx *YakuContext) (int, int) { return 0, 0 }},
 }
 
-func buildTileTypeCountsForClaim(ctx *YakuContext) (map[TileType]int, int) {
-	counts := make(map[TileType]int, 34)
-	total := 0
-	if ctx == nil || ctx.Winner == nil {
-		return counts, 0
-	}
-	for _, t := range ctx.Winner.Tiles {
-		counts[t.Type]++
-		total++
-	}
-	for _, m := range ctx.Winner.Melds {
-		for _, t := range m.Tiles {
-			counts[t.Type]++
-			total++
-		}
-	}
-	if ctx.Claim.HasLoser {
-		counts[ctx.Claim.WinTile.Type]++
-		total++
-	}
-	return counts, total
-}
-
 func isHonor(tt TileType) bool { return tt >= East }
 
 func suitOfTileType(tt TileType) int {
@@ -235,6 +212,7 @@ func isKokushiTileType(tt TileType) bool {
 	}
 }
 
+// checkSuuankouTanki 四暗刻单骑
 func checkSuuankouTanki(ctx *YakuContext) bool {
 	if ctx == nil || ctx.Winner == nil {
 		return false
@@ -275,11 +253,13 @@ func checkSuuankouTanki(ctx *YakuContext) bool {
 	return pair == ctx.Claim.WinTile.Type
 }
 
+// checkDaisushi check 大四喜
 func checkDaisushi(ctx *YakuContext) bool {
 	counts, _ := buildTileTypeCountsForClaim(ctx)
 	return counts[East] >= 3 && counts[South] >= 3 && counts[West] >= 3 && counts[North] >= 3
 }
 
+// checkKokushi13 check 国士无双
 func checkKokushi13(ctx *YakuContext) bool {
 	if ctx == nil || ctx.Winner == nil {
 		return false
@@ -318,6 +298,7 @@ func checkKokushi13(ctx *YakuContext) bool {
 	return true
 }
 
+// checkJunseiChuuren check 纯正九莲宝灯
 func checkJunseiChuuren(ctx *YakuContext) bool {
 	if ctx == nil || ctx.Winner == nil {
 		return false
@@ -377,4 +358,27 @@ func checkJunseiChuuren(ctx *YakuContext) bool {
 		}
 	}
 	return true
+}
+
+func buildTileTypeCountsForClaim(ctx *YakuContext) (map[TileType]int, int) {
+	counts := make(map[TileType]int, 34)
+	total := 0
+	if ctx == nil || ctx.Winner == nil {
+		return counts, 0
+	}
+	for _, t := range ctx.Winner.Tiles {
+		counts[t.Type]++
+		total++
+	}
+	for _, m := range ctx.Winner.Melds {
+		for _, t := range m.Tiles {
+			counts[t.Type]++
+			total++
+		}
+	}
+	if ctx.Claim.HasLoser {
+		counts[ctx.Claim.WinTile.Type]++
+		total++
+	}
+	return counts, total
 }

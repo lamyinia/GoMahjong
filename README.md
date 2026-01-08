@@ -20,7 +20,7 @@ GoMahjong/                               # 项目代码
   connector/                             # 长连接网关服务
     app/                                 # 应用启动
   core/                                  # 核心域与容器
-    container/                           # 容器初始化和注入
+    container/                           # 容器初始化和依赖注入
     domain/                              # 领域模型
       entity/                            # 实体
       repository/                        # 仓储
@@ -76,6 +76,7 @@ GoMahjong/                               # 项目代码
       room_manager.go                    # 房间管理器
       worker.go                          # 工作器，处理消息和房间管理
     march/                               # 匹配核心逻辑
+    	march_pool.go				   # 匹配池
   user/                                  # 用户服务
     api/                                 # API 定义
     app/                                 # 应用启动

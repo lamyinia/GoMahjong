@@ -2,6 +2,7 @@ package transfer
 
 import (
 	"errors"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -20,6 +21,9 @@ var (
 
 	// 用户路由相关错误
 	ErrRouterNotFound = errors.New("user router not found")
+
+	// 游戏记录相关错误
+	ErrGameRecordNotFound = errors.New("game record not found")
 
 	ErrMongodb = errors.New("mongodb error happen")
 	ErrRedis   = errors.New("redis error happen")

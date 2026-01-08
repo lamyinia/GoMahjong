@@ -38,10 +38,7 @@ func NewMonitor(roomManager *RoomManager, registry *discovery.Registry, updateIn
 func (m *Monitor) Report(ctx context.Context) {
 	ticker := time.NewTicker(m.updateInterval)
 	defer ticker.Stop()
-
-	// 立即执行一次
 	m.reportLoad()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -77,13 +74,8 @@ func (m *Monitor) reportLoad() {
 
 // collectLoadInfo 收集负载信息
 func (m *Monitor) collectLoadInfo() *LoadInfo {
-	// 从 RoomManager 获取房间数和玩家数
 	gameCount, playerCount := m.roomManager.GetStats()
-
-	// 获取 CPU 使用率（简化实现，后续可以使用 gopsutil 库）
 	cpuUsage := m.getCPUUsage()
-
-	// 获取内存使用率
 	memUsage := m.getMemoryUsage()
 
 	return &LoadInfo{
@@ -132,22 +124,17 @@ func (m *Monitor) getCPUUsage() float64 {
 func (m *Monitor) getMemoryUsage() float64 {
 	var mStats runtime.MemStats
 	runtime.ReadMemStats(&mStats)
-
 	// 计算当前进程的内存使用率
 	// 注意：这里计算的是 Go 进程的内存使用，不是系统总内存
 	// 如果需要系统总内存使用率，需要使用 gopsutil 库
-
 	// 获取系统总内存（简化处理，假设为 8GB）
 	// 实际应该使用 gopsutil 获取系统总内存
 	totalMemory := uint64(8 * 1024 * 1024 * 1024) // 8GB
-
 	if totalMemory == 0 {
 		return 0.0
 	}
-
 	// 计算内存使用率（当前进程使用的内存 / 系统总内存）
 	memUsage := float64(mStats.Sys) / float64(totalMemory) * 100.0
-
 	// 限制在 0-100 之间
 	if memUsage > 100.0 {
 		memUsage = 100.0

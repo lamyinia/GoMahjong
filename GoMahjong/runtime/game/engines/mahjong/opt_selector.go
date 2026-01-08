@@ -3,24 +3,19 @@ package mahjong
 // calculateAvailableOperations 计算可用操作
 func (eg *RiichiMahjong4p) calculateAvailableOperations(excludeSeat int) map[int]*PlayerReaction {
 	reactions := make(map[int]*PlayerReaction)
-
 	// 获取出牌玩家打出的最后一张牌
 	droppingPlayer := eg.TurnManager.GetCurrentPlayer()
 	droppingPlayerObj := eg.Players[droppingPlayer]
 	if droppingPlayerObj == nil || len(droppingPlayerObj.DiscardPile) == 0 {
 		return reactions
 	}
-
 	droppedTile := droppingPlayerObj.DiscardPile[len(droppingPlayerObj.DiscardPile)-1]
-
 	// 检查每个反应玩家的操作
 	for i := 0; i < 4; i++ {
 		if i == excludeSeat {
 			continue
 		}
-
 		var playerOps []*PlayerOperation
-
 		// 检查是否可以荣和
 		if eg.canHu(i, droppedTile) {
 			playerOps = append(playerOps, &PlayerOperation{
@@ -28,21 +23,17 @@ func (eg *RiichiMahjong4p) calculateAvailableOperations(excludeSeat int) map[int
 				Tiles: []Tile{droppedTile},
 			})
 		}
-
 		// 检查是否可以明杠
 		gangOps := eg.getGangOptions(i, droppedTile)
 		playerOps = append(playerOps, gangOps...)
-
 		// 检查是否可以碰
 		pengOps := eg.getPengOptions(i, droppedTile)
 		playerOps = append(playerOps, pengOps...)
-
 		// 检查是否可以吃（只有下家可以吃）
 		if (droppingPlayer+1)%4 == i {
 			chiOps := eg.getChiOptions(i, droppedTile)
 			playerOps = append(playerOps, chiOps...)
 		}
-
 		if len(playerOps) > 0 {
 			reactions[i] = &PlayerReaction{
 				Operations: playerOps,
@@ -71,11 +62,9 @@ func (eg *RiichiMahjong4p) getPengOptions(seatIndex int, droppedTile Tile) []*Pl
 			matchingTiles = append(matchingTiles, tile)
 		}
 	}
-
 	if len(matchingTiles) < 2 {
 		return ops
 	}
-
 	for i := 0; i < len(matchingTiles); i++ {
 		for j := i + 1; j < len(matchingTiles); j++ {
 			ops = append(ops, &PlayerOperation{
@@ -154,7 +143,6 @@ func (eg *RiichiMahjong4p) findChiCombinations(hand []Tile, droppedTile Tile) []
 
 // isSameTile 判断两张牌是否相同
 func (eg *RiichiMahjong4p) isSameTile(tile1, tile2 Tile) bool {
-	// 如果Type不同，肯定不是同一张牌
 	if tile1.Type != tile2.Type {
 		return false
 	}

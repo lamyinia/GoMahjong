@@ -53,7 +53,7 @@ func toMahjongTile(t share.Tile) Tile {
 		就是枚举打出的牌，然后跑和牌算法，给 ai 评测了一下，跑一次，平均情况 1ms 以内是可以跑完的，最坏 3 ms，自己测了一点数据大概只需要 0.2 ms
 	番符计算
 
-	fixme 通知、广播：
+	通知、广播：
 		具体包括：通知每个人的手牌、广播 dora 牌，广播玩家打牌、吃牌、碰牌、杠牌、立直、荣胡、自摸，广播回合结果，广播游戏结果
 	自己手牌（完整）, 其他三家手牌（不可见，只给副露/牌河/立直状态）
 	场况：庄家、场风、局数、本场、供托,宝牌指示牌（公开）
@@ -62,8 +62,12 @@ func toMahjongTile(t share.Tile) Tile {
 
 	fixme 算法收集和响应，包括出牌者和非出牌者的收集和响应
 
+	fixme 抢杠算一役
+
 	fixme 立直，立直后只能暗杠，进入类似一种托管的状态，需要加额外逻辑处理
 	立直资格，具体来说，包括是否门清（len(Melds)==0 且无副露），当前不是最后巡/海底，点数 >= 1000，是否已经立直，立直宣言后扣棒、供托处理
+
+	平和特殊处理：平和固定30符（荣和）或20符（自摸），需要特殊判断
 */
 
 // RiichiMahjong4p 日麻四人游戏引擎
@@ -78,6 +82,7 @@ type RiichiMahjong4p struct {
 	TurnManager     *TurnManager               // 回合管理
 	roundStartTimer *time.Timer                // 开局延迟计时器（用于 Close 时停止）
 	lastDiscard     LastDiscard
+	Persister       *GamePersister // 持久化组件
 
 	gameEvents chan share.GameEvent
 	gameDone   chan struct{}
@@ -138,6 +143,14 @@ func (eg *RiichiMahjong4p) InitializeEngine(roomID string, userMap map[string]*s
 	}
 	eg.TurnManager = NewTurnManager(tickers)
 	eg.State = engines.GameWaiting
+
+	// 初始化持久化组件
+	if eg.Worker != nil && eg.Worker.GameRecordRepository != nil {
+		eg.Persister = NewGamePersister(eg.Worker.GameRecordRepository, roomID, userMap)
+	}
+
+	go eg.pushMatchSuccessMessage(userMap)
+
 	eg.roundStartTimer = time.AfterFunc(DefaultWaitStartTime, func() {
 		eg.State = engines.GameInProgress
 		eg.NotifyEvent(&StartRoundEvent{})
@@ -205,6 +218,14 @@ func (eg *RiichiMahjong4p) processEvent(event share.GameEvent) {
 		if gangEvent, ok := event.(*share.GangEvent); ok {
 			eg.handleGangEvent(gangEvent)
 		}
+	case "Ankan":
+		if ankanEvent, ok := event.(*share.AnkanEvent); ok {
+			eg.handleAnkanEvent(ankanEvent)
+		}
+	case "Kakan":
+		if kakanEvent, ok := event.(*share.KakanEvent); ok {
+			eg.handleKakanEvent(kakanEvent)
+		}
 	case "Chi":
 		if chiEvent, ok := event.(*share.ChiEvent); ok {
 			eg.handleChiEvent(chiEvent)
@@ -242,6 +263,13 @@ func (eg *RiichiMahjong4p) handleRongHuEvent(event *share.RongHuEvent) {
 	if event == nil {
 		return
 	}
+	// 广播荣和（在结算前先广播）
+	if eg.lastDiscard.Valid {
+		seatIndex, err := eg.getSeatIndex(event.GetUserID())
+		if err == nil {
+			eg.broadcastRon(seatIndex, eg.lastDiscard.Seat, eg.lastDiscard.Tile)
+		}
+	}
 	eg.handleReactionHuEvent(&share.HuEvent{GameMessageEvent: event.GameMessageEvent})
 }
 
@@ -260,6 +288,8 @@ func (eg *RiichiMahjong4p) handleTouchHuEvent(event *share.TouchHuEvent) {
 		log.Warn("自摸结算失败: 玩家或 NewestTile 为空: seat=%d", seatIndex)
 		return
 	}
+	// 广播自摸（在结算前先广播）
+	eg.broadcastTsumo(seatIndex, *p.NewestTile)
 	eg.handleRoundOverEvent([]HuClaim{{WinnerSeat: seatIndex, WinTile: *p.NewestTile}}, RoundEndTsumo)
 }
 
@@ -281,6 +311,20 @@ func (eg *RiichiMahjong4p) handleStartRoundEvent() {
 	eg.DeckManager.InitRound()
 	eg.DeckManager.RevealDoraIndicator()
 	eg.distributeCard()
+
+	// 记录回合开始
+	if eg.Persister != nil {
+		eg.Persister.StartRound(
+			eg.Situation.RoundNumber,
+			eg.Situation.RoundWind.String(),
+			eg.Situation.DealerIndex,
+			eg.Situation.Honba,
+		)
+	}
+
+	// 推送回合开始
+	eg.broadcastRoundStart()
+
 	eg.DropTurn(eg.Situation.DealerIndex, true)
 }
 
@@ -347,6 +391,8 @@ func (eg *RiichiMahjong4p) DropTurn(seatIndex int, needTile bool) {
 		p := eg.Players[seatIndex]
 		if p != nil {
 			p.DrawTile(t)
+			// 推送摸牌（仅自己可见）
+			eg.pushDrawTile(seatIndex, t)
 		}
 	}
 	if err := eg.TurnManager.EnterDropPhase(seatIndex, DefaultRoundCompensation); err != nil {
@@ -370,6 +416,8 @@ func (eg *RiichiMahjong4p) handleRoundOverEvent(claims []HuClaim, endKind string
 		eg.LeadNormalDrawEnding()
 	case RoundEndDraw3Ron:
 		eg.LeadHalfwayDrawEnding("三家点铳")
+	case RoundEndDraw4Kan:
+		eg.LeadHalfwayDrawEnding("四杠散了")
 	case RoundEndTsumo:
 		if len(claims) == 0 {
 			eg.HappenDamageError("自摸结算 claims 为空")
@@ -424,13 +472,18 @@ func (eg *RiichiMahjong4p) LeadNormalDrawEnding() {
 		}
 	}
 
+	nextDealer := eg.Situation.DealerIndex
 	if dealerTenpai {
 		eg.Situation.Honba++
 	} else {
 		eg.Situation.Honba = 0
 		eg.Situation.DealerIndex = (eg.Situation.DealerIndex + 1) % 4
 		eg.Situation.RoundNumber++
+		nextDealer = eg.Situation.DealerIndex
 	}
+
+	// 广播回合结束
+	eg.broadcastRoundEnd(RoundEndDrawExhaustive, []HuClaimDTO{}, delta, "荒牌流局", nextDealer)
 
 	eg.finalizeRound(delta, -1)
 }
@@ -439,6 +492,17 @@ func (eg *RiichiMahjong4p) LeadNormalDrawEnding() {
 func (eg *RiichiMahjong4p) LeadHalfwayDrawEnding(reason string) {
 	var delta [4]int
 	eg.Situation.Honba++
+	nextDealer := eg.Situation.DealerIndex
+
+	// 根据 reason 确定流局类型
+	endType := RoundEndDraw3Ron
+	if reason == "四杠散了" {
+		endType = RoundEndDraw4Kan
+	}
+
+	// 广播回合结束
+	eg.broadcastRoundEnd(endType, []HuClaimDTO{}, delta, reason, nextDealer)
+
 	eg.finalizeRound(delta, -1)
 }
 
@@ -449,37 +513,51 @@ func (eg *RiichiMahjong4p) LeadRonEnding(claims []HuClaim) {
 	}
 	var delta [4]int
 	stickWinner := selectStickWinnerRonA(claims)
-	honba := eg.Situation.Honba
 	dealer := eg.Situation.DealerIndex
 	dealerWin := false
 
+	// 转换 claims 为 DTO
+	claimDTOs := make([]HuClaimDTO, 0, len(claims))
 	for _, c := range claims {
 		if c.WinnerSeat == dealer {
 			dealerWin = true
 		}
-		_, yakumanMult, _ := eg.evalClaimYakuman(c, RoundEndRon)
-		if yakumanMult <= 0 {
+		// 如果玩家立直，翻开里宝牌指示牌
+		winner := eg.Players[c.WinnerSeat]
+		if winner != nil && winner.IsRiichi {
+			eg.revealUraDoraIndicators()
+		}
+
+		// 计算和牌点数
+		han, fu, points, yakus := eg.callHuPoints(c, RoundEndRon)
+		if points == 0 {
+			// 没有有效和牌，跳过
 			continue
 		}
-		base := 8000 * yakumanMult
-		pay := base * 4
-		if c.WinnerSeat == dealer {
-			pay = base * 6
-		}
-		pay += 300 * honba
-		delta[c.WinnerSeat] += pay
+
+		// 荣和：放铳玩家支付全部点数
+		delta[c.WinnerSeat] += points
 		if c.HasLoser {
-			delta[c.LoserSeat] -= pay
+			delta[c.LoserSeat] -= points
 		}
+
+		// 转换为 DTO
+		claimDTO := eg.convertHuClaimToDTOWithFanFu(c, RoundEndRon, han, fu, points, yakus)
+		claimDTOs = append(claimDTOs, claimDTO)
 	}
 
+	nextDealer := eg.Situation.DealerIndex
 	if dealerWin {
 		eg.Situation.Honba++
 	} else {
 		eg.Situation.Honba = 0
 		eg.Situation.DealerIndex = (eg.Situation.DealerIndex + 1) % 4
 		eg.Situation.RoundNumber++
+		nextDealer = eg.Situation.DealerIndex
 	}
+
+	// 广播回合结束
+	eg.broadcastRoundEnd(RoundEndRon, claimDTOs, delta, "", nextDealer)
 
 	eg.finalizeRound(delta, stickWinner)
 }
@@ -492,41 +570,62 @@ func (eg *RiichiMahjong4p) LeadTsumoEnding(claim HuClaim) {
 	var delta [4]int
 	winner := claim.WinnerSeat
 	dealer := eg.Situation.DealerIndex
-	honba := eg.Situation.Honba
-	_, yakumanMult, _ := eg.evalClaimYakuman(claim, RoundEndTsumo)
-	if yakumanMult > 0 {
-		base := 8000 * yakumanMult
-		if winner == dealer {
-			payEach := base*2 + 100*honba
-			for i := 0; i < 4; i++ {
-				if i == winner {
-					continue
-				}
-				delta[i] -= payEach
-				delta[winner] += payEach
+
+	// 如果玩家立直，翻开里宝牌指示牌
+	winnerPlayer := eg.Players[winner]
+	if winnerPlayer != nil && winnerPlayer.IsRiichi {
+		eg.revealUraDoraIndicators()
+	}
+
+	// 计算和牌点数
+	han, fu, points, yakus := eg.callHuPoints(claim, RoundEndTsumo)
+	if points == 0 {
+		// 没有有效和牌
+		return
+	}
+
+	// 自摸：其他玩家支付点数
+	if winner == dealer {
+		// 庄家自摸：每人支付相同点数
+		payEach := points
+		for i := 0; i < 4; i++ {
+			if i == winner {
+				continue
 			}
-		} else {
-			for i := 0; i < 4; i++ {
-				if i == winner {
-					continue
-				}
-				pay := base + 100*honba
-				if i == dealer {
-					pay = base*2 + 100*honba
-				}
-				delta[i] -= pay
-				delta[winner] += pay
+			delta[i] -= payEach
+			delta[winner] += payEach
+		}
+	} else {
+		// 闲家自摸：闲家每人支付基础点数，庄家支付2倍
+		basePoints := points // 闲家每人支付的点数
+		dealerPay := basePoints * 2
+		for i := 0; i < 4; i++ {
+			if i == winner {
+				continue
+			}
+			if i == dealer {
+				delta[i] -= dealerPay
+				delta[winner] += dealerPay
+			} else {
+				delta[i] -= basePoints
+				delta[winner] += basePoints
 			}
 		}
 	}
 
+	nextDealer := eg.Situation.DealerIndex
 	if winner == dealer {
 		eg.Situation.Honba++
 	} else {
 		eg.Situation.Honba = 0
 		eg.Situation.DealerIndex = (eg.Situation.DealerIndex + 1) % 4
 		eg.Situation.RoundNumber++
+		nextDealer = eg.Situation.DealerIndex
 	}
+
+	// 转换为 DTO 并广播回合结束
+	claimDTO := eg.convertHuClaimToDTOWithFanFu(claim, RoundEndTsumo, han, fu, points, yakus)
+	eg.broadcastRoundEnd(RoundEndTsumo, []HuClaimDTO{claimDTO}, delta, "", nextDealer)
 
 	eg.finalizeRound(delta, winner)
 }
@@ -557,6 +656,8 @@ func (eg *RiichiMahjong4p) finalizeRound(delta [4]int, stickWinner int) {
 		}
 	}
 
+	// 判断是否游戏结束
+	gameEnd := false
 	if eg.Situation.RoundNumber > 4 {
 		maxPoints := -1
 		for i := 0; i < 4; i++ {
@@ -569,11 +670,16 @@ func (eg *RiichiMahjong4p) finalizeRound(delta [4]int, stickWinner int) {
 			}
 		}
 		if maxPoints >= 30000 {
-			eg.handlerGameOverEvent()
-			return
+			gameEnd = true
+		} else {
+			eg.Situation.RoundNumber = 1
+			//eg.Situation.RoundWind = nextWind(eg.Situation.RoundWind)
 		}
-		eg.Situation.RoundNumber = 1
-		//eg.Situation.RoundWind = nextWind(eg.Situation.RoundWind)
+	}
+
+	if gameEnd {
+		eg.handlerGameOverEvent()
+		return
 	}
 
 	eg.Reactions = make(map[int]*PlayerReaction)
@@ -581,6 +687,7 @@ func (eg *RiichiMahjong4p) finalizeRound(delta [4]int, stickWinner int) {
 	eg.NotifyEvent(&StartRoundEvent{})
 }
 
+// evalClaimYakuman 返回 番数、三倍满(1)|役满(2)、役种
 func (eg *RiichiMahjong4p) evalClaimYakuman(claim HuClaim, endKind string) (int, int, []Yaku) {
 	var winner *PlayerImage
 	if claim.WinnerSeat >= 0 && claim.WinnerSeat < 4 {
@@ -623,9 +730,56 @@ func selectStickWinnerRonA(claims []HuClaim) int {
 	return best
 }
 
+// CheckFourKanDraw 检查4杠散了流局
+func (eg *RiichiMahjong4p) CheckFourKanDraw() bool {
+	// 统计所有玩家的杠数
+	totalKans := 0
+	for i := 0; i < 4; i++ {
+		player := eg.Players[i]
+		if player == nil {
+			continue
+		}
+		for _, meld := range player.Melds {
+			if meld.Type == "Gang" || meld.Type == "Kakan" || meld.Type == "Ankan" {
+				totalKans++
+			}
+		}
+	}
+
+	// 如果有4个杠，检查岭上牌是否足够
+	if totalKans >= 4 {
+		if eg.DeckManager == nil {
+			return false
+		}
+		// 需要4张岭上牌，如果剩余不足4张，则流局
+		if eg.DeckManager.RemainingKanTiles() < 4 {
+			return true
+		}
+	}
+
+	return false
+}
+
+// revealUraDoraIndicators 翻开里宝牌指示牌（立直和牌时使用）
+func (eg *RiichiMahjong4p) revealUraDoraIndicators() {
+	if eg.DeckManager == nil {
+		return
+	}
+	// 翻开与已翻开的宝牌指示牌数量相同的里宝牌指示牌
+	doraCount := len(eg.DeckManager.GetDoraIndicators())
+	for i := 0; i < doraCount; i++ {
+		_, ok := eg.DeckManager.RevealUraDoraIndicator()
+		if !ok {
+			break // 里宝牌指示牌已全部翻开
+		}
+	}
+}
+
 // fixme 游戏结束，生命周期结束，通知结果，自毁回调
 func (eg *RiichiMahjong4p) handlerGameOverEvent() {
 	log.Info("游戏结束")
+	// 广播游戏结束
+	eg.broadcastGameEnd()
 	eg.Terminate()
 }
 
@@ -679,6 +833,9 @@ func (eg *RiichiMahjong4p) handleDropTileEvent(event *share.DropTileEvent) {
 	eg.setLastDiscard(seatIndex, tile)
 
 	log.Info("玩家 %d 出牌: %v", seatIndex, tile)
+
+	// 广播出牌（所有玩家可见）
+	eg.broadcastDiscard(seatIndex, tile)
 
 	eg.waitReaction(seatIndex)
 }
@@ -900,6 +1057,230 @@ func (eg *RiichiMahjong4p) handleReactionHuEvent(event *share.HuEvent) {
 	eg.recordPlayerResponse(seatIndex, huOp)
 }
 
+func (eg *RiichiMahjong4p) handleAnkanEvent(event *share.AnkanEvent) {
+	log.Info("处理暗杠事件")
+
+	// 暗杠只能在玩家自己的回合进行
+	if eg.TurnManager.GetState() != TurnStateWaitMain {
+		log.Warn("当前不在出牌阶段，无法暗杠")
+		return
+	}
+
+	seatIndex, err := eg.getSeatIndex(event.GetUserID())
+	if err != nil {
+		log.Warn("获取玩家座位失败: %v", err)
+		return
+	}
+
+	if seatIndex != eg.TurnManager.GetCurrentPlayer() {
+		log.Warn("不是当前玩家的回合，当前玩家: %d, 事件玩家: %d", eg.TurnManager.GetCurrentPlayer(), seatIndex)
+		return
+	}
+
+	player := eg.Players[seatIndex]
+	if player == nil {
+		log.Warn("玩家 %d 不存在", seatIndex)
+		return
+	}
+
+	tile := toMahjongTile(event.GetTile())
+
+	// 检查手牌中是否有四张相同的牌
+	count := 0
+	for _, t := range player.Tiles {
+		if t.Type == tile.Type {
+			count++
+		}
+	}
+	if count < 4 {
+		log.Warn("玩家 %d 手牌中没有四张 %v，无法暗杠", seatIndex, tile)
+		return
+	}
+
+	// 移除四张相同牌
+	removedCount := 0
+	ankanTiles := make([]Tile, 0, 4)
+	for i := len(player.Tiles) - 1; i >= 0 && removedCount < 4; i-- {
+		if player.Tiles[i].Type == tile.Type {
+			ankanTiles = append(ankanTiles, player.Tiles[i])
+			player.Tiles = append(player.Tiles[:i], player.Tiles[i+1:]...)
+			removedCount++
+		}
+	}
+
+	if removedCount != 4 {
+		eg.HappenDamageError(fmt.Sprintf("暗杠移除牌数异常: 期望4张，实际%d张", removedCount))
+		return
+	}
+
+	// 添加暗杠副露（From = -1 表示暗杠）
+	player.Melds = append(player.Melds, Meld{
+		Type:  "Ankan",
+		Tiles: ankanTiles,
+		From:  -1, // -1 表示暗杠
+	})
+
+	// 检查4杠散了流局
+	if eg.CheckFourKanDraw() {
+		eg.handleRoundOverEvent(nil, RoundEndDraw4Kan)
+		return
+	}
+
+	// 从岭上牌摸一张牌
+	if eg.DeckManager == nil {
+		eg.HappenDamageError("DeckManager 为空，无法摸岭上牌")
+		return
+	}
+
+	// 检查岭上牌是否足够
+	if !eg.DeckManager.CanKan() {
+		eg.HappenDamageError("岭上牌不足，无法暗杠")
+		return
+	}
+
+	// 从岭上牌摸一张
+	kanTile, ok := eg.DeckManager.DrawKanTile()
+	if !ok {
+		eg.HappenDamageError("岭上牌为空，无法暗杠")
+		return
+	}
+	player.DrawTile(kanTile)
+
+	// 停止当前计时
+	ticker := eg.TurnManager.GetPlayerTicker(seatIndex)
+	ticker.Stop()
+
+	// 广播暗杠（所有玩家可见）
+	eg.broadcastAnkan(seatIndex, ankanTiles)
+
+	// 推送摸牌（仅自己可见）
+	eg.pushDrawTile(seatIndex, kanTile)
+
+	// 继续当前玩家的回合（暗杠后继续出牌）
+	if err := eg.TurnManager.EnterDropPhase(seatIndex, DefaultRoundCompensation); err != nil {
+		eg.HappenDamageError("暗杠后进入出牌阶段失败")
+		return
+	}
+
+	log.Info("玩家 %d 暗杠成功，杠牌: %v", seatIndex, ankanTiles)
+}
+
+func (eg *RiichiMahjong4p) handleKakanEvent(event *share.KakanEvent) {
+	log.Info("处理加杠事件")
+
+	// 加杠只能在玩家自己的回合进行
+	if eg.TurnManager.GetState() != TurnStateWaitMain {
+		log.Warn("当前不在出牌阶段，无法加杠")
+		return
+	}
+
+	seatIndex, err := eg.getSeatIndex(event.GetUserID())
+	if err != nil {
+		log.Warn("获取玩家座位失败: %v", err)
+		return
+	}
+
+	if seatIndex != eg.TurnManager.GetCurrentPlayer() {
+		log.Warn("不是当前玩家的回合，当前玩家: %d, 事件玩家: %d", eg.TurnManager.GetCurrentPlayer(), seatIndex)
+		return
+	}
+
+	player := eg.Players[seatIndex]
+	if player == nil {
+		log.Warn("玩家 %d 不存在", seatIndex)
+		return
+	}
+
+	tile := toMahjongTile(event.GetTile())
+
+	// 检查手牌中是否有这张牌
+	if !player.RemoveTile(tile) {
+		log.Warn("玩家 %d 手牌中没有 %v，无法加杠", seatIndex, tile)
+		return
+	}
+
+	// 查找对应的碰副露
+	var pengMeldIndex = -1
+	for i, meld := range player.Melds {
+		if meld.Type == "Peng" && len(meld.Tiles) > 0 && meld.Tiles[0].Type == tile.Type {
+			pengMeldIndex = i
+			break
+		}
+	}
+
+	if pengMeldIndex == -1 {
+		log.Warn("玩家 %d 没有对应的碰副露，无法加杠", seatIndex)
+		// 恢复手牌
+		player.AddTile(tile)
+		return
+	}
+
+	// 将碰升级为杠（添加第四张牌）
+	pengMeld := &player.Melds[pengMeldIndex]
+	pengMeld.Type = "Kakan" // 或 "Gang"，根据你的设计
+	pengMeld.Tiles = append(pengMeld.Tiles, tile)
+
+	// 从岭上牌摸一张牌
+	if eg.DeckManager == nil {
+		eg.HappenDamageError("DeckManager 为空，无法摸岭上牌")
+		// 恢复手牌和副露
+		player.AddTile(tile)
+		pengMeld.Type = "Peng"
+		pengMeld.Tiles = pengMeld.Tiles[:len(pengMeld.Tiles)-1]
+		return
+	}
+
+	// 检查4杠散了流局
+	if eg.CheckFourKanDraw() {
+		// 恢复手牌和副露
+		player.AddTile(tile)
+		pengMeld.Type = "Peng"
+		pengMeld.Tiles = pengMeld.Tiles[:len(pengMeld.Tiles)-1]
+		eg.handleRoundOverEvent(nil, RoundEndDraw4Kan)
+		return
+	}
+
+	// 检查岭上牌是否足够
+	if !eg.DeckManager.CanKan() {
+		eg.HappenDamageError("岭上牌不足，无法加杠")
+		// 恢复手牌和副露
+		player.AddTile(tile)
+		pengMeld.Type = "Peng"
+		pengMeld.Tiles = pengMeld.Tiles[:len(pengMeld.Tiles)-1]
+		return
+	}
+
+	// 从岭上牌摸一张
+	kanTile, ok := eg.DeckManager.DrawKanTile()
+	if !ok {
+		eg.HappenDamageError("岭上牌为空，无法加杠")
+		// 恢复手牌和副露
+		player.AddTile(tile)
+		pengMeld.Type = "Peng"
+		pengMeld.Tiles = pengMeld.Tiles[:len(pengMeld.Tiles)-1]
+		return
+	}
+	player.DrawTile(kanTile)
+
+	// 停止当前计时
+	ticker := eg.TurnManager.GetPlayerTicker(seatIndex)
+	ticker.Stop()
+
+	// 广播加杠（所有玩家可见）
+	eg.broadcastKakan(seatIndex, pengMeld.From, pengMeld.Tiles)
+
+	// 推送摸牌（仅自己可见）
+	eg.pushDrawTile(seatIndex, kanTile)
+
+	// 继续当前玩家的回合（加杠后继续出牌）
+	if err := eg.TurnManager.EnterDropPhase(seatIndex, DefaultRoundCompensation); err != nil {
+		eg.HappenDamageError("加杠后进入出牌阶段失败")
+		return
+	}
+
+	log.Info("玩家 %d 加杠成功，杠牌: %v", seatIndex, pengMeld.Tiles)
+}
+
 func (eg *RiichiMahjong4p) handleRiichiEvent(event *share.RiichiEvent) {
 	log.Info("处理立直事件")
 	seatIndex, err := eg.getSeatIndex(event.GetUserID())
@@ -913,8 +1294,17 @@ func (eg *RiichiMahjong4p) handleRiichiEvent(event *share.RiichiEvent) {
 		return
 	}
 
-	// 标记玩家为听牌状态
+	// 标记玩家为立直状态
+	player.IsRiichi = true
 	player.IsWaiting = true
+
+	// 扣除立直棒
+	player.AddPoints(-1000)
+	eg.Situation.RiichiSticks++
+
+	// 广播立直（所有玩家可见）
+	eg.broadcastRiichi(seatIndex)
+
 	log.Info("玩家 %d 立直", seatIndex)
 }
 
@@ -972,7 +1362,7 @@ func (eg *RiichiMahjong4p) handleReactionComplete() {
 	log.Info("所有玩家反应完成")
 
 	if eg.TurnManager.GetState() != TurnStateWaitReactions {
-		eg.HappenDamageError(fmt.Sprintf("处理反应时错误，状态机错误，应该是 TurnStateWaitReactions，得到: %s", eg.TurnManager.GetState()))
+		eg.HappenDamageError(fmt.Sprintf("处理反应时错误，状态机错误，应该是 TurnStateWaitReactions，得到: %d", eg.TurnManager.GetState()))
 		return
 	}
 	eg.TurnManager.EnterChoosingPhase()
@@ -1097,8 +1487,11 @@ func (eg *RiichiMahjong4p) executeReaction(action *ReactionAction) {
 			return
 		}
 		discarderPlayer.DiscardPile = discarderPlayer.DiscardPile[:len(discarderPlayer.DiscardPile)-1]
-		caller.Melds = append(caller.Melds, Meld{Type: "Peng", Tiles: []Tile{called, t1, t2}, From: discarder})
+		meldTiles := []Tile{called, t1, t2}
+		caller.Melds = append(caller.Melds, Meld{Type: "Peng", Tiles: meldTiles, From: discarder})
 		eg.clearLastDiscard()
+		// 广播碰牌
+		eg.broadcastMeldAction("PENG", action.PlayerSeat, discarder, meldTiles)
 		eg.DropTurn(action.PlayerSeat, false)
 		return
 	case "CHI":
@@ -1113,8 +1506,11 @@ func (eg *RiichiMahjong4p) executeReaction(action *ReactionAction) {
 			return
 		}
 		discarderPlayer.DiscardPile = discarderPlayer.DiscardPile[:len(discarderPlayer.DiscardPile)-1]
-		caller.Melds = append(caller.Melds, Meld{Type: "Chi", Tiles: []Tile{called, t1, t2}, From: discarder})
+		meldTiles := []Tile{called, t1, t2}
+		caller.Melds = append(caller.Melds, Meld{Type: "Chi", Tiles: meldTiles, From: discarder})
 		eg.clearLastDiscard()
+		// 广播吃牌
+		eg.broadcastMeldAction("CHI", action.PlayerSeat, discarder, meldTiles)
 		eg.DropTurn(action.PlayerSeat, false)
 		return
 
@@ -1131,8 +1527,11 @@ func (eg *RiichiMahjong4p) executeReaction(action *ReactionAction) {
 			return
 		}
 		discarderPlayer.DiscardPile = discarderPlayer.DiscardPile[:len(discarderPlayer.DiscardPile)-1]
-		caller.Melds = append(caller.Melds, Meld{Type: "Gang", Tiles: []Tile{called, t1, t2, t3}, From: discarder})
+		meldTiles := []Tile{called, t1, t2, t3}
+		caller.Melds = append(caller.Melds, Meld{Type: "Gang", Tiles: meldTiles, From: discarder})
 		eg.clearLastDiscard()
+		// 广播明杠
+		eg.broadcastMeldAction("GANG", action.PlayerSeat, discarder, meldTiles)
 		eg.DropTurn(action.PlayerSeat, true)
 		return
 	default:
@@ -1213,7 +1612,6 @@ func (eg *RiichiMahjong4p) HappenDamageError(err string) {
 // Terminate 自毁程序
 func (eg *RiichiMahjong4p) Terminate() {
 	eg.requestDestroyRoom()
-	return
 }
 
 func (eg *RiichiMahjong4p) requestDestroyRoom() {

@@ -157,7 +157,7 @@ func NewPlayerTicker(totalTime int) *PlayerTicker {
 }
 
 // Start 启动计时
-// duration: 本次分配的时间（秒）
+// duration: 本次分配的时间（秒），在我的游戏逻辑中 Available = duration
 // 返回 error 如果时间不足或已在运行
 func (pt *PlayerTicker) Start(duration int) error {
 	pt.Lock()

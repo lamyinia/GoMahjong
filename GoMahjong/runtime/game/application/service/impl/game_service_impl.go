@@ -3,8 +3,6 @@ package impl
 import (
 	"common/log"
 	"context"
-	"core/infrastructure/message/transfer"
-	"encoding/json"
 	"fmt"
 	"runtime/game"
 	"runtime/game/application/service"
@@ -49,28 +47,9 @@ func (s *GameServiceImpl) CreateRoom(ctx context.Context, req *service.CreateRoo
 		}, nil
 	}
 
-	// 推送匹配成功消息给所有玩家
-	matchSuccessMsg := &transfer.MatchSuccessDTO{
-		GameNodeID: s.worker.NodeID,
-		Players:    req.Players,
-	}
-	msgData, err := json.Marshal(matchSuccessMsg)
-	if err != nil {
-		log.Error(fmt.Sprintf("GameService 序列化消息失败: %v", err))
-		return &service.CreateRoomResp{
-			Success: true,
-			RoomID:  room.ID,
-			Message: "房间创建成功，但推送消息失败",
-		}, nil
-	}
-
-	// 向每个玩家推送匹配成功消息
-	for userID := range req.Players {
-		if err := s.worker.PushMessage(userID, transfer.MatchingSuccess, msgData); err != nil {
-			log.Warn(fmt.Sprintf("GameService 推送消息给玩家 %s 失败: %v", userID, err))
-			// 继续推送其他玩家，不中断
-		}
-	}
+	// 推送逻辑已迁移到 Engine.InitializeEngine 中
+	// 避免 GetPlayerConnector 的锁竞争，提升性能
+	// 如果 Engine 初始化失败，推送也会失败，这是合理的
 
 	log.Info(fmt.Sprintf("GameService 创建房间成功: %s, 玩家数: %d", room.ID, len(req.Players)))
 

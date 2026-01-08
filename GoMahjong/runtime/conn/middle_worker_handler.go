@@ -10,10 +10,11 @@ import (
 
 // handlePush 处理所有 Push 类型消息
 func (w *Worker) handlePush(users []string, body *protocol.Message, route string) {
-	// 对路由过滤，不同路由有不同的错误处理等级
 	switch route {
 	case transfer.MatchingSuccess:
 		w.handleMatchSuccessPush(users, body)
+	case transfer.GamePush:
+		w.handleGamePush(users, body)
 	default:
 		log.Warn(fmt.Sprintf("connector handlePush 未知消息类型: %s", route))
 	}
@@ -30,6 +31,20 @@ func (w *Worker) handleMatchSuccessPush(users []string, body *protocol.Message) 
 
 	if len(failedUsers) > 0 {
 		log.Warn(fmt.Sprintf("connector handleMatchSuccessPush 发送失败的用户: %v", failedUsers))
+	}
+}
+
+// handleGamePush 处理游戏推送的 Push 消息
+func (w *Worker) handleGamePush(users []string, body *protocol.Message) {
+	var failedUsers []error
+	for _, userID := range users {
+		if err := w.send(protocol.Push, userID, transfer.GamePush, body.Data); err != nil {
+			failedUsers = append(failedUsers, err)
+		}
+	}
+
+	if len(failedUsers) > 0 {
+		log.Warn(fmt.Sprintf("connector handleGamePush 发送失败的用户: %v", failedUsers))
 	}
 }
 

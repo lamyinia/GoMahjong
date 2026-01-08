@@ -53,10 +53,8 @@ func (worker *NatsWorker) readChanMessage() {
 				log.Warn("NatsWorker-节点通信 packet 解析错误: %#v", packet)
 				continue
 			}
-
 			route := packet.Route
 			body := packet.Body
-
 			if handler := worker.subscriberHandler[route]; handler != nil || body.Type == protocol.Push {
 				go func() {
 					// 如果 body.Type == protocol.Push，可能执行 handler，也可能不执行 handler，但是一定要推送

@@ -5,6 +5,7 @@ import (
 	"common/discovery"
 	"common/log"
 	"context"
+	"core/domain/repository"
 	"core/infrastructure/message/node"
 	"core/infrastructure/message/protocol"
 	"core/infrastructure/message/transfer"
@@ -25,12 +26,13 @@ import (
 */
 
 type Worker struct {
-	RoomManager  *RoomManager
-	MiddleWorker *node.NatsWorker
-	Monitor      *Monitor
-	Registry     *discovery.Registry
-	GameService  svc.GameService // 游戏服务
-	NodeID       string          // 当前 game 节点 ID（用于 NATS topic）
+	RoomManager          *RoomManager
+	MiddleWorker         *node.NatsWorker
+	Monitor              *Monitor
+	Registry             *discovery.Registry
+	GameService          svc.GameService                 // 游戏服务
+	GameRecordRepository repository.GameRecordRepository // 游戏记录仓储
+	NodeID               string                          // 当前 game 节点 ID（用于 NATS topic）
 
 	destroyRoomCh chan string
 	destroyMu     sync.Mutex
@@ -95,6 +97,11 @@ func (w *Worker) SetGameService(gameService svc.GameService) {
 	w.GameService = gameService
 }
 
+// SetGameRecordRepository 设置 GameRecordRepository（由容器注入）
+func (w *Worker) SetGameRecordRepository(repo repository.GameRecordRepository) {
+	w.GameRecordRepository = repo
+}
+
 // Start 启动 Worker
 // natsURL: NATS 服务地址，如 "nats://localhost:4222"
 // etcdConf: etcd 配置
@@ -131,15 +138,11 @@ func (w *Worker) registerHandlers() {
 }
 
 // PushConnector 推送消息给指定的 Connector（由 Engine 使用）
-// connectorNodeID: connector 的 topic
-// route: 消息路由
-// data: 消息数据
 func (w *Worker) PushConnector(connectorNodeID, route string, data []byte) error {
 	if connectorNodeID == "" {
 		return fmt.Errorf("connector topic 不能为空")
 	}
 
-	// 构建 ServicePacket
 	packet := &transfer.ServicePacket{
 		Source:      w.NodeID,
 		Destination: connectorNodeID,
@@ -150,8 +153,6 @@ func (w *Worker) PushConnector(connectorNodeID, route string, data []byte) error
 			Data:  data,
 		},
 	}
-
-	// 通过 NatsWorker 推送消息
 	err := w.MiddleWorker.PushMessage(packet)
 	if err != nil {
 		return fmt.Errorf("推送消息失败: %v", err)
@@ -161,35 +162,8 @@ func (w *Worker) PushConnector(connectorNodeID, route string, data []byte) error
 	return nil
 }
 
-// PushMessage 主动推送消息给指定玩家
-func (w *Worker) PushMessage(userID, route string, data []byte) error {
-	// 获取玩家的 connector topic
-	dest, exists := w.RoomManager.GetPlayerConnector(userID)
-	if !exists {
-		return fmt.Errorf("玩家 %s 不在任何房间中或 connector topic 不存在", userID)
-	}
-
-	// 构建 ServicePacket
-	packet := &transfer.ServicePacket{
-		Source:      w.NodeID,
-		Destination: dest,
-		Route:       route,
-		PushUser:    []string{userID},
-		Body: &protocol.Message{
-			Type:  protocol.Push,
-			Route: route,
-			Data:  data,
-		},
-	}
-
-	// 通过 NatsWorker 推送消息
-	err := w.MiddleWorker.PushMessage(packet)
-	if err != nil {
-		return fmt.Errorf("推送消息失败: %v", err)
-	}
-
-	log.Info(fmt.Sprintf("Game Worker 推送消息给玩家 %s, route: %s, connector: %s", userID, route, dest))
-	return nil
+func (w *Worker) PushMessage(packet *transfer.ServicePacket) error {
+	return w.MiddleWorker.PushMessage(packet)
 }
 
 // Close 关闭 Worker

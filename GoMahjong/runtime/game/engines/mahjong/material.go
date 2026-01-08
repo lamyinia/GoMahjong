@@ -67,10 +67,19 @@ type Tile struct {
 	ID   int // 用于区分相同的牌（0-3）。对于数牌5，ID=0表示赤宝牌，ID=1-3表示普通牌
 }
 
+// Wang 王牌结构（固定14张）
 type Wang struct {
-	DeadWall          []Tile // 岭上牌
-	DoraIndicators    []Tile // 宝牌指示牌
-	UraDoraIndicators []Tile // 里宝牌指示牌
+	// 固定4张岭上牌
+	KanTiles [4]Tile
+	kanIndex int // 已摸张数 (0-4)
+
+	// 固定5张宝牌指示牌
+	DoraIndicators [5]Tile
+	doraIndex      int // 已翻开张数 (0-5)
+
+	// 固定5张里宝牌指示牌
+	UraDoraIndicators [5]Tile
+	uraDoraIndex      int // 已翻开张数 (0-5)
 }
 
 type DeckManager struct {
@@ -87,9 +96,12 @@ func NewDeckManager(useRedFives bool) *DeckManager {
 		wall:      make([]Tile, 0, TileLimit),
 		wallIndex: 0,
 		wang: Wang{
-			DeadWall:          make([]Tile, 0, 14),
-			DoraIndicators:    make([]Tile, 0, 5),
-			UraDoraIndicators: make([]Tile, 0, 5),
+			KanTiles:          [4]Tile{},
+			kanIndex:          0,
+			DoraIndicators:    [5]Tile{},
+			doraIndex:         0,
+			UraDoraIndicators: [5]Tile{},
+			uraDoraIndex:      0,
 		},
 		remain34:    [34]int{},
 		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -105,9 +117,11 @@ func (dm *DeckManager) InitRound() {
 
 	dm.wall = dm.wall[:0]
 	dm.wallIndex = 0
-	dm.wang.DeadWall = dm.wang.DeadWall[:0]
-	dm.wang.DoraIndicators = dm.wang.DoraIndicators[:0]
-	dm.wang.UraDoraIndicators = dm.wang.UraDoraIndicators[:0]
+
+	// 重置王牌索引
+	dm.wang.kanIndex = 0
+	dm.wang.doraIndex = 0
+	dm.wang.uraDoraIndex = 0
 
 	for i := 0; i < 34; i++ {
 		dm.remain34[i] = 4
@@ -117,9 +131,15 @@ func (dm *DeckManager) InitRound() {
 		return
 	}
 
+	// 取最后14张作为王牌
 	deadStart := len(deck.tiles) - 14
 	dm.wall = append(dm.wall, deck.tiles[:deadStart]...)
-	dm.wang.DeadWall = append(dm.wang.DeadWall, deck.tiles[deadStart:]...)
+
+	// 分配王牌：[0-3]岭上牌, [4-8]宝牌指示牌, [9-13]里宝牌指示牌
+	wangTiles := deck.tiles[deadStart:]
+	copy(dm.wang.KanTiles[:], wangTiles[0:4])
+	copy(dm.wang.DoraIndicators[:], wangTiles[4:9])
+	copy(dm.wang.UraDoraIndicators[:], wangTiles[9:14])
 }
 
 func (dm *DeckManager) Draw() (Tile, bool) {
@@ -136,15 +156,57 @@ func (dm *DeckManager) Deal() (Tile, bool) {
 	return dm.Draw()
 }
 
+// DrawKanTile 从岭上牌摸一张牌（开杠时使用）
+func (dm *DeckManager) DrawKanTile() (Tile, bool) {
+	if dm.wang.kanIndex >= 4 {
+		return Tile{}, false // 岭上牌已摸完
+	}
+	tile := dm.wang.KanTiles[dm.wang.kanIndex]
+	dm.wang.kanIndex++
+	dm.remain34[int(tile.Type)]--
+	return tile, true
+}
+
+// RemainingKanTiles 返回剩余岭上牌数量
+func (dm *DeckManager) RemainingKanTiles() int {
+	return 4 - dm.wang.kanIndex
+}
+
+// CanKan 检查是否还有岭上牌可以摸（用于开杠）
+func (dm *DeckManager) CanKan() bool {
+	return dm.wang.kanIndex < 4
+}
+
+// RevealDoraIndicator 翻开一张宝牌指示牌
 func (dm *DeckManager) RevealDoraIndicator() (Tile, bool) {
-	if len(dm.wang.DeadWall) == 0 {
+	if dm.wang.doraIndex >= 5 {
 		return Tile{}, false
 	}
-	t := dm.wang.DeadWall[0]
-	dm.wang.DeadWall = dm.wang.DeadWall[1:]
-	dm.wang.DoraIndicators = append(dm.wang.DoraIndicators, t)
-	dm.remain34[int(t.Type)]--
-	return t, true
+	tile := dm.wang.DoraIndicators[dm.wang.doraIndex]
+	dm.wang.doraIndex++
+	dm.remain34[int(tile.Type)]--
+	return tile, true
+}
+
+// RevealUraDoraIndicator 翻开一张里宝牌指示牌（立直和牌时使用）
+func (dm *DeckManager) RevealUraDoraIndicator() (Tile, bool) {
+	if dm.wang.uraDoraIndex >= 5 {
+		return Tile{}, false
+	}
+	tile := dm.wang.UraDoraIndicators[dm.wang.uraDoraIndex]
+	dm.wang.uraDoraIndex++
+	dm.remain34[int(tile.Type)]--
+	return tile, true
+}
+
+// GetDoraIndicators 获取当前已翻开的宝牌指示牌
+func (dm *DeckManager) GetDoraIndicators() []Tile {
+	return dm.wang.DoraIndicators[:dm.wang.doraIndex]
+}
+
+// GetUraDoraIndicators 获取当前已翻开的里宝牌指示牌
+func (dm *DeckManager) GetUraDoraIndicators() []Tile {
+	return dm.wang.UraDoraIndicators[:dm.wang.uraDoraIndex]
 }
 
 func (dm *DeckManager) Visible34(dst *[34]uint8) {
@@ -160,6 +222,7 @@ func (dm *DeckManager) Visible34(dst *[34]uint8) {
 	}
 }
 
+// Wang 返回王牌结构（保留用于兼容性，但建议直接使用 DeckManager 的方法）
 func (dm *DeckManager) Wang() *Wang {
 	return &dm.wang
 }
@@ -273,10 +336,11 @@ func (t Tile) GetTileValue() TileType {
 }
 
 const (
-	RoundEndDrawExhaustive = "DRAW_EXHAUSTIVE"
-	RoundEndDraw3Ron       = "DRAW_3RON"
-	RoundEndTsumo          = "TSUMO"
-	RoundEndRon            = "RON"
+	RoundEndDrawExhaustive = "DRAW_EXHAUSTIVE" // 常规荒牌流局
+	RoundEndDraw3Ron       = "DRAW_3RON"       // 三家点铳流局
+	RoundEndDraw4Kan       = "DRAW_4KAN"       // 四杠散了流局
+	RoundEndTsumo          = "TSUMO"           // 自摸
+	RoundEndRon            = "RON"             // 荣和
 )
 
 // HuClaim 约定 WinTile 的最后一张牌是 点到的/摸到的 牌

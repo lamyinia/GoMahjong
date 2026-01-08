@@ -450,7 +450,6 @@ func (w *Worker) send(messageType protocol.MessageType, userID string, route str
 		if bodyBytes, ok := body.([]byte); ok {
 			data = bodyBytes
 		} else {
-			// 如果是其他类型，序列化为 JSON
 			jsonData, err := json.Marshal(body)
 			if err != nil {
 				return fmt.Errorf("%s 序列化消息失败: %w", userID, err)
@@ -458,7 +457,6 @@ func (w *Worker) send(messageType protocol.MessageType, userID string, route str
 			data = jsonData
 		}
 	}
-
 	msg := &protocol.Message{
 		Type:  messageType,
 		ID:    0,
@@ -466,20 +464,17 @@ func (w *Worker) send(messageType protocol.MessageType, userID string, route str
 		Data:  data,
 		Error: false,
 	}
-
 	// 2. 编码 Message
 	msgEncoded, err := protocol.MessageEncode(msg)
 	if err != nil {
 		return fmt.Errorf("%s 编码消息失败: %w", userID, err)
 	}
-
 	// 3. 包装成 pomelo Packet
 	packet, err := protocol.Wrap(protocol.Data, msgEncoded)
 	if err != nil {
 		return fmt.Errorf("%s 打包消息失败: %w", userID, err)
 	}
 
-	// 4. 发送给客户端
 	if err := conn.SendMessage(packet); err != nil {
 		return fmt.Errorf("发送消息给玩家 %s 失败: %w", userID, err)
 	}

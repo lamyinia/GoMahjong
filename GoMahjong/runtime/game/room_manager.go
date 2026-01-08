@@ -174,33 +174,6 @@ func (rm *RoomManager) UpdatePlayerConnector(userID, newConnectorTopic string) e
 	return nil
 }
 
-// GetPlayerConnector 获取玩家的 connector topic
-// 通过房间查找玩家信息，获取 connectorTopic
-func (rm *RoomManager) GetPlayerConnector(userID string) (string, bool) {
-	rm.mu.RLock()
-	roomID, exists := rm.playerRoom[userID]
-	rm.mu.RUnlock()
-
-	if !exists {
-		return "", false
-	}
-
-	rm.mu.RLock()
-	room, exists := rm.rooms[roomID]
-	rm.mu.RUnlock()
-
-	if !exists {
-		return "", false
-	}
-
-	player, exists := room.GetPlayer(userID)
-	if !exists {
-		return "", false
-	}
-
-	return player.ConnectorNodeID, true
-}
-
 // GetStats 获取统计信息（房间数、玩家数）
 // 供 Monitor 使用
 func (rm *RoomManager) GetStats() (gameCount int, playerCount int) {

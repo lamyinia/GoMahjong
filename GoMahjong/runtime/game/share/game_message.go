@@ -81,6 +81,34 @@ func (e *GangEvent) GetEventType() string {
 	return "Gang"
 }
 
+// AnkanEvent 暗杠事件（玩家自己回合主动杠牌）
+type AnkanEvent struct {
+	GameMessageEvent
+	Tile Tile `json:"tile"` // 要杠的牌（四张相同牌中的任意一张）
+}
+
+func (e *AnkanEvent) GetEventType() string {
+	return "Ankan"
+}
+
+func (e *AnkanEvent) GetTile() Tile {
+	return e.Tile
+}
+
+// KakanEvent 加杠事件（将碰升级为杠）
+type KakanEvent struct {
+	GameMessageEvent
+	Tile Tile `json:"tile"` // 要加杠的牌（第四张相同的牌）
+}
+
+func (e *KakanEvent) GetEventType() string {
+	return "Kakan"
+}
+
+func (e *KakanEvent) GetTile() Tile {
+	return e.Tile
+}
+
 type ChiEvent struct {
 	GameMessageEvent
 }

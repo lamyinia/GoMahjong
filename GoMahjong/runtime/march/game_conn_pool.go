@@ -31,11 +31,9 @@ func (p *GameConnPool) GetClient(gameNodeAddr string) (pb.GameServiceClient, err
 	conn, exists := p.conns[gameNodeAddr]
 	p.mu.RUnlock()
 
-	// 如果连接已存在且有效，直接返回
 	if exists && conn != nil && conn.GetState() == connectivity.Ready {
 		return pb.NewGameServiceClient(conn), nil
 	}
-
 	// 创建新连接
 	conn, err := grpc.NewClient(gameNodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
