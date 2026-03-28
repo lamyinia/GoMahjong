@@ -1,0 +1,12 @@
+{
+  "server": {
+    "net": {
+      "tcp": {
+        "port": 7777,
+        "max_frame_bytes": 65536,
+        "idle_timeout_seconds": 60
+      }
+    }
+  }
+}
+

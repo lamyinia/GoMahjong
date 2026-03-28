@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package gomahjong.net;
+
+message Envelope {
+  string route = 1;
+  bytes payload = 2;
+
+  uint64 client_seq = 3;
+  uint64 uid = 4;
+  uint64 room_id = 5;
+
+  uint32 type = 6;
+}
