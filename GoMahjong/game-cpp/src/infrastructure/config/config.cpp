@@ -19,15 +19,25 @@ Config Config::load_from_file(const std::string& path) {
     Config cfg;
 
     if (j.contains("server")) {
-        const auto& s = j.at("server");
-        if (s.contains("tcp_port")) {
-            cfg.server_.tcp_port = s.at("tcp_port").get<std::uint16_t>();
+        const auto& server = j["server"];
+
+        // Parse net.tcp
+        if (server.contains("net") && server["net"].contains("tcp")) {
+            const auto& tcp = server["net"]["tcp"];
+            if (tcp.contains("port")) {
+                cfg.server_.net.tcp.port = tcp.at("port").get<std::uint16_t>();
+            }
+            if (tcp.contains("max_frame_bytes")) {
+                cfg.server_.net.tcp.max_frame_bytes = tcp.at("max_frame_bytes").get<std::uint32_t>();
+            }
+            if (tcp.contains("idle_timeout_seconds")) {
+                cfg.server_.net.tcp.idle_timeout_seconds = tcp.at("idle_timeout_seconds").get<std::uint32_t>();
+            }
         }
-        if (s.contains("max_frame_bytes")) {
-            cfg.server_.max_frame_bytes = s.at("max_frame_bytes").get<std::uint32_t>();
-        }
-        if (s.contains("idle_timeout_seconds")) {
-            cfg.server_.idle_timeout_seconds = s.at("idle_timeout_seconds").get<std::uint32_t>();
+
+        // Parse log (reserved for future)
+        if (server.contains("log")) {
+            // Future: parse log configuration
         }
     }
 

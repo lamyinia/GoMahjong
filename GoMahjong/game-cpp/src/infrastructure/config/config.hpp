@@ -5,10 +5,23 @@
 
 namespace infra::config {
 
-struct ServerConfig {
-    std::uint16_t tcp_port{7777};
+struct TcpConfig {
+    std::uint16_t port{7000};
     std::uint32_t max_frame_bytes{64 * 1024};
     std::uint32_t idle_timeout_seconds{60};
+};
+
+struct NetConfig {
+    TcpConfig tcp;
+};
+
+struct LogConfig {
+    // Reserved for future log settings
+};
+
+struct ServerConfig {
+    NetConfig net;
+    LogConfig log;
 };
 
 class Config {
