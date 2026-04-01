@@ -1,10 +1,14 @@
 #include "infrastructure/persistence/mongo_client.hpp"
 
 #include <mongocxx/client.hpp>
+#include <mongocxx/database.hpp>
 #include <mongocxx/instance.hpp>
 #include <mongocxx/uri.hpp>
 #include <mongocxx/options/client.hpp>
 #include <mongocxx/exception/exception.hpp>
+
+#include <bsoncxx/builder/basic/document.hpp>
+#include <bsoncxx/builder/basic/kvp.hpp>
 
 #include "infrastructure/log/logger.hpp"
 
@@ -50,12 +54,8 @@ namespace infra::persistence {
             // 构建 URI
             mongocxx::uri uri{impl_->config.uri};
 
-            // 配置连接池选项
+            // 配置客户端选项
             mongocxx::options::client client_opts;
-            auto pool_opts = mongocxx::options::pool{};
-            pool_opts.min_size(impl_->config.min_pool_size);
-            pool_opts.max_size(impl_->config.max_pool_size);
-            client_opts.pool_opts(pool_opts);
 
             // 如果有认证信息
             if (!impl_->config.username.empty() && !impl_->config.password.empty()) {

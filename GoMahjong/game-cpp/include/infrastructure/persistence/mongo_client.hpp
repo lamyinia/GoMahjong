@@ -4,12 +4,10 @@
 #include <memory>
 #include <string>
 
-// 前向声明，避免在头文件中包含 mongo-cxx-driver 头文件
-namespace mongocxx {
-    class client;
-    class database;
-    class collection;
-}
+// mongo-cxx-driver types are returned by value in this header; include the full definitions.
+#include <mongocxx/client.hpp>
+#include <mongocxx/collection.hpp>
+#include <mongocxx/database.hpp>
 
 namespace infra::persistence {
 

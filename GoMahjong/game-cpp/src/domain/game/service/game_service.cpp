@@ -3,6 +3,8 @@
 #include "domain/game/room/room_manager.h"
 #include "infrastructure/log/logger.hpp"
 
+#include <grpcpp/grpcpp.h>
+
 // proto 生成的头文件
 #include "game_service.grpc.pb.h"
 
@@ -11,7 +13,7 @@ namespace domain::game::service {
     // grpc 服务实现（内部类）
     class GameServiceImpl final : public gomahjong::rpc::GameService::Service {
     public:
-        explicit GameServiceImpl(RoomManager &room_manager) : room_manager_(room_manager) {
+        explicit GameServiceImpl(domain::game::room::RoomManager &room_manager) : room_manager_(room_manager) {
         }
 
         grpc::Status CreateRoom(
@@ -50,20 +52,20 @@ namespace domain::game::service {
         }
 
     private:
-        RoomManager &room_manager_;
+        domain::game::room::RoomManager &room_manager_;
     };
 
     // GameService::Impl
     struct GameService::Impl {
-        RoomManager &room_manager;
+        domain::game::room::RoomManager &room_manager;
         std::shared_ptr<GameServiceImpl> grpc_service;
 
-        explicit Impl(RoomManager &rm) : room_manager(rm) {
+        explicit Impl(domain::game::room::RoomManager &rm) : room_manager(rm) {
             grpc_service = std::make_shared<GameServiceImpl>(room_manager);
         }
     };
 
-    GameService::GameService(RoomManager &room_manager)
+    GameService::GameService(domain::game::room::RoomManager &room_manager)
         : impl_(std::make_unique<Impl>(room_manager)) {
     }
 
@@ -85,7 +87,7 @@ namespace domain::game::service {
     }
 
     std::shared_ptr<grpc::Service> GameService::get_grpc_service() const {
-        return impl_->grpc_service;
+        return std::static_pointer_cast<grpc::Service>(impl_->grpc_service);
     }
 
 } // namespace domain::game::service

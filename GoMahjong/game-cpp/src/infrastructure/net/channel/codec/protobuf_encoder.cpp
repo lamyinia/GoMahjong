@@ -2,7 +2,7 @@
 #include "infrastructure/log/logger.hpp"
 
 // 包含 protobuf 生成的头文件
-#include "proto/envelope.pb.h"
+#include "generated/envelope.pb.h"
 
 namespace infra::net::channel {
 

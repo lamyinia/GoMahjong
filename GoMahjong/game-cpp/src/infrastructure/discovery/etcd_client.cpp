@@ -189,7 +189,7 @@ namespace infra::discovery {
         stop_keepalive(lease_id);
 
         try {
-            auto response = impl_->client->revoke(lease_id).get();
+            auto response = impl_->client->leaserevoke(lease_id).get();
             return response.is_ok();
         } catch (const std::exception &) {
             return false;
@@ -214,7 +214,7 @@ namespace infra::discovery {
                             for (const auto &event: response.events()) {
                                 WatchEvent evt;
                                 switch (event.event_type()) {
-                                    case etcd::Event::EventType::SET:
+                                    case etcd::Event::EventType::PUT:
                                         evt.type = WatchEventType::Put;
                                         break;
                                     case etcd::Event::EventType::DELETE_:
@@ -228,7 +228,8 @@ namespace infra::discovery {
                                 callback(evt);
                             }
                         }
-                    });
+                    },
+                    true);
 
             impl_->watchers.emplace(watch_id, std::move(watcher));
             impl_->watch_callbacks.emplace(watch_id, std::move(callback));

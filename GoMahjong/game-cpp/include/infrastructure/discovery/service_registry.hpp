@@ -1,15 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
-namespace infra::discovery {
-    class EtcdClient;
-}
+#include "infrastructure/discovery/etcd_client.hpp"
 
 namespace infra::discovery {
 
