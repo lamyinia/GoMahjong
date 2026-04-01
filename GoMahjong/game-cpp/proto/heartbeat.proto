@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package gomahjong.net;
+
+// 心跳请求
+message HeartbeatPing {
+  uint64 timestamp = 1;    // 客户端时间戳（可选）
+}
+
+// 心跳响应
+message HeartbeatPong {
+  uint64 timestamp = 1;    // 服务端时间戳
+  uint64 server_seq = 2;   // 服务端序列号（可选）
+}

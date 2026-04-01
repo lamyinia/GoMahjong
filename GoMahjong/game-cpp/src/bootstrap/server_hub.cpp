@@ -1,11 +1,12 @@
 #include "bootstrap/server_hub.h"
 
 #include <algorithm>
-#include <cstdlib>
 #include <iostream>
 
 #include "infrastructure/config/config.hpp"
 #include "infrastructure/net/listener/tcp_listener.h"
+#include "infrastructure/net/reliability/wild_endpoint_manager.h"
+#include "infrastructure/net/session/session_manager.h"
 #include "infrastructure/log/logger.hpp"
 
 namespace gomahjong::bootstrap {
@@ -44,6 +45,8 @@ namespace gomahjong::bootstrap {
 
         // 释放资源
         tcp_listener_.reset();
+        wild_endpoint_manager_.reset();
+        session_manager_.reset();
     }
 
     void ServerHub::build_pools() {
@@ -60,37 +63,43 @@ namespace gomahjong::bootstrap {
     }
 
     void ServerHub::build_services() {
+        // 创建未认证连接管理器
+        wild_endpoint_manager_ = std::make_shared<infra::net::reliability::WildEndpointManager>(
+            ioc_.get_executor(),
+            std::chrono::milliseconds(5000)  // 5秒认证超时
+        );
 
+        // 创建已认证会话管理器
+        session_manager_ = std::make_shared<infra::net::session::SessionManager>();
+
+        // 设置回调
+        setup_wild_endpoint_callbacks();
+
+        LOG_INFO("[hub] services built");
     }
 
     void ServerHub::build_listeners() {
         // 小作用域 using，生命周期在整个函数块内，对运行效率无影响
         using namespace infra::net::listener;
-        using namespace infra::net::transport;
 
         auto port = cfg_.server().net.tcp.port;
 
-        tcp_listener_ = std::make_unique<TcpListener>(ioc_, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port));
+        tcp_listener_ = std::make_unique<TcpListener>(ioc_,
+                                                      boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port));
+
+        // 捕获 wild_endpoint_manager_ 的弱引用，避免循环引用
+        auto wild_manager = wild_endpoint_manager_;
 
         tcp_listener_->start(
-                [this](std::shared_ptr<ITransport> transport) {
-                    LOG_INFO("[hub] new connection accepted");
-                    // Echo demo: start transport with echo callback
-                    transport->start(
-                            [transport](ITransport::Bytes &&data) {
-                                // Echo back received data
-                                LOG_INFO("[hub] received {} bytes, echoing back", data.size());
-                                transport->send(std::move(data));
-                            },
-                            [] {
-                                LOG_INFO("[hub] connection closed");
-                            },
-                            [](const std::error_code &ec) {
-                                LOG_ERROR("[hub] connection error: {}", ec.message());
-                            });
-                },
                 [](const std::error_code &ec) {
                     LOG_ERROR("[hub] accept error: {}", ec.message());
+                },
+                [wild_manager](const std::shared_ptr<infra::net::channel::IChannel>& channel) {
+                    LOG_INFO("[hub] new connection accepted");
+                    // 将新连接交给 WildEndpointManager 管理
+                    if (wild_manager && channel) {
+                        wild_manager->add_channel(channel);
+                    }
                 });
 
         LOG_INFO("[hub] tcp listener started on port {}", port);
@@ -98,5 +107,26 @@ namespace gomahjong::bootstrap {
 
     void ServerHub::write_back() {
 
+    }
+
+    void ServerHub::setup_wild_endpoint_callbacks() {
+        if (!wild_endpoint_manager_ || !session_manager_) {
+            LOG_ERROR("[hub] cannot setup callbacks: managers not initialized");
+            return;
+        }
+
+        auto session_mgr = session_manager_;
+
+        // 设置认证成功回调：创建 Session
+        wild_endpoint_manager_->set_on_authenticated(
+            [session_mgr](const std::string& player_id, 
+                          std::shared_ptr<infra::net::channel::IChannel> channel) {
+                LOG_INFO("[hub] player {} authenticated, creating session", player_id);
+                // 创建或获取会话
+                session_mgr->create_or_get_session(player_id, std::move(channel));
+            }
+        );
+
+        LOG_INFO("[hub] wild endpoint callbacks setup complete");
     }
 }

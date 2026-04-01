@@ -67,6 +67,24 @@ add_custom_command(
         ARGS -I${PROTO_DIR} --cpp_out=${GENERATED_DIR} --grpc_out=${GENERATED_DIR} ${GAME_SERVICE_PROTO}
         DEPENDS ${GAME_SERVICE_PROTO}
         COMMENT "Generating gRPC code for game_service.proto"
+set(PROTO_FILES
+        ${PROTO_DIR}/envelope.proto
+        ${PROTO_DIR}/auth.proto
+        ${PROTO_DIR}/heartbeat.proto
+)
+
+# Generate protobuf sources into ${GENERATED_DIR} and attach them to a CMake target.
+add_library(proto_generated STATIC)
+target_link_libraries(proto_generated PUBLIC protobuf::libprotobuf)
+target_include_directories(proto_generated PUBLIC ${GENERATED_DIR})
+
+protobuf_generate(
+        TARGET proto_generated
+        LANGUAGE cpp
+        PROTOC_OUT_DIR ${GENERATED_DIR}
+        APPEND_PATH OFF
+        IMPORT_DIRS ${PROTO_DIR}
+        PROTOS ${PROTO_FILES}
 )
 
 add_executable(gomahjong_server
@@ -79,20 +97,41 @@ add_executable(gomahjong_server
         ${PROTO_HDRS}
         ${GAME_SERVICE_GRPC_SRCS}
         ${GAME_SERVICE_GRPC_HDRS}
+        # Channel 层
         include/infrastructure/net/channel/i_channel.h
+        include/infrastructure/net/channel/channel_handler_context.h
+        include/infrastructure/net/channel/i_channel_handler.h
+        include/infrastructure/net/channel/channel_pipeline.h
+        src/infrastructure/net/channel/channel_pipeline.cpp
+        include/infrastructure/net/channel/tcp_channel.h
+        src/infrastructure/net/channel/tcp_channel.cpp
+        # Codec 层
+        include/infrastructure/net/channel/codec/length_field_decoder.h
+        src/infrastructure/net/channel/codec/length_field_decoder.cpp
+        include/infrastructure/net/channel/codec/length_field_encoder.h
+        src/infrastructure/net/channel/codec/length_field_encoder.cpp
+        include/infrastructure/net/channel/codec/protobuf_decoder.h
+        src/infrastructure/net/channel/codec/protobuf_decoder.cpp
+        include/infrastructure/net/channel/codec/protobuf_encoder.h
+        src/infrastructure/net/channel/codec/protobuf_encoder.cpp
+        # Session 层
         src/infrastructure/net/session/session.cpp
         include/infrastructure/net/session/session.h
         src/infrastructure/net/session/session_manager.cpp
         include/infrastructure/net/session/session_manager.h
+        # Bootstrap
         src/bootstrap/server_hub.cpp
         include/bootstrap/server_hub.h
+        # Domain
         src/domain/game/room/room_manager.cpp
         include/domain/game/room/room_manager.h
         src/domain/game/engine/engine.cpp
         include/domain/game/engine/engine.h
+        # Listener
         include/infrastructure/net/listener/i_listener.h
         src/infrastructure/net/listener/tcp_listener.cpp
         include/infrastructure/net/listener/tcp_listener.h
+        # Transport
         include/infrastructure/net/transport/tcp_transport.h
         src/infrastructure/discovery/etcd_client.cpp
         include/infrastructure/discovery/etcd_client.hpp
@@ -104,17 +143,25 @@ add_executable(gomahjong_server
         include/domain/game/service/game_service.hpp
         src/infrastructure/persistence/mongo_client.cpp
         include/infrastructure/persistence/mongo_client.hpp
+        # Reliability
+        src/infrastructure/net/reliability/wild_endpoint.cpp
+        include/infrastructure/net/reliability/wild_endpoint.h
+        src/infrastructure/net/reliability/wild_endpoint_manager.cpp
+        include/infrastructure/net/reliability/wild_endpoint_manager.h
+        src/infrastructure/net/reliability/auth_handler.cpp
+        include/infrastructure/net/reliability/auth_handler.h
 )
 
 target_include_directories(gomahjong_server PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}
+        ${GENERATED_DIR}
 )
 
 target_link_libraries(gomahjong_server PRIVATE
         Boost::boost
-        protobuf::libprotobuf
+        proto_generated
         spdlog::spdlog
         nlohmann_json::nlohmann_json
         etcd-cpp-api
@@ -137,6 +184,8 @@ add_executable(tcp_server_test
         tests/tcp_server_test.cpp
         src/infrastructure/log/logger.cpp
         src/infrastructure/net/transport/tcp_transport.cpp
+        src/infrastructure/net/channel/channel_pipeline.cpp
+        src/infrastructure/net/channel/tcp_channel.cpp
         src/infrastructure/net/listener/tcp_listener.cpp
 )
 

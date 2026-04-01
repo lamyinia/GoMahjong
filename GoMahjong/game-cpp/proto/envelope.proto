@@ -2,13 +2,9 @@ syntax = "proto3";
 
 package gomahjong.net;
 
+// 消息信封（统一消息格式）
 message Envelope {
-  string route = 1;
-  bytes payload = 2;
-
-  uint64 client_seq = 3;
-  uint64 uid = 4;
-  uint64 room_id = 5;
-
-  uint32 type = 6;
+  string route = 1;        // 路由（如 "auth.login", "heartbeat.ping"）
+  bytes payload = 2;       // 业务数据（序列化的 protobuf）
+  uint64 client_seq = 3;   // 请求序列号（用于请求-响应匹配）
 }
