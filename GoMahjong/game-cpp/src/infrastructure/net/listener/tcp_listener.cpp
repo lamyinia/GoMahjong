@@ -1,12 +1,13 @@
 #include "infrastructure/net/listener/tcp_listener.h"
 #include "infrastructure/net/transport/tcp_transport.h"
+#include "infrastructure/net/channel/tcp_channel.h"
 #include "infrastructure/log/logger.hpp"
 
 #include <boost/asio.hpp>
 
 namespace infra::net::listener {
 
-    TcpListener::TcpListener(boost::asio::io_context &ioc, boost::asio::ip::tcp::endpoint ep)
+    TcpListener::TcpListener(boost::asio::io_context& ioc, boost::asio::ip::tcp::endpoint ep)
         : ioc_(ioc), acceptor_(ioc) {
         boost::system::error_code ec;
         acceptor_.open(ep.protocol(), ec);
@@ -34,13 +35,13 @@ namespace infra::net::listener {
         LOG_INFO("[tcp_listener] listening on {}:{}", ep.address().to_string(), ep.port());
     }
 
-    void TcpListener::start(OnAccept onAccept, OnError onError) {
+    void TcpListener::start(OnError onError, OnNewChannel onNewChannel) {
         if (started_.exchange(true)) {
             return;
         }
 
-        onAccept_ = std::move(onAccept);
         onError_ = std::move(onError);
+        onNewChannel_ = std::move(onNewChannel);
         do_accept();
     }
 
@@ -60,7 +61,7 @@ namespace infra::net::listener {
         if (!started_) {
             return;
         }
-        
+
         // 这里的 socket 代表一个完成三次握手的 TCP 连接的 fd
         acceptor_.async_accept(
             [this](boost::system::error_code ec, boost::asio::ip::tcp::socket socket) {
@@ -79,13 +80,21 @@ namespace infra::net::listener {
                     return;
                 }
 
-                auto transport = std::make_shared<infra::net::transport::TcpTransport>(std::move(socket));
-                if (onAccept_) {
-                    onAccept_(transport);
+                // 1. 创建 Transport
+                auto transport = std::make_shared<transport::TcpTransport>(std::move(socket));
+                // 2. 创建 Channel（封装 Transport）
+                auto channel = std::make_shared<channel::TcpChannel>(std::move(transport));
+
+                LOG_DEBUG("[tcp_listener] new connection: {}", channel->id());
+
+                if (onNewChannel_){
+                    onNewChannel_(channel);
                 }
+                // 开始读取数据（由上层决定何时开始）
+                // 注意：这里不自动调用 start_read()，让上层有机会先添加 Handler
 
                 do_accept();
             });
     }
 
-}
+} // namespace infra::net::listener

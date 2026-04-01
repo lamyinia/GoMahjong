@@ -12,6 +12,10 @@ namespace infra::config { class Config; }
 
 namespace infra::net::listener { class TcpListener; }
 
+namespace infra::net::reliability { class WildEndpointManager; }
+
+namespace infra::net::session { class SessionManager; }
+
 
 // 生命周期管理器，以及依赖的组装
 namespace gomahjong::bootstrap {
@@ -40,6 +44,8 @@ namespace gomahjong::bootstrap {
 
         void write_back();
 
+        void setup_wild_endpoint_callbacks();
+
     private:
         const infra::config::Config &cfg_;
 
@@ -48,6 +54,12 @@ namespace gomahjong::bootstrap {
         std::optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> work_guard_;
 
         std::unique_ptr<infra::net::listener::TcpListener> tcp_listener_;
+
+        // 未认证连接管理
+        std::shared_ptr<infra::net::reliability::WildEndpointManager> wild_endpoint_manager_;
+
+        // 已认证会话管理
+        std::shared_ptr<infra::net::session::SessionManager> session_manager_;
 
         bool started_ = false;
     };
