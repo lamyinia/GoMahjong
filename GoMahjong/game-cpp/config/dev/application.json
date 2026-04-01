@@ -9,6 +9,19 @@
     },
     "log": {
 
+    },
+    "etcd": {
+      "endpoints": "http://127.0.0.1:2379",
+      "ttl_seconds": 10
+    },
+    "grpc": {
+      "port": 9010
+    },
+    "mongodb": {
+      "uri": "mongodb://localhost:27017",
+      "database": "gomahjong",
+      "min_pool_size": 10,
+      "max_pool_size": 100
     }
   }
 }

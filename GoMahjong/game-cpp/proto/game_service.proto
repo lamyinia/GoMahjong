@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package gomahjong.rpc;
+
+// 游戏服务 - 供外部服务（如 march）调用
+service GameService {
+    // 创建房间
+    // 由匹配服务在匹配成功后调用
+    rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
+}
+
+// 创建房间请求
+message CreateRoomRequest {
+    // 玩家列表：userID -> connectorTopic
+    // connectorTopic 用于推送消息给玩家所在的 connector 节点
+    map<string, string> players = 1;
+
+    // 游戏引擎类型
+    // 1: 日本麻将 4 人
+    int32 engine_type = 2;
+}
+
+// 创建房间响应
+message CreateRoomResponse {
+    // 是否成功
+    bool success = 1;
+
+    // 房间 ID（成功时返回）
+    string room_id = 2;
+
+    // 消息（失败时返回错误原因）
+    string message = 3;
+}
