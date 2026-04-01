@@ -39,6 +39,48 @@ Config Config::load_from_file(const std::string& path) {
         if (server.contains("log")) {
             // Future: parse log configuration
         }
+
+        // Parse etcd
+        if (server.contains("etcd")) {
+            const auto& etcd = server["etcd"];
+            if (etcd.contains("endpoints")) {
+                cfg.server_.etcd.endpoints = etcd.at("endpoints").get<std::string>();
+            }
+            if (etcd.contains("ttl_seconds")) {
+                cfg.server_.etcd.ttl_seconds = etcd.at("ttl_seconds").get<std::int64_t>();
+            }
+        }
+
+        // Parse grpc
+        if (server.contains("grpc")) {
+            const auto& grpc = server["grpc"];
+            if (grpc.contains("port")) {
+                cfg.server_.grpc.port = grpc.at("port").get<std::uint16_t>();
+            }
+        }
+
+        // Parse mongodb
+        if (server.contains("mongodb")) {
+            const auto& mongodb = server["mongodb"];
+            if (mongodb.contains("uri")) {
+                cfg.server_.mongodb.uri = mongodb.at("uri").get<std::string>();
+            }
+            if (mongodb.contains("database")) {
+                cfg.server_.mongodb.database = mongodb.at("database").get<std::string>();
+            }
+            if (mongodb.contains("min_pool_size")) {
+                cfg.server_.mongodb.min_pool_size = mongodb.at("min_pool_size").get<std::uint32_t>();
+            }
+            if (mongodb.contains("max_pool_size")) {
+                cfg.server_.mongodb.max_pool_size = mongodb.at("max_pool_size").get<std::uint32_t>();
+            }
+            if (mongodb.contains("username")) {
+                cfg.server_.mongodb.username = mongodb.at("username").get<std::string>();
+            }
+            if (mongodb.contains("password")) {
+                cfg.server_.mongodb.password = mongodb.at("password").get<std::string>();
+            }
+        }
     }
 
     return cfg;

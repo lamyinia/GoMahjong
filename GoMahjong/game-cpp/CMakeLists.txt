@@ -8,6 +8,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Boost REQUIRED)
 find_package(Protobuf REQUIRED)
+find_package(gRPC CONFIG REQUIRED)
+find_package(mongocxx REQUIRED)
 
 include(FetchContent)
 
@@ -21,19 +23,50 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/nlohmann/json.git
         GIT_TAG v3.11.3
 )
+FetchContent_Declare(
+        etcd-cpp-apiv3
+        GIT_REPOSITORY https://github.com/etcd-cpp-apiv3/etcd-cpp-apiv3.git
+        GIT_TAG v0.15.4
+)
 
 set(SPDLOG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_BENCH OFF CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(spdlog nlohmann_json)
+# etcd-cpp-apiv3 配置
+set(BUILD_ETCD_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_ETCD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(ETCD_CMAKE_CXX_STANDARD 20 CACHE STRING "" FORCE)
+
+FetchContent_MakeAvailable(spdlog nlohmann_json etcd-cpp-apiv3)
 
 # Protobuf codegen
 set(PROTO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/proto)
 set(GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${GENERATED_DIR})
 
+# Protobuf 文件
+set(PROTO_FILES
+        ${PROTO_DIR}/envelope.proto
+        ${PROTO_DIR}/game_service.proto
+)
+
+# 生成 protobuf 代码
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
+
+# 生成 grpc 代码（game_service.proto 包含 grpc 服务）
+get_filename_component(GAME_SERVICE_PROTO "${PROTO_DIR}/game_service.proto" ABSOLUTE)
+get_filename_component(GAME_SERVICE_BASE "${GAME_SERVICE_PROTO}" NAME_WE)
+set(GAME_SERVICE_GRPC_SRCS "${GENERATED_DIR}/${GAME_SERVICE_BASE}.grpc.pb.cc")
+set(GAME_SERVICE_GRPC_HDRS "${GENERATED_DIR}/${GAME_SERVICE_BASE}.grpc.pb.h")
+
+add_custom_command(
+        OUTPUT ${GAME_SERVICE_GRPC_SRCS} ${GAME_SERVICE_GRPC_HDRS}
+        COMMAND ${gRPC_CPP_PLUGIN_EXECUTABLE}
+        ARGS -I${PROTO_DIR} --cpp_out=${GENERATED_DIR} --grpc_out=${GENERATED_DIR} ${GAME_SERVICE_PROTO}
+        DEPENDS ${GAME_SERVICE_PROTO}
+        COMMENT "Generating gRPC code for game_service.proto"
 set(PROTO_FILES
         ${PROTO_DIR}/envelope.proto
         ${PROTO_DIR}/auth.proto
@@ -60,6 +93,10 @@ add_executable(gomahjong_server
         src/infrastructure/log/logger.cpp
         src/infrastructure/config/config.cpp
         src/infrastructure/net/transport/tcp_transport.cpp
+        ${PROTO_SRCS}
+        ${PROTO_HDRS}
+        ${GAME_SERVICE_GRPC_SRCS}
+        ${GAME_SERVICE_GRPC_HDRS}
         # Channel 层
         include/infrastructure/net/channel/i_channel.h
         include/infrastructure/net/channel/channel_handler_context.h
@@ -96,6 +133,16 @@ add_executable(gomahjong_server
         include/infrastructure/net/listener/tcp_listener.h
         # Transport
         include/infrastructure/net/transport/tcp_transport.h
+        src/infrastructure/discovery/etcd_client.cpp
+        include/infrastructure/discovery/etcd_client.hpp
+        src/infrastructure/discovery/service_registry.cpp
+        include/infrastructure/discovery/service_registry.hpp
+        src/infrastructure/rpc/grpc_server.cpp
+        include/infrastructure/rpc/grpc_server.hpp
+        src/domain/game/service/game_service.cpp
+        include/domain/game/service/game_service.hpp
+        src/infrastructure/persistence/mongo_client.cpp
+        include/infrastructure/persistence/mongo_client.hpp
         # Reliability
         src/infrastructure/net/reliability/wild_endpoint.cpp
         include/infrastructure/net/reliability/wild_endpoint.h
@@ -117,6 +164,9 @@ target_link_libraries(gomahjong_server PRIVATE
         proto_generated
         spdlog::spdlog
         nlohmann_json::nlohmann_json
+        etcd-cpp-api
+        gRPC::grpc++
+        mongo::mongocxx_shared
 )
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
