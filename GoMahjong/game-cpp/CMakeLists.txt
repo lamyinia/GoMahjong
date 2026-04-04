@@ -43,6 +43,7 @@ set(PROTO_FILES
         ${PROTO_DIR}/game_service.proto
         ${PROTO_DIR}/auth.proto
         ${PROTO_DIR}/heartbeat.proto
+        ${PROTO_DIR}/game_mahjong.proto
 )
 
 # Generate protobuf sources into ${GENERATED_DIR} and attach them to a CMake target.
@@ -89,75 +90,33 @@ target_sources(proto_generated PRIVATE
 
 add_dependencies(proto_generated game_service_grpc_codegen)
 
+# Collect source files automatically
+file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
+file(GLOB_RECURSE SERVER_HEADERS CONFIGURE_DEPENDS "include/*.h" "include/*.hpp")
+
 add_executable(gomahjong_server
-        src/main.cpp
-        src/bootstrap/app.cpp
-        src/infrastructure/log/logger.cpp
-        src/infrastructure/config/config.cpp
-        src/infrastructure/net/transport/tcp_transport.cpp
+        ${SERVER_SOURCES}
+        ${SERVER_HEADERS}
         ${GAME_SERVICE_GRPC_SRCS}
         ${GAME_SERVICE_GRPC_HDRS}
-        # Channel 层
-        include/infrastructure/net/channel/i_channel.h
-        include/infrastructure/net/channel/channel_handler_context.h
-        include/infrastructure/net/channel/i_channel_handler.h
-        include/infrastructure/net/channel/channel_pipeline.h
-        src/infrastructure/net/channel/channel_pipeline.cpp
-        include/infrastructure/net/channel/tcp_channel.h
-        src/infrastructure/net/channel/tcp_channel.cpp
-        # Codec 层
-        include/infrastructure/net/channel/codec/length_field_decoder.h
-        src/infrastructure/net/channel/codec/length_field_decoder.cpp
-        include/infrastructure/net/channel/codec/length_field_encoder.h
-        src/infrastructure/net/channel/codec/length_field_encoder.cpp
-        include/infrastructure/net/channel/codec/protobuf_decoder.h
-        src/infrastructure/net/channel/codec/protobuf_decoder.cpp
-        include/infrastructure/net/channel/codec/protobuf_encoder.h
-        src/infrastructure/net/channel/codec/protobuf_encoder.cpp
-        # Session 层
-        src/infrastructure/net/session/session.cpp
-        include/infrastructure/net/session/session.h
-        src/infrastructure/net/session/session_manager.cpp
-        include/infrastructure/net/session/session_manager.h
-        # Bootstrap
-        src/bootstrap/server_hub.cpp
-        include/bootstrap/server_hub.h
-        # Domain
-        src/domain/game/room/room_manager.cpp
-        include/domain/game/room/room_manager.h
-        src/domain/game/engine/engine.cpp
-        include/domain/game/engine/engine.h
-        # Listener
-        include/infrastructure/net/listener/i_listener.h
-        src/infrastructure/net/listener/tcp_listener.cpp
-        include/infrastructure/net/listener/tcp_listener.h
-        # Transport
-        include/infrastructure/net/transport/tcp_transport.h
-        src/infrastructure/discovery/etcd_client.cpp
-        include/infrastructure/discovery/etcd_client.hpp
-        src/infrastructure/discovery/service_registry.cpp
-        include/infrastructure/discovery/service_registry.hpp
-        src/infrastructure/rpc/grpc_server.cpp
-        include/infrastructure/rpc/grpc_server.hpp
-        src/domain/game/service/game_service.cpp
-        include/domain/game/service/game_service.hpp
-        src/infrastructure/persistence/mongo_client.cpp
-        include/infrastructure/persistence/mongo_client.hpp
-        # Reliability
-        src/infrastructure/net/reliability/wild_endpoint.cpp
-        include/infrastructure/net/reliability/wild_endpoint.h
-        src/infrastructure/net/reliability/wild_endpoint_manager.cpp
-        include/infrastructure/net/reliability/wild_endpoint_manager.h
-        src/infrastructure/net/reliability/auth_handler.cpp
-        include/infrastructure/net/reliability/auth_handler.h
 )
 
-target_include_directories(gomahjong_server PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_BINARY_DIR}
-        ${GENERATED_DIR}
-)
+# Helper function for common target setup
+function(setup_target target_name)
+    target_include_directories(${target_name} PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_BINARY_DIR}
+            ${GENERATED_DIR}
+    )
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_definitions(${target_name} PRIVATE SPDLOG_FUNCTION=__PRETTY_FUNCTION__)
+    elseif (MSVC)
+        target_compile_definitions(${target_name} PRIVATE SPDLOG_FUNCTION=__FUNCSIG__)
+    endif ()
+endfunction()
+
+setup_target(gomahjong_server)
 
 target_link_libraries(gomahjong_server PRIVATE
         Boost::boost
@@ -169,30 +128,13 @@ target_link_libraries(gomahjong_server PRIVATE
         mongo::mongocxx_shared
 )
 
-if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    target_compile_definitions(gomahjong_server PRIVATE SPDLOG_FUNCTION=__PRETTY_FUNCTION__)
-elseif (MSVC)
-    target_compile_definitions(gomahjong_server PRIVATE SPDLOG_FUNCTION=__FUNCSIG__)
-endif ()
-
-set(THREADS_PREFER_PTHREAD_FLAG ON)  # 指示在可用时优先使用pthread库。
+set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 target_link_libraries(gomahjong_server PRIVATE Threads::Threads)
 
-# Test executable
-add_executable(tcp_server_test
-        tests/tcp_server_test.cpp
-        src/infrastructure/log/logger.cpp
-        src/infrastructure/net/transport/tcp_transport.cpp
-        src/infrastructure/net/channel/channel_pipeline.cpp
-        src/infrastructure/net/channel/tcp_channel.cpp
-        src/infrastructure/net/listener/tcp_listener.cpp
-)
-
-target_include_directories(tcp_server_test PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
+# Test executables
+add_executable(tcp_server_test tests/tcp_server_test.cpp)
+setup_target(tcp_server_test)
 
 target_link_libraries(tcp_server_test PRIVATE
         Boost::boost
@@ -200,24 +142,16 @@ target_link_libraries(tcp_server_test PRIVATE
         Threads::Threads
 )
 
-if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    target_compile_definitions(tcp_server_test PRIVATE SPDLOG_FUNCTION=__PRETTY_FUNCTION__)
-elseif (MSVC)
-    target_compile_definitions(tcp_server_test PRIVATE SPDLOG_FUNCTION=__FUNCSIG__)
-endif ()
-
-# ServerHub test executable (tests connecting to configured port)
-add_executable(server_hub_test
-        tests/server_hub_test.cpp
-        src/infrastructure/config/config.cpp
+add_executable(mongo_pool_test
+        tests/mongo_pool_test.cpp
+        src/infrastructure/persistence/mongo_pool.cpp
+        src/infrastructure/log/logger.cpp
 )
+setup_target(mongo_pool_test)
 
-target_include_directories(server_hub_test PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-target_link_libraries(server_hub_test PRIVATE
+target_link_libraries(mongo_pool_test PRIVATE
         Boost::boost
-        nlohmann_json::nlohmann_json
-        Threads::Threads)
+        spdlog::spdlog
+        mongo::mongocxx_shared
+        Threads::Threads
+)

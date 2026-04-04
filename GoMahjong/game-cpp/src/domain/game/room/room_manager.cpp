@@ -1,5 +1,7 @@
 #include "domain/game/room/room_manager.h"
 
+#include "infrastructure/log/logger.hpp"
+
 #include <chrono>
 #include <random>
 #include <sstream>
@@ -21,72 +23,133 @@ namespace domain::game::room {
         return oss.str();
     }
 
-    RoomManager::RoomManager() = default;
+    RoomManager::RoomManager() 
+        : actorPool_(std::make_unique<RoomActorPool>(4, 1024)) {
+        // 设置事件处理器回调
+        actorPool_->setEventHandler([this](const std::string& roomId, const event::GameEvent& event) {
+            this->onEvent(roomId, event);
+        });
+    }
 
-    const Room *RoomManager::create_room(const std::map<std::string, std::string> &players, std::int32_t engine_type) {
-        // 验证玩家数量（日本麻将需要 4 人）
-        if (players.size() != 4) {
-            return nullptr;
+    RoomManager::RoomManager(std::uint32_t actorCount, std::uint32_t queueCapacity)
+        : actorPool_(std::make_unique<RoomActorPool>(actorCount, queueCapacity)) {
+        // 设置事件处理器回调
+        actorPool_->setEventHandler([this](const std::string& roomId, const event::GameEvent& event) {
+            this->onEvent(roomId, event);
+        });
+    }
+
+    RoomManager::~RoomManager() {
+        stop();
+    }
+
+    void RoomManager::start() {
+        if (actorPool_) {
+            actorPool_->start();
+            LOG_INFO("[RoomManager] started with {} actors", actorPool_->actorCount());
+        }
+    }
+
+    void RoomManager::stop() {
+        if (actorPool_) {
+            actorPool_->stop();
+            LOG_INFO("[RoomManager] stopped");
+        }
+    }
+
+    void RoomManager::submitEvent(const std::string& roomId, const event::GameEvent& event) {
+        if (actorPool_) {
+            actorPool_->submitEvent(roomId, event);
+        }
+    }
+
+    void RoomManager::onEvent(const std::string& roomId, const event::GameEvent& event) {
+        auto* room = get_room(roomId);
+        if (!room) {
+            LOG_WARN("[RoomManager] room {} not found for event", roomId);
+            return;
         }
 
+        room->handleEvent(event);
+    }
+
+    Room* RoomManager::create_room(const std::vector<std::string> &players, std::int32_t engineType) {
         std::lock_guard lock(mutex_);
 
         // 检查玩家是否已在其他房间
-        for (const auto &[user_id, _]: players) {
-            if (player_room_.contains(user_id)) {
+        for (const auto &userId: players) {
+            if (playerRoom_.contains(userId)) {
+                LOG_WARN("[RoomManager] player {} already in a room", userId);
                 return nullptr;
             }
         }
 
-        // 创建房间
-        auto room = std::make_unique<Room>();
-        room->id = generate_room_id();
-        room->players = players;
-        room->engine_type = engine_type;
-
-        const Room *result = room.get();
-
-        // 更新路由
-        for (const auto &[user_id, _]: players) {
-            player_room_[user_id] = room->id;
+        auto roomId = generate_room_id();
+        auto room = std::make_unique<Room>(roomId, engineType);
+        for (const auto &userId: players) {
+            room->addPlayer(userId);
+        }
+        auto* result = room.get();
+        for (const auto &userId: players) {
+            playerRoom_[userId] = roomId;
         }
 
-        rooms_[room->id] = std::move(room);
+        rooms_[roomId] = std::move(room);
+        
+        // 分配房间到 Actor 池
+        if (actorPool_) {
+            actorPool_->assignRoom(roomId);
+        }
+        
+        LOG_INFO("[RoomManager] created room {} with {} players", roomId, players.size());
+        
+        // 初始化游戏
+        if (result) {
+            result->initGame();
+        }
+        
         return result;
     }
 
-    const Room *RoomManager::get_room(const std::string &room_id) const {
+    Room* RoomManager::get_room(const std::string &roomId) {
         std::lock_guard lock(mutex_);
-        if (auto it = rooms_.find(room_id); it != rooms_.end()) {
+        if (auto it = rooms_.find(roomId); it != rooms_.end()) {
             return it->second.get();
         }
         return nullptr;
     }
 
-    const Room *RoomManager::get_player_room(const std::string &user_id) const {
+    Room* RoomManager::get_player_room(const std::string &userId) {
         std::lock_guard lock(mutex_);
-        if (auto it = player_room_.find(user_id); it != player_room_.end()) {
-            if (auto room_it = rooms_.find(it->second); room_it != rooms_.end()) {
-                return room_it->second.get();
+        if (auto it = playerRoom_.find(userId); it != playerRoom_.end()) {
+            if (auto roomIt = rooms_.find(it->second); roomIt != rooms_.end()) {
+                return roomIt->second.get();
             }
         }
         return nullptr;
     }
 
-    bool RoomManager::delete_room(const std::string &room_id) {
+    bool RoomManager::delete_room(const std::string &roomId) {
         std::lock_guard lock(mutex_);
 
-        auto it = rooms_.find(room_id);
+        auto it = rooms_.find(roomId);
         if (it == rooms_.end()) {
+            LOG_WARN("[RoomManager] room {} not found", roomId);
             return false;
         }
 
         // 清理玩家路由
-        for (const auto &[user_id, _]: it->second->players) {
-            player_room_.erase(user_id);
+        for (const auto &userId: it->second->getPlayers()) {
+            playerRoom_.erase(userId);
+        }
+
+        // 从 Actor 池移除房间
+        if (actorPool_) {
+            actorPool_->removeRoom(roomId);
         }
 
         rooms_.erase(it);
+        LOG_INFO("[RoomManager] deleted room {}", roomId);
         return true;
     }
 
@@ -97,7 +160,11 @@ namespace domain::game::room {
 
     std::size_t RoomManager::player_count() const {
         std::lock_guard lock(mutex_);
-        return player_room_.size();
+        return playerRoom_.size();
+    }
+
+    std::size_t RoomManager::actor_count() const {
+        return actorPool_ ? actorPool_->actorCount() : 0;
     }
 
 } // namespace domain::game::room

@@ -9,17 +9,13 @@
 #include <mongocxx/collection.hpp>
 #include <mongocxx/database.hpp>
 
+// 使用权威配置
+#include "infrastructure/config/config.hpp"
+
 namespace infra::persistence {
 
-    // MongoDB 配置
-    struct MongoConfig {
-        std::string uri{"mongodb://localhost:27017"};
-        std::string database{"gomahjong"};
-        std::uint32_t min_pool_size{10};
-        std::uint32_t max_pool_size{100};
-        std::string username;
-        std::string password;
-    };
+    // 使用 config 命名空间中的权威 MongoConfig
+    using MongoConfig = infra::config::MongoConfig;
 
     // MongoDB 客户端封装
     // 提供连接管理、数据库和集合访问

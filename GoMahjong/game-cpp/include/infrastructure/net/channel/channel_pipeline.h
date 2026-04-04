@@ -29,6 +29,11 @@ namespace infra::net::channel {
         IChannel& channel() override { return channel_; }
         ChannelPipeline& pipeline() override { return pipeline_; }
 
+        // === 授权状态 ===
+        bool is_authorized() const noexcept override { return authorized_; }
+        const std::string& player_id() const noexcept override { return player_id_; }
+        void set_authorized(const std::string& player_id) override;
+
         void fire_channel_active() override;
         void fire_channel_read(InboundMessage&& msg) override;
         void fire_channel_inactive() override;
@@ -48,6 +53,10 @@ namespace infra::net::channel {
         size_t index_;
         std::shared_ptr<ChannelInboundHandler> inbound_;
         std::shared_ptr<ChannelOutboundHandler> outbound_;
+        
+        // 授权状态
+        bool authorized_{false};
+        std::string player_id_;
     };
 
     /**

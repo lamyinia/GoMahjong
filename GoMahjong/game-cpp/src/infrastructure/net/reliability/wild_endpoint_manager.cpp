@@ -1,4 +1,5 @@
 #include "infrastructure/net/reliability/wild_endpoint_manager.h"
+#include "infrastructure/net/dispatcher/dispatcher.h"
 #include "infrastructure/log/logger.hpp"
 
 namespace infra::net::reliability {
@@ -77,8 +78,15 @@ namespace infra::net::reliability {
             }
         }
 
-        if (channel && onAuthenticated_) {
-            onAuthenticated_(player_id, channel);
+        if (channel) {
+            // 添加 DispatcherHandler 到 Pipeline
+            auto dispatcher = dispatcher::Dispatcher::instance().create_dispatcher();
+            channel->add_inbound(dispatcher);
+            LOG_DEBUG("[WildEndpointManager] dispatcher added to channel for player {}", player_id);
+
+            if (onAuthenticated_) {
+                onAuthenticated_(player_id, channel);
+            }
         }
     }
 

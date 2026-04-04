@@ -16,6 +16,9 @@ namespace infra::net::reliability { class WildEndpointManager; }
 
 namespace infra::net::session { class SessionManager; }
 
+namespace infra::persistence { class MongoPool; }
+
+namespace domain::game::room { class RoomManager; }
 
 // 生命周期管理器，以及依赖的组装
 namespace gomahjong::bootstrap {
@@ -60,6 +63,12 @@ namespace gomahjong::bootstrap {
 
         // 已认证会话管理
         std::shared_ptr<infra::net::session::SessionManager> session_manager_;
+
+        // 数据库线程池
+        std::shared_ptr<infra::persistence::MongoPool> mongo_pool_;
+
+        // 游戏房间管理器（包含 Actor 线程池）
+        std::unique_ptr<domain::game::room::RoomManager> room_manager_;
 
         bool started_ = false;
     };

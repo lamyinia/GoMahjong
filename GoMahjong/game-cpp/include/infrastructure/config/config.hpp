@@ -35,6 +35,14 @@ struct MongoConfig {
     std::uint32_t max_pool_size{100};
     std::string username;
     std::string password;
+    // 数据库线程池配置
+    std::uint32_t thread_count{4};        // 工作线程数量
+    std::uint32_t queue_max_size{1000};   // 任务队列最大容量
+};
+
+struct ActorConfig {
+    std::uint32_t count{4};              // Actor 数量（建议 = CPU 核心数）
+    std::uint32_t queue_capacity{1024};  // 每个 Actor 的队列容量
 };
 
 struct ServerConfig {
@@ -43,6 +51,7 @@ struct ServerConfig {
     EtcdConfig etcd;
     GrpcConfig grpc;
     MongoConfig mongodb;
+    ActorConfig actor;
 };
 
 class Config {

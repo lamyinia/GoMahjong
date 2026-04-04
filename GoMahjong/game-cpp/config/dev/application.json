@@ -21,7 +21,9 @@
       "uri": "mongodb://localhost:27017",
       "database": "gomahjong",
       "min_pool_size": 10,
-      "max_pool_size": 100
+      "max_pool_size": 100,
+      "thread_count": 4,
+      "queue_max_size": 1000
     }
   }
 }

@@ -19,6 +19,11 @@ namespace infra::net::channel {
       , inbound_(std::move(inbound))
       , outbound_(std::move(outbound)) {}
 
+    void DefaultChannelHandlerContext::set_authorized(const std::string& player_id) {
+        authorized_ = true;
+        player_id_ = player_id;
+    }
+
     // 进站事件传播
     void DefaultChannelHandlerContext::fire_channel_active() {
         pipeline_.fire_channel_active_from(index_ + 1);

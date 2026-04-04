@@ -29,24 +29,24 @@ namespace domain::game::service {
                 return grpc::Status::OK;
             }
 
-            // 转换 players
-            std::map<std::string, std::string> players;
-            for (const auto &[user_id, connector_topic]: request->players()) {
-                players[user_id] = connector_topic;
+            // 转换 players（只取 userId）
+            std::vector<std::string> players;
+            for (const auto &[user_id, _]: request->players()) {
+                players.push_back(user_id);
             }
 
             // 调用 RoomManager 创建房间
-            const auto *room = room_manager_.create_room(players, request->engine_type());
+            auto* room = room_manager_.create_room(players, request->engine_type());
             if (!room) {
                 response->set_success(false);
                 response->set_message("创建房间失败：玩家数量不正确或玩家已在其他房间");
                 return grpc::Status::OK;
             }
 
-            LOG_INFO("[GameService] 创建房间成功: {}, 玩家数: {}", room->id, players.size());
+            LOG_INFO("[GameService] 创建房间成功: {}, 玩家数: {}", room->getId(), players.size());
 
             response->set_success(true);
-            response->set_room_id(room->id);
+            response->set_room_id(room->getId());
             response->set_message("房间创建成功");
             return grpc::Status::OK;
         }
@@ -56,28 +56,41 @@ namespace domain::game::service {
     };
 
     // GameService::Impl
-    struct GameService::Impl {
-        domain::game::room::RoomManager &room_manager;
+    class GameService::Impl {
+    public:
+        domain::game::room::RoomManager room_manager;  // 改为值类型（单例内部持有）
         std::shared_ptr<GameServiceImpl> grpc_service;
 
-        explicit Impl(domain::game::room::RoomManager &rm) : room_manager(rm) {
+        Impl() {
             grpc_service = std::make_shared<GameServiceImpl>(room_manager);
         }
     };
 
-    GameService::GameService(domain::game::room::RoomManager &room_manager)
-        : impl_(std::make_unique<Impl>(room_manager)) {
+    GameService& GameService::instance() {
+        static GameService instance;
+        return instance;
+    }
+
+    GameService::GameService()
+        : impl_(std::make_unique<Impl>()) {
+        LOG_INFO("[GameService] 单例实例已创建");
     }
 
     GameService::~GameService() = default;
 
     CreateRoomResponse GameService::create_room(const CreateRoomRequest &request) {
-        const auto *room = impl_->room_manager.create_room(request.players, request.engine_type);
+        std::vector<std::string> players;
+        players.reserve(request.players.size());
+        for (const auto &[user_id, _] : request.players) {
+            players.push_back(user_id);
+        }
+
+        const auto *room = impl_->room_manager.create_room(players, request.engine_type);
 
         CreateRoomResponse response;
         if (room) {
             response.success = true;
-            response.room_id = room->id;
+            response.room_id = room->getId();
             response.message = "房间创建成功";
         } else {
             response.success = false;
@@ -88,6 +101,10 @@ namespace domain::game::service {
 
     std::shared_ptr<grpc::Service> GameService::get_grpc_service() const {
         return std::static_pointer_cast<grpc::Service>(impl_->grpc_service);
+    }
+
+    domain::game::room::RoomManager& GameService::room_manager() {
+        return impl_->room_manager;
     }
 
 } // namespace domain::game::service

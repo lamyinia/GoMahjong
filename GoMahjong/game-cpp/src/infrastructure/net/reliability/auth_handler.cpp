@@ -83,6 +83,10 @@ namespace infra::net::reliability {
         if (verified) {
             resp.set_pid(std::stoull(player_id));
             resp.set_message("ok");
+            
+            // 设置授权状态
+            ctx.set_authorized(player_id);
+            
             LOG_INFO("[AuthHandler] auth success, player_id={}", player_id);
         } else {
             resp.set_message("invalid token");

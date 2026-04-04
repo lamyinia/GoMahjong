@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <system_error>
 #include <vector>
 #include <variant>
@@ -27,6 +28,7 @@ namespace infra::net::channel {
      * 提供：
      * - 访问 Channel 和 Pipeline
      * - 传播事件到下一个 Handler
+     * - 授权状态管理
      */
     class ChannelHandlerContext {
     public:
@@ -36,6 +38,12 @@ namespace infra::net::channel {
 
         virtual IChannel& channel() = 0;
         virtual ChannelPipeline& pipeline() = 0;
+
+        // === 授权状态 ===
+
+        virtual bool is_authorized() const noexcept = 0;
+        virtual const std::string& player_id() const noexcept = 0;
+        virtual void set_authorized(const std::string& player_id) = 0;
 
         // === 进站事件传播 ===
 
