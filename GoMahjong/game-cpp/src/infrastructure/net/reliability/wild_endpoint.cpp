@@ -35,22 +35,20 @@ namespace infra::net::reliability {
 
         LOG_DEBUG("[WildEndpoint] start waiting auth, channel_id={}", id_);
 
-        // 1. 添加 Codec Handler 到 Pipeline
         // 进站：Bytes -> Bytes (拆包) -> MessagePtr (反序列化)
         channel_->add_inbound(std::make_shared<channel::LengthFieldDecoder>());
         channel_->add_inbound(std::make_shared<channel::ProtobufDecoder>());
 
         // 出站：MessagePtr -> Bytes (序列化) -> Bytes (加长度头)
-        channel_->add_outbound(std::make_shared<channel::ProtobufEncoder>());
+        // 注意：出站 Handler 是反向传播的，所以先添加 LengthFieldEncoder，再添加 ProtobufEncoder
+        // 这样 ProtobufEncoder 先执行（MessagePtr -> Bytes），然后 LengthFieldEncoder（Bytes -> Bytes with length）
         channel_->add_outbound(std::make_shared<channel::LengthFieldEncoder>());
+        channel_->add_outbound(std::make_shared<channel::ProtobufEncoder>());
 
-        // 2. 添加 AuthHandler 到 Pipeline
         channel_->add_inbound(std::make_shared<AuthHandler>(shared_from_this()));
 
-        // 3. 启动超时定时器
         start_timeout_timer();
 
-        // 4. 开始读取数据
         channel_->start_read();
     }
 
@@ -80,8 +78,6 @@ namespace infra::net::reliability {
         if (onAuthFailed_) {
             onAuthFailed_();
         }
-
-        // 关闭连接
         if (channel_) {
             channel_->close();
         }
@@ -101,7 +97,7 @@ namespace infra::net::reliability {
 
     void WildEndpoint::handle_timeout(const boost::system::error_code& ec) {
         if (ec == boost::asio::error::operation_aborted) {
-            return; // 定时器被取消
+            return;
         }
 
         if (!ec && !auth_done_.load()) {

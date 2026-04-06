@@ -22,6 +22,7 @@ namespace infra::net::channel {
         }
 
         auto& data = std::get<Bytes>(msg);
+        LOG_DEBUG("[LengthFieldDecoder] received {} bytes, buffer size before: {}", data.size(), buffer_.size());
         
         // 将新数据追加到缓冲区
         buffer_.insert(buffer_.end(), data.begin(), data.end());
@@ -47,6 +48,7 @@ namespace infra::net::channel {
 
             // 提取消息体（不包含长度字段）
             Bytes frame(buffer_.begin() + length_field_offset_ + length_field_length_, buffer_.begin() + total_len);
+            LOG_DEBUG("[LengthFieldDecoder] extracted frame, length={}, firing channel_read", frame_len);
             
             // 从缓冲区移除已处理的数据
             buffer_.erase(buffer_.begin(), buffer_.begin() + total_len);

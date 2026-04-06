@@ -67,6 +67,9 @@ namespace gomahjong::bootstrap {
     }
 
     void ServerHub::build_pools() {
+        // 初始化日志系统
+        infra::log::init(cfg_.server().log);
+        
         // 创建网络 IO 线程池
         work_guard_.emplace(boost::asio::make_work_guard(ioc_));
         unsigned int threads = std::max(2u, std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() / 2 : 2u);
@@ -96,17 +99,13 @@ namespace gomahjong::bootstrap {
         // 创建未认证连接管理器
         wild_endpoint_manager_ = std::make_shared<infra::net::reliability::WildEndpointManager>(
             ioc_.get_executor(),
-            std::chrono::milliseconds(5000)  // 5秒认证超时
+            std::chrono::milliseconds(5000)  // 30 秒认证超时
         );
         session_manager_ = std::make_shared<infra::net::session::SessionManager>();
-
-        // 设置回调
         setup_wild_endpoint_callbacks();
 
         // 注册游戏 Handler
         domain::game::handler::registerGameHandlers();
-
-        LOG_INFO("[hub] services built");
     }
 
     void ServerHub::build_listeners() {
@@ -118,7 +117,6 @@ namespace gomahjong::bootstrap {
         tcp_listener_ = std::make_unique<TcpListener>(ioc_,
                                                       boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port));
 
-        // 捕获 wild_endpoint_manager_ 的弱引用，避免循环引用
         auto wild_manager = wild_endpoint_manager_;
 
         tcp_listener_->start(
@@ -147,13 +145,10 @@ namespace gomahjong::bootstrap {
         }
 
         auto session_mgr = session_manager_;
-
-        // 设置认证成功回调：创建 Session
         wild_endpoint_manager_->set_on_authenticated(
-            [session_mgr](const std::string& player_id, 
+            [session_mgr](const std::string& player_id,
                           std::shared_ptr<infra::net::channel::IChannel> channel) {
                 LOG_INFO("[hub] player {} authenticated, creating session", player_id);
-                // 创建或获取会话
                 session_mgr->create_or_get_session(player_id, std::move(channel));
             }
         );

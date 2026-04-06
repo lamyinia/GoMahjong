@@ -8,16 +8,19 @@ namespace infra::net::channel {
 
     static std::atomic<uint64_t> channel_counter{0};
 
-    // fix me 这里可以优化成 uuid
     std::string TcpChannel::generate_id() {
         std::ostringstream oss;
         oss << "tcp-" << ++channel_counter;
         return oss.str();
     }
 
-    TcpChannel::TcpChannel(std::shared_ptr<transport::ITransport> transport)
+    TcpChannel::TcpChannel(
+        std::shared_ptr<transport::ITransport> transport,
+        const Strand& strand
+    )
         : transport_(std::move(transport))
         , pipeline_(*this)
+        , strand_(strand)  // 拷贝，与 TcpTransport 共享同一个底层 strand 实现
         , id_(generate_id())
         , active_(true) {
         LOG_DEBUG("[TcpChannel] created: {}", id_);
@@ -51,12 +54,19 @@ namespace infra::net::channel {
             LOG_WARN("[TcpChannel] send on closed channel: {}", id_);
             return;
         }
-        pipeline_.fire_write(std::move(data));
+        // strand_ 投递，保证 contexts_ 访问无锁
+        boost::asio::post(strand_, [self = shared_from_this(), this, data = std::move(data)]() mutable {
+            if (!active_) return;
+            pipeline_.fire_write(std::move(data));
+        });
     }
 
     void TcpChannel::flush() {
         if (!active_) return;
-        pipeline_.fire_flush();
+        boost::asio::post(strand_, [self = shared_from_this(), this]() {
+            if (!active_) return;
+            pipeline_.fire_flush();
+        });
     }
 
     void TcpChannel::close() {
@@ -64,14 +74,17 @@ namespace infra::net::channel {
             return;
         }
         LOG_DEBUG("[TcpChannel] closing: {}", id_);
-        pipeline_.fire_close();
-        pipeline_.fire_channel_inactive();
+        boost::asio::post(strand_, [self = shared_from_this(), this]() {
+            pipeline_.fire_close();
+            pipeline_.fire_channel_inactive();
+        });
     }
 
     // === 进站事件入口 ===
 
     void TcpChannel::start_read() {
         if (reading_.exchange(true)) {
+            LOG_WARN("[TcpChannel] start_read already reading: {}", id_);
             return;
         }
         if (!transport_) {
@@ -85,6 +98,8 @@ namespace infra::net::channel {
             [this, self]() { on_transport_closed(); },
             [this, self](const std::error_code& ec) { on_transport_error(ec); }
         );
+
+        LOG_DEBUG("[TcpChannel] starting transport, channel_id={}", id_);
     }
 
     // === Transport 操作（由 Pipeline 调用）===
@@ -113,6 +128,7 @@ namespace infra::net::channel {
 
     void TcpChannel::on_transport_bytes(Bytes&& data) {
         if (!active_) return;
+        LOG_DEBUG("[TcpChannel] on_transport_bytes, size={}, firing channel_read", data.size());
         pipeline_.fire_channel_read(std::move(data));
     }
 

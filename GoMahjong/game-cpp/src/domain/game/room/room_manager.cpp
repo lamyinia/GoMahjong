@@ -6,26 +6,26 @@
 #include <random>
 #include <sstream>
 #include <iomanip>
+#include <atomic>
 
 namespace domain::game::room {
 
-    // 生成房间 ID
+    static std::atomic<std::uint64_t> roomCounter{0};
+
     static std::string generate_room_id() {
         auto now = std::chrono::system_clock::now();
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, 65535);
+        
+        // 使用原子计数器确保唯一性
+        auto counter = roomCounter.fetch_add(1, std::memory_order_relaxed);
 
         std::ostringstream oss;
-        oss << "room_" << ms << "_" << std::hex << std::setw(4) << std::setfill('0') << dis(gen);
+        oss << "room_" << ms << "_" << std::hex << std::setw(4) << std::setfill('0') << (counter % 65536);
         return oss.str();
     }
 
     RoomManager::RoomManager() 
         : actorPool_(std::make_unique<RoomActorPool>(4, 1024)) {
-        // 设置事件处理器回调
         actorPool_->setEventHandler([this](const std::string& roomId, const event::GameEvent& event) {
             this->onEvent(roomId, event);
         });
@@ -33,7 +33,6 @@ namespace domain::game::room {
 
     RoomManager::RoomManager(std::uint32_t actorCount, std::uint32_t queueCapacity)
         : actorPool_(std::make_unique<RoomActorPool>(actorCount, queueCapacity)) {
-        // 设置事件处理器回调
         actorPool_->setEventHandler([this](const std::string& roomId, const event::GameEvent& event) {
             this->onEvent(roomId, event);
         });
@@ -76,6 +75,8 @@ namespace domain::game::room {
     Room* RoomManager::create_room(const std::vector<std::string> &players, std::int32_t engineType) {
         std::lock_guard lock(mutex_);
 
+        LOG_INFO("[RoomManager] create_room: checking players");
+
         // 检查玩家是否已在其他房间
         for (const auto &userId: players) {
             if (playerRoom_.contains(userId)) {
@@ -84,7 +85,9 @@ namespace domain::game::room {
             }
         }
 
+        LOG_INFO("[RoomManager] create_room: generating room id");
         auto roomId = generate_room_id();
+        LOG_INFO("[RoomManager] create_room: creating room object");
         auto room = std::make_unique<Room>(roomId, engineType);
         for (const auto &userId: players) {
             room->addPlayer(userId);
@@ -96,18 +99,20 @@ namespace domain::game::room {
 
         rooms_[roomId] = std::move(room);
         
-        // 分配房间到 Actor 池
+        LOG_INFO("[RoomManager] create_room: assigning room to actor pool");
+
         if (actorPool_) {
             actorPool_->assignRoom(roomId);
         }
         
         LOG_INFO("[RoomManager] created room {} with {} players", roomId, players.size());
-        
+        LOG_INFO("[RoomManager] create_room: initializing game");
         // 初始化游戏
         if (result) {
             result->initGame();
         }
         
+        LOG_INFO("[RoomManager] create_room: done");
         return result;
     }
 

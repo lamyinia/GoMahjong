@@ -18,8 +18,9 @@ namespace gomahjong::bootstrap {
         GOOGLE_PROTOBUF_VERIFY_VERSION;
 
         try {
-            const auto cfg = infra::config::Config::load_from_file_or_default("../config/dev/application.json");
-            infra::log::init();
+            infra::config::Config::init_or_default("../config/dev/application.json");
+            auto& cfg = infra::config::Config::instance();
+            infra::log::init(cfg.server().log);
             ServerHub hub(cfg);
 
             boost::asio::signal_set signals(hub.ioc(), SIGINT, SIGTERM);
@@ -31,6 +32,7 @@ namespace gomahjong::bootstrap {
             });
 
             // 开始组装逻辑
+            LOG_DEBUG("开始组装逻辑");
             hub.start();
             hub.ioc().run();
             hub.stop();

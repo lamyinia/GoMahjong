@@ -24,9 +24,15 @@ namespace infra::net::channel {
 
         // 创建 Message 并填充
         auto message = std::make_shared<Message>();
-        // TODO: 从 Envelope 中提取 route 和 payload
-        // message->route = envelope->route();
-        // message->payload.assign(envelope->payload().begin(), envelope->payload().end());
+        message->route = envelope->route();
+        message->payload.assign(envelope->payload().begin(), envelope->payload().end());
+        message->client_seq = envelope->client_seq();
+
+        if (message->route.empty()) {
+            LOG_WARN("[ProtobufDecoder] empty route, close channel");
+            ctx.fire_close();
+            return;
+        }
 
         // 传播 MessagePtr 到下游 Handler
         ctx.fire_channel_read(message);

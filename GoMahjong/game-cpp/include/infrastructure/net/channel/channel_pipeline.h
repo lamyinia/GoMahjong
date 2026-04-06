@@ -5,7 +5,6 @@
 
 #include <deque>
 #include <memory>
-#include <mutex>
 #include <vector>
 
 namespace infra::net::channel {
@@ -94,7 +93,6 @@ namespace infra::net::channel {
 
     private:
         IChannel& channel_;
-        std::mutex mutex_;
         std::vector<std::shared_ptr<DefaultChannelHandlerContext>> contexts_;
     };
 

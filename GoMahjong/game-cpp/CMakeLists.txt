@@ -7,6 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Boost REQUIRED)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
 find_package(Protobuf REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
 find_package(etcd-cpp-api REQUIRED)
@@ -123,14 +125,11 @@ target_link_libraries(gomahjong_server PRIVATE
         proto_generated
         spdlog::spdlog
         nlohmann_json::nlohmann_json
+        Threads::Threads
         etcd-cpp-api
         gRPC::grpc++
         mongo::mongocxx_shared
 )
-
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
-target_link_libraries(gomahjong_server PRIVATE Threads::Threads)
 
 # Test executables
 add_executable(tcp_server_test tests/tcp_server_test.cpp)
@@ -153,5 +152,44 @@ target_link_libraries(mongo_pool_test PRIVATE
         Boost::boost
         spdlog::spdlog
         mongo::mongocxx_shared
+        Threads::Threads
+)
+
+# Room test
+file(GLOB_RECURSE ROOM_SOURCES CONFIGURE_DEPENDS "src/domain/game/room/*.cpp")
+file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "src/domain/game/engine/*.cpp")
+
+add_executable(room_test
+        tests/room_test.cpp
+        ${ROOM_SOURCES}
+        ${ENGINE_SOURCES}
+        src/infrastructure/log/logger.cpp
+)
+setup_target(room_test)
+
+target_link_libraries(room_test PRIVATE
+        Boost::boost
+        spdlog::spdlog
+        nlohmann_json::nlohmann_json
+        Threads::Threads
+)
+
+# Integration test
+file(GLOB_RECURSE SESSION_SOURCES CONFIGURE_DEPENDS "src/infrastructure/net/session/*.cpp")
+
+add_executable(integration_test
+        tests/integration_test.cpp
+        ${ROOM_SOURCES}
+        ${ENGINE_SOURCES}
+        ${SESSION_SOURCES}
+        src/infrastructure/log/logger.cpp
+)
+setup_target(integration_test)
+
+target_link_libraries(integration_test PRIVATE
+        Boost::boost
+        proto_generated
+        spdlog::spdlog
+        nlohmann_json::nlohmann_json
         Threads::Threads
 )

@@ -14,14 +14,6 @@ using namespace infra::net::listener;
 using namespace infra::net::transport;
 using boost::asio::ip::tcp;
 
-/*
-    测试使用端口 17000-17003，确保这些端口未被占用。
-    1.test_listener_lifecycle - 测试 listener 启动/停止生命周期
-    2.test_echo - 测试 echo 功能（发送什么返回什么）
-    3.test_multiple_connections - 测试多客户端并发连接（5个客户端）
-    4.test_large_data - 测试大数据传输（4KB）
-
-*/
 // Test helper: simple sync client
 class TestClient {
 public:

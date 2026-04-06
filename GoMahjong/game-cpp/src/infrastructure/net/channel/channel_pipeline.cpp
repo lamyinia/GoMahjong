@@ -62,21 +62,18 @@ namespace infra::net::channel {
     // === Handler 管理 ===
 
     void ChannelPipeline::add_inbound(std::shared_ptr<ChannelInboundHandler> handler) {
-        std::lock_guard<std::mutex> lock(mutex_);
         auto ctx = std::make_shared<DefaultChannelHandlerContext>(
             channel_, *this, contexts_.size(), std::move(handler), nullptr);
         contexts_.push_back(std::move(ctx));
     }
 
     void ChannelPipeline::add_outbound(std::shared_ptr<ChannelOutboundHandler> handler) {
-        std::lock_guard<std::mutex> lock(mutex_);
         auto ctx = std::make_shared<DefaultChannelHandlerContext>(
             channel_, *this, contexts_.size(), nullptr, std::move(handler));
         contexts_.push_back(std::move(ctx));
     }
 
     void ChannelPipeline::add_duplex(std::shared_ptr<ChannelDuplexHandler> handler) {
-        std::lock_guard<std::mutex> lock(mutex_);
         auto inbound_ptr = std::static_pointer_cast<ChannelInboundHandler>(handler);
         auto outbound_ptr = std::static_pointer_cast<ChannelOutboundHandler>(handler);
         auto ctx = std::make_shared<DefaultChannelHandlerContext>(
@@ -85,7 +82,6 @@ namespace infra::net::channel {
     }
 
     void ChannelPipeline::clear() {
-        std::lock_guard<std::mutex> lock(mutex_);
         contexts_.clear();
     }
 
@@ -139,7 +135,6 @@ namespace infra::net::channel {
     // === Context 传播实现 ===
 
     void ChannelPipeline::fire_channel_active_from(size_t index) {
-        std::lock_guard<std::mutex> lock(mutex_);
         for (size_t i = index; i < contexts_.size(); ++i) {
             if (auto* handler = contexts_[i]->inbound_handler()) {
                 handler->channel_active(*contexts_[i]);
@@ -148,7 +143,6 @@ namespace infra::net::channel {
     }
 
     void ChannelPipeline::fire_channel_read_from(size_t index, InboundMessage&& msg) {
-        std::lock_guard<std::mutex> lock(mutex_);
         for (size_t i = index; i < contexts_.size(); ++i) {
             if (auto* handler = contexts_[i]->inbound_handler()) {
                 handler->channel_read(*contexts_[i], std::move(msg));
@@ -158,7 +152,6 @@ namespace infra::net::channel {
     }
 
     void ChannelPipeline::fire_channel_inactive_from(size_t index) {
-        std::lock_guard<std::mutex> lock(mutex_);
         for (size_t i = index; i < contexts_.size(); ++i) {
             if (auto* handler = contexts_[i]->inbound_handler()) {
                 handler->channel_inactive(*contexts_[i]);
@@ -167,7 +160,6 @@ namespace infra::net::channel {
     }
 
     void ChannelPipeline::fire_exception_caught_from(size_t index, const std::error_code& ec) {
-        std::lock_guard<std::mutex> lock(mutex_);
         for (size_t i = index; i < contexts_.size(); ++i) {
             if (auto* handler = contexts_[i]->inbound_handler()) {
                 handler->exception_caught(*contexts_[i], ec);
@@ -176,7 +168,6 @@ namespace infra::net::channel {
     }
 
     void ChannelPipeline::fire_write_from(size_t index, OutboundMessage&& msg) {
-        std::lock_guard<std::mutex> lock(mutex_);
         // 反向遍历
         for (int i = static_cast<int>(index); i >= 0; --i) {
             if (auto* handler = contexts_[i]->outbound_handler()) {
@@ -191,7 +182,6 @@ namespace infra::net::channel {
     }
 
     void ChannelPipeline::fire_flush_from(size_t index) {
-        std::lock_guard<std::mutex> lock(mutex_);
         for (int i = static_cast<int>(index); i >= 0; --i) {
             if (auto* handler = contexts_[i]->outbound_handler()) {
                 handler->flush(*contexts_[i]);
@@ -201,7 +191,6 @@ namespace infra::net::channel {
     }
 
     void ChannelPipeline::fire_close_from(size_t index) {
-        std::lock_guard<std::mutex> lock(mutex_);
         for (int i = static_cast<int>(index); i >= 0; --i) {
             if (auto* handler = contexts_[i]->outbound_handler()) {
                 handler->close(*contexts_[i]);

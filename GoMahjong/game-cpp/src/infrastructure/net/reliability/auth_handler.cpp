@@ -2,7 +2,6 @@
 #include "infrastructure/net/reliability/wild_endpoint.h"
 #include "infrastructure/log/logger.hpp"
 
-// 生成的 protobuf 头文件
 #include "auth.pb.h"
 
 namespace infra::net::reliability {
@@ -12,7 +11,6 @@ namespace infra::net::reliability {
     }
 
     void AuthHandler::channel_read(channel::ChannelHandlerContext& ctx, channel::InboundMessage&& msg) {
-        // 检查是否是 MessagePtr
         if (!std::holds_alternative<channel::MessagePtr>(msg)) {
             ctx.fire_channel_read(std::move(msg));
             return;
@@ -24,13 +22,11 @@ namespace infra::net::reliability {
             return;
         }
 
-        // 检查路由是否是认证请求
-        if (message->route == "auth.login") {
+        if (!ctx.is_authorized() && message->route == "auth.login") {
             handle_auth_request(ctx, message);
             return;
         }
 
-        // 其他消息继续传播
         ctx.fire_channel_read(std::move(msg));
     }
 
@@ -55,7 +51,6 @@ namespace infra::net::reliability {
             ctx.fire_write(channel::MessagePtr(std::move(resp_msg)));
             ctx.fire_flush();
 
-            // 通知认证失败
             if (auto endpoint = endpoint_.lock()) {
                 endpoint->on_auth_failed();
             }
@@ -64,16 +59,22 @@ namespace infra::net::reliability {
 
         LOG_DEBUG("[AuthHandler] auth request, token={}", auth_req.token().substr(0, 8) + "...");
 
-        // TODO: 验证 token（通过 gRPC 调用 Player 服务）
-        // 目前使用简化逻辑：token 格式为 "player_id:timestamp"
         std::string player_id;
         bool verified = false;
 
-        // 简化验证逻辑（后续替换为 gRPC 调用）
+        // 简化验证逻辑
         auto pos = auth_req.token().find(':');
         if (pos != std::string::npos && auth_req.token().length() > pos + 1) {
             player_id = auth_req.token().substr(0, pos);
             verified = !player_id.empty();
+            // 提取数字部分（支持 "player_001" -> "001" -> 1）, 如果 player_id 包含非数字字符，尝试提取数字后缀
+            if (verified) {
+                size_t digit_start = player_id.find_last_not_of("0123456789");
+                if (digit_start != std::string::npos) {
+                    player_id = player_id.substr(digit_start + 1);
+                }
+                verified = !player_id.empty();
+            }
         }
 
         // 发送响应
@@ -83,8 +84,6 @@ namespace infra::net::reliability {
         if (verified) {
             resp.set_pid(std::stoull(player_id));
             resp.set_message("ok");
-            
-            // 设置授权状态
             ctx.set_authorized(player_id);
             
             LOG_INFO("[AuthHandler] auth success, player_id={}", player_id);
@@ -102,7 +101,6 @@ namespace infra::net::reliability {
         ctx.fire_write(channel::MessagePtr(std::move(resp_msg)));
         ctx.fire_flush();
 
-        // 通知 WildEndpoint
         if (auto endpoint = endpoint_.lock()) {
             if (verified) {
                 endpoint->on_auth_success(player_id);

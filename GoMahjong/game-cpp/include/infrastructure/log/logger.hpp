@@ -2,12 +2,16 @@
 
 #include <memory>
 
-#include <spdlog/spdlog.h>
-#include <spdlog/logger.h>
+#include "_deps/spdlog-src/include/spdlog/spdlog.h"
+#include "_deps/spdlog-src/include/spdlog/logger.h"
+
+namespace infra::config {
+struct LogConfig;
+}
 
 namespace infra::log {
 
-void init();
+void init(const config::LogConfig& cfg);
 std::shared_ptr<spdlog::logger> get();
 
 } // namespace infra::log

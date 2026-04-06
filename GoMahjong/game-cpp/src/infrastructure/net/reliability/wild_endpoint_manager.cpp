@@ -28,8 +28,8 @@ namespace infra::net::reliability {
 
         LOG_DEBUG("[WildEndpointManager] add channel, endpoint_id={}", endpoint_id);
 
-        // 设置回调
         auto self = shared_from_this();
+        // on_auth_success 回调链路 => auth_handler -> wild_endpoint -> wild_endpoint_mgr
         endpoint->set_on_auth_success([self, endpoint_id](const std::string& player_id) {
             self->on_endpoint_authenticated(endpoint_id, player_id);
         });
@@ -37,13 +37,11 @@ namespace infra::net::reliability {
             self->on_endpoint_auth_failed(endpoint_id);
         });
 
-        // 添加到管理列表
         {
             std::lock_guard<std::mutex> lock(mutex_);
             endpoints_[endpoint_id] = endpoint;
         }
 
-        // 开始等待认证
         endpoint->start_wait_auth();
     }
 
@@ -51,7 +49,7 @@ namespace infra::net::reliability {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = endpoints_.find(endpoint_id);
         if (it != endpoints_.end()) {
-            LOG_DEBUG("[WildEndpointManager] remove endpoint, endpoint_id={}", endpoint_id);
+            LOG_DEBUG("remove endpoint, endpoint_id={}", endpoint_id);
             endpoints_.erase(it);
         }
     }
@@ -65,7 +63,7 @@ namespace infra::net::reliability {
         const std::string& endpoint_id,
         const std::string& player_id
     ) {
-        LOG_INFO("[WildEndpointManager] endpoint authenticated, endpoint_id={}, player_id={}", 
+        LOG_DEBUG("endpoint authenticated, endpoint_id={}, player_id={}",
                  endpoint_id, player_id);
 
         std::shared_ptr<channel::IChannel> channel;
@@ -79,10 +77,9 @@ namespace infra::net::reliability {
         }
 
         if (channel) {
-            // 添加 DispatcherHandler 到 Pipeline
             auto dispatcher = dispatcher::Dispatcher::instance().create_dispatcher();
             channel->add_inbound(dispatcher);
-            LOG_DEBUG("[WildEndpointManager] dispatcher added to channel for player {}", player_id);
+            LOG_DEBUG("dispatcher added to channel for player {}", player_id);
 
             if (onAuthenticated_) {
                 onAuthenticated_(player_id, channel);
@@ -91,7 +88,7 @@ namespace infra::net::reliability {
     }
 
     void WildEndpointManager::on_endpoint_auth_failed(const std::string& endpoint_id) {
-        LOG_WARN("[WildEndpointManager] endpoint auth failed, endpoint_id={}", endpoint_id);
+        LOG_WARN("endpoint auth failed, endpoint_id={}", endpoint_id);
 
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = endpoints_.find(endpoint_id);

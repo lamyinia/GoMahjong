@@ -80,19 +80,15 @@ namespace infra::net::listener {
                     return;
                 }
 
-                // 1. 创建 Transport
                 auto transport = std::make_shared<transport::TcpTransport>(std::move(socket));
-                // 2. 创建 Channel（封装 Transport）
-                auto channel = std::make_shared<channel::TcpChannel>(std::move(transport));
+                auto channel = std::make_shared<channel::TcpChannel>(transport, transport->strand());
 
                 LOG_DEBUG("[tcp_listener] new connection: {}", channel->id());
 
                 if (onNewChannel_){
                     onNewChannel_(channel);
                 }
-                // 开始读取数据（由上层决定何时开始）
-                // 注意：这里不自动调用 start_read()，让上层有机会先添加 Handler
-
+                // 开始读取数据（由上层决定何时开始），这里不自动调用 start_read()，让上层有机会先添加 Handler
                 do_accept();
             });
     }

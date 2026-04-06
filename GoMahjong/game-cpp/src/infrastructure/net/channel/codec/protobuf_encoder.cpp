@@ -32,11 +32,17 @@ namespace infra::net::channel {
 
     Bytes ProtobufEncoder::serialize_envelope(const Message& message) const {
         gomahjong::net::Envelope envelope;
-        
-        // TODO: 根据 Envelope 的定义填充字段
-        // envelope.set_route(message.route);
-        // envelope.set_payload(message.payload.data(), message.payload.size());
-        // envelope.set_client_seq(message.client_seq);
+
+        if (message.route.empty()) {
+            LOG_ERROR("[ProtobufEncoder] empty route");
+            return {};
+        }
+
+        envelope.set_route(message.route);
+        if (!message.payload.empty()) {
+            envelope.set_payload(message.payload.data(), message.payload.size());
+        }
+        envelope.set_client_seq(message.client_seq);
 
         Bytes bytes;
         bytes.resize(envelope.ByteSizeLong());

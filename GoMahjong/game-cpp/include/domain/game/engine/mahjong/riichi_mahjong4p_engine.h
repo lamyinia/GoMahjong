@@ -40,6 +40,16 @@ namespace domain::game::engine {
         std::set<std::string> players_;
         GamePhase phase_{GamePhase::Waiting};
         bool started_{false};
+
+        // === 事件处理函数 ===
+        void handlePlayTile(const event::PlayTileEvent& e);
+        void handleDrawTile(const event::DrawTileEvent& e);
+        void handleChi(const event::ChiEvent& e);
+        void handlePon(const event::PonEvent& e);
+        void handleKan(const event::KanEvent& e);
+        void handleRon(const event::RonEvent& e);
+        void handleTsumo(const event::TsumoEvent& e);
+        void handleDraw(const event::DrawEvent& e);
     };
 
 } // namespace domain::game::engine

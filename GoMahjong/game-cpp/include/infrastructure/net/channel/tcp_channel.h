@@ -6,11 +6,11 @@
 
 #include <atomic>
 #include <memory>
-#include <mutex>
 #include <string>
+#include <boost/asio.hpp>
+#include <boost/asio/strand.hpp>
 
 namespace infra::net::channel {
-
     namespace transport = infra::net::transport;
 
     /**
@@ -23,7 +23,12 @@ namespace infra::net::channel {
      */
     class TcpChannel : public IChannel {
     public:
-        explicit TcpChannel(std::shared_ptr<transport::ITransport> transport);
+        using Strand = boost::asio::strand<boost::asio::any_io_executor>;
+
+        explicit TcpChannel(
+            std::shared_ptr<transport::ITransport> transport,
+            const Strand& strand
+        );
 
         ~TcpChannel() override;
 
@@ -65,11 +70,11 @@ namespace infra::net::channel {
     private:
         std::shared_ptr<transport::ITransport> transport_;
         ChannelPipeline pipeline_;
+        Strand strand_;
         std::string id_;
         std::atomic<bool> active_{false};
         std::atomic<bool> reading_{false};
         OnError on_error_;
-        std::mutex mutex_;
     };
 
 } // namespace infra::net::channel

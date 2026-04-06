@@ -28,6 +28,7 @@ namespace infra::net::channel {
      * - Handler 链管理（Pipeline）
      * - 进站/出站事件传播
      * - 统一的读写接口
+     * - 实现时务必保证 send、start_read、close 在同一线程串行执行
      */
     class IChannel : public std::enable_shared_from_this<IChannel> {
     public:

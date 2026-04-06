@@ -8,7 +8,7 @@ namespace domain::game::room {
     // === RoomActor 实现 ===
 
     RoomActor::RoomActor(std::uint32_t queueCapacity)
-        : queueCapacity_(queueCapacity) {
+            : queueCapacity_(queueCapacity) {
     }
 
     RoomActor::~RoomActor() {
@@ -31,7 +31,7 @@ namespace domain::game::room {
 
         // 唤醒工作线程
         queueCv_.notify_all();
-        
+
         if (worker_.joinable()) {
             worker_.join();
         }
@@ -39,7 +39,7 @@ namespace domain::game::room {
         LOG_INFO("[RoomActor] stopped, processed {} rooms", rooms_.size());
     }
 
-    bool RoomActor::submitEvent(const std::string& roomId, const event::GameEvent& event) {
+    bool RoomActor::submitEvent(const std::string &roomId, const event::GameEvent &event) {
         if (!running_) {
             return false;
         }
@@ -54,13 +54,13 @@ namespace domain::game::room {
         return true;
     }
 
-    void RoomActor::addRoom(const std::string& roomId) {
+    void RoomActor::addRoom(const std::string &roomId) {
         std::lock_guard lock(roomsMutex_);
         rooms_[roomId] = true;
         LOG_DEBUG("[RoomActor] added room {}, total: {}", roomId, rooms_.size());
     }
 
-    void RoomActor::removeRoom(const std::string& roomId) {
+    void RoomActor::removeRoom(const std::string &roomId) {
         std::lock_guard lock(roomsMutex_);
         rooms_.erase(roomId);
         LOG_DEBUG("[RoomActor] removed room {}, total: {}", roomId, rooms_.size());
@@ -88,15 +88,15 @@ namespace domain::game::room {
             {
                 std::unique_lock lock(queueMutex_);
                 queueCv_.wait(lock, [this] { return !eventQueue_.empty() || !running_; });
-                
+
                 if (!running_ && eventQueue_.empty()) {
                     break;
                 }
-                
+
                 if (eventQueue_.empty()) {
                     continue;
                 }
-                
+
                 roomEvent = eventQueue_.front();
                 eventQueue_.pop();
             }
@@ -106,7 +106,7 @@ namespace domain::game::room {
         LOG_INFO("[RoomActor] worker thread exited");
     }
 
-    void RoomActor::processEvent(const RoomEvent& roomEvent) {
+    void RoomActor::processEvent(const RoomEvent &roomEvent) {
         if (eventHandler_) {
             eventHandler_(roomEvent.roomId, roomEvent.event);
         } else {
@@ -128,21 +128,21 @@ namespace domain::game::room {
     }
 
     void RoomActorPool::start() {
-        for (auto& actor : actors_) {
+        for (auto &actor: actors_) {
             actor->start();
         }
         LOG_INFO("[RoomActorPool] started with {} actors", actors_.size());
     }
 
     void RoomActorPool::stop() {
-        for (auto& actor : actors_) {
+        for (auto &actor: actors_) {
             actor->stop();
         }
         LOG_INFO("[RoomActorPool] stopped");
     }
 
-    bool RoomActorPool::submitEvent(const std::string& roomId, const event::GameEvent& event) {
-        auto* actor = getActorForRoom(roomId);
+    bool RoomActorPool::submitEvent(const std::string &roomId, const event::GameEvent &event) {
+        auto *actor = getActorForRoom(roomId);
         if (!actor) {
             LOG_WARN("[RoomActorPool] room {} not assigned to any actor", roomId);
             return false;
@@ -150,7 +150,7 @@ namespace domain::game::room {
         return actor->submitEvent(roomId, event);
     }
 
-    void RoomActorPool::assignRoom(const std::string& roomId) {
+    void RoomActorPool::assignRoom(const std::string &roomId) {
         std::lock_guard lock(roomActorMapMutex_);
 
         // 检查是否已分配
@@ -160,7 +160,7 @@ namespace domain::game::room {
         }
 
         // 选择负载最低的 Actor
-        auto* actor = selectLeastLoadedActor();
+        auto *actor = selectLeastLoadedActor();
         if (!actor) {
             LOG_ERROR("[RoomActorPool] no available actor for room {}", roomId);
             return;
@@ -168,11 +168,11 @@ namespace domain::game::room {
 
         actor->addRoom(roomId);
         roomActorMap_[roomId] = actor;
-        LOG_INFO("[RoomActorPool] assigned room {} to actor, total rooms: {}", 
-                 roomId, totalRooms());
+        // 直接访问 roomActorMap_.size()，避免调用 totalRooms() 导致死锁
+        LOG_INFO("[RoomActorPool] assigned room {} to actor, total rooms: {}", roomId, roomActorMap_.size());
     }
 
-    void RoomActorPool::removeRoom(const std::string& roomId) {
+    void RoomActorPool::removeRoom(const std::string &roomId) {
         std::lock_guard lock(roomActorMapMutex_);
 
         auto it = roomActorMap_.find(roomId);
@@ -181,13 +181,14 @@ namespace domain::game::room {
             return;
         }
 
-        auto* actor = it->second;
+        auto *actor = it->second;
         actor->removeRoom(roomId);
         roomActorMap_.erase(it);
-        LOG_INFO("[RoomActorPool] removed room {}, total rooms: {}", roomId, totalRooms());
+        // 直接访问 roomActorMap_.size()，避免调用 totalRooms() 导致死锁
+        LOG_INFO("[RoomActorPool] removed room {}, total rooms: {}", roomId, roomActorMap_.size());
     }
 
-    RoomActor* RoomActorPool::getActorForRoom(const std::string& roomId) const {
+    RoomActor *RoomActorPool::getActorForRoom(const std::string &roomId) const {
         std::lock_guard lock(roomActorMapMutex_);
         auto it = roomActorMap_.find(roomId);
         return it != roomActorMap_.end() ? it->second : nullptr;
@@ -200,7 +201,7 @@ namespace domain::game::room {
 
     std::size_t RoomActorPool::totalPendingEvents() const {
         std::size_t total = 0;
-        for (const auto& actor : actors_) {
+        for (const auto &actor: actors_) {
             total += actor->pendingEvents();
         }
         return total;
@@ -208,12 +209,12 @@ namespace domain::game::room {
 
     void RoomActorPool::setEventHandler(RoomActor::EventHandler handler) {
         eventHandler_ = std::move(handler);
-        for (auto& actor : actors_) {
+        for (auto &actor: actors_) {
             actor->setEventHandler(eventHandler_);
         }
     }
 
-    RoomActor* RoomActorPool::selectLeastLoadedActor() const {
+    RoomActor *RoomActorPool::selectLeastLoadedActor() const {
         if (actors_.empty()) {
             return nullptr;
         }
@@ -222,8 +223,8 @@ namespace domain::game::room {
         // 先检查下一个 Actor，如果负载合理就直接使用
         // 否则遍历所有 Actor 找到负载最低的
         std::size_t startIndex = nextActorIndex_.fetch_add(1) % actors_.size();
-        
-        auto* selected = actors_[startIndex].get();
+
+        auto *selected = actors_[startIndex].get();
         auto minLoad = selected->roomCount();
 
         // 如果当前 Actor 负载较低（< 10 个房间），直接使用
@@ -232,7 +233,7 @@ namespace domain::game::room {
         }
 
         // 否则遍历所有 Actor 找到负载最低的
-        for (const auto& actor : actors_) {
+        for (const auto &actor: actors_) {
             auto load = actor->roomCount();
             if (load < minLoad) {
                 minLoad = load;
@@ -243,7 +244,7 @@ namespace domain::game::room {
         return selected;
     }
 
-    std::size_t RoomActorPool::hashRoomId(const std::string& roomId) const {
+    std::size_t RoomActorPool::hashRoomId(const std::string &roomId) const {
         // 简单的哈希函数，用于一致性分配
         return std::hash<std::string>{}(roomId) % actors_.size();
     }

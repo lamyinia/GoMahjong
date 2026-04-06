@@ -18,26 +18,20 @@ namespace infra::net::session {
         std::shared_ptr<Session> session;
 
         if (it != sessions_.end()) {
-            // 玩家已有会话，添加 Channel
             session = it->second;
             if (channel) {
-                session->add_channel(channel->type(), std::move(channel));
+                auto type = channel->type();
+                session->add_channel(type, std::move(channel));
             }
-            LOG_DEBUG("[SessionManager] player {} session updated, channels={}", 
-                      player_id, session->channels().size());
+            LOG_DEBUG("[SessionManager] player {} session updated, channels={}",player_id, session->channels().size());
         } else {
-            // 创建新会话
             session = std::make_shared<Session>(player_id);
             if (channel) {
-                session->add_channel(channel->type(), std::move(channel));
+                auto type = channel->type();
+                session->add_channel(type, std::move(channel));
             }
             sessions_[player_id] = session;
-            LOG_INFO("[SessionManager] player {} session created", player_id);
-
-            // 触发回调
-            if (onSessionCreated_) {
-                onSessionCreated_(player_id, session);
-            }
+            LOG_DEBUG("[SessionManager] player {} session created", player_id);
         }
 
         return session;
@@ -56,13 +50,7 @@ namespace infra::net::session {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = sessions_.find(player_id);
         if (it != sessions_.end()) {
-            LOG_INFO("[SessionManager] player {} session removed", player_id);
-            
-            // 触发回调
-            if (onSessionClosed_) {
-                onSessionClosed_(player_id);
-            }
-            
+            LOG_DEBUG("[SessionManager] player {} session removed", player_id);
             sessions_.erase(it);
         }
     }

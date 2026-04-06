@@ -16,7 +16,7 @@ struct NetConfig {
 };
 
 struct LogConfig {
-    // Reserved for future log settings
+    std::string level{"info"};  // trace, debug, info, warn, error, critical, off
 };
 
 struct EtcdConfig {
@@ -56,12 +56,31 @@ struct ServerConfig {
 
 class Config {
 public:
+    // 单例访问
+    static Config& instance() {
+        static Config inst;
+        return inst;
+    }
+
+    // 初始化配置（从文件加载）
+    static void init(const std::string& path);
+
+    // 初始化配置（文件不存在则使用默认值）
+    static void init_or_default(const std::string& path) noexcept;
+
+    // 从文件加载（返回新实例，用于特殊场景）
     static Config load_from_file(const std::string& path);
-    static Config load_from_file_or_default(const std::string& path) noexcept;
 
     const ServerConfig& server() const noexcept { return server_; }
 
+    // 禁止拷贝，允许移动（用于 init）
+    Config(const Config&) = delete;
+    Config(Config&&) = default;
+    Config& operator=(const Config&) = delete;
+    Config& operator=(Config&&) = default;
+
 private:
+    Config() = default;
     ServerConfig server_;
 };
 

@@ -1,5 +1,6 @@
 #include "infrastructure/net/transport/tcp_transport.h"
 #include "infrastructure/net/transport/i_transport.h"
+#include "infrastructure/log/logger.hpp"
 
 #include <boost/asio/write.hpp>
 #include <boost/asio/post.hpp>
@@ -11,20 +12,39 @@
 
 namespace infra::net::transport {
     void TcpTransport::start(OnBytes onBytes, OnClosed onClosed, OnError onError) {
-        boost::asio::post(strand_, [self = shared_from_this(), this,
-                onBytes = std::move(onBytes),
-                onClosed = std::move(onClosed),
-                onError = std::move(onError)]() mutable {
-            if (closed_) return;
-            if (started_) return;
-            started_ = true;
+        LOG_INFO("[TcpTransport] start() ENTRY, this={}, closed_={}, started_={}, socket_open={}", 
+                 (void*)this, closed_, started_, socket_.is_open());
+        
+        try {
+            auto self = shared_from_this();
+            LOG_INFO("[TcpTransport] shared_from_this() OK, self={}", (void*)self.get());
+            
+            boost::asio::post(strand_, [self, this,
+                    onBytes = std::move(onBytes),
+                    onClosed = std::move(onClosed),
+                    onError = std::move(onError)]() mutable {
+                LOG_INFO("[TcpTransport] POSTED LAMBDA EXECUTING, closed_={}, started_={}", closed_, started_);
+                if (closed_) {
+                    LOG_WARN("[TcpTransport] start() posted but already closed");
+                    return;
+                }
+                if (started_) {
+                    LOG_WARN("[TcpTransport] start() posted but already started");
+                    return;
+                }
+                started_ = true;
 
-            onBytes_ = std::move(onBytes);
-            onClosed_ = std::move(onClosed);
-            onError_ = std::move(onError);
+                onBytes_ = std::move(onBytes);
+                onClosed_ = std::move(onClosed);
+                onError_ = std::move(onError);
 
-            do_read();
-        });
+                LOG_INFO("[TcpTransport] calling do_read()");
+                do_read();
+            });
+            LOG_INFO("[TcpTransport] post() returned successfully");
+        } catch (const std::exception& e) {
+            LOG_ERROR("[TcpTransport] start() exception: {}", e.what());
+        }
     }
 
     void TcpTransport::send(Bytes &&data) {
@@ -46,7 +66,10 @@ namespace infra::net::transport {
 
     bool TcpTransport::is_closed() const noexcept { return !socket_.is_open(); }
 
+ITransport::Strand TcpTransport::strand() const { return strand_; }
+
     void TcpTransport::do_read() {
+        LOG_DEBUG("[TcpTransport] do_read() called, closed_={}, socket_open={}", closed_, socket_.is_open());
         if (closed_) return;
         if (!socket_.is_open()) {
             do_close();
@@ -80,6 +103,7 @@ namespace infra::net::transport {
                             if (n > 0 && onBytes_) {
                                 Bytes bytes;
                                 bytes.insert(bytes.end(), read_buf_.begin(), read_buf_.begin() + n);
+                                LOG_DEBUG("[TcpTransport] read {} bytes, calling onBytes_", n);
                                 onBytes_(std::move(bytes));
                             }
 

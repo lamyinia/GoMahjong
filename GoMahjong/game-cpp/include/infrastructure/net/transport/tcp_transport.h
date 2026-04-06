@@ -29,6 +29,8 @@ namespace infra::net::transport {
 
         bool is_closed() const noexcept override;
 
+        Strand strand() const override;
+
     private:
         void do_read();
         void do_write();

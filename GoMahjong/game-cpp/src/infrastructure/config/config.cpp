@@ -7,6 +7,18 @@
 
 namespace infra::config {
 
+void Config::init(const std::string& path) {
+    instance() = load_from_file(path);
+}
+
+void Config::init_or_default(const std::string& path) noexcept {
+    try {
+        instance() = load_from_file(path);
+    } catch (...) {
+        // 使用默认配置
+    }
+}
+
 Config Config::load_from_file(const std::string& path) {
     std::ifstream ifs(path);
     if (!ifs.is_open()) {
@@ -35,9 +47,12 @@ Config Config::load_from_file(const std::string& path) {
             }
         }
 
-        // Parse log (reserved for future)
+        // Parse log
         if (server.contains("log")) {
-            // Future: parse log configuration
+            const auto& log = server["log"];
+            if (log.contains("level")) {
+                cfg.server_.log.level = log.at("level").get<std::string>();
+            }
         }
 
         // Parse etcd
@@ -84,14 +99,6 @@ Config Config::load_from_file(const std::string& path) {
     }
 
     return cfg;
-}
-
-Config Config::load_from_file_or_default(const std::string& path) noexcept {
-    try {
-        return load_from_file(path);
-    } catch (...) {
-        return Config{};
-    }
 }
 
 } // namespace infra::config

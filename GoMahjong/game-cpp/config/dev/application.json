@@ -8,7 +8,7 @@
       }
     },
     "log": {
-
+      "level": "debug"
     },
     "etcd": {
       "endpoints": "http://127.0.0.1:2379",

@@ -19,16 +19,9 @@ namespace infra::net::session {
      */
     class SessionManager : public std::enable_shared_from_this<SessionManager> {
     public:
-        using OnSessionCreated = std::function<void(const std::string& player_id, std::shared_ptr<Session> session)>;
-        using OnSessionClosed = std::function<void(const std::string& player_id)>;
 
         SessionManager() = default;
         ~SessionManager();
-
-        // === 回调设置 ===
-
-        void set_on_session_created(OnSessionCreated callback) { onSessionCreated_ = std::move(callback); }
-        void set_on_session_closed(OnSessionClosed callback) { onSessionClosed_ = std::move(callback); }
 
         // === 会话管理 ===
 
@@ -73,9 +66,6 @@ namespace infra::net::session {
     private:
         mutable std::mutex mutex_;
         std::unordered_map<std::string, std::shared_ptr<Session>> sessions_;
-
-        OnSessionCreated onSessionCreated_;
-        OnSessionClosed onSessionClosed_;
     };
 
 } // namespace infra::net::session
