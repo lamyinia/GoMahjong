@@ -1,0 +1,370 @@
+/* Base Styles */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+#app {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Header */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 15px 20px;
+    background: #16213e;
+    border-radius: 8px;
+}
+
+.header h1 {
+    color: #e94560;
+    font-size: 1.5rem;
+}
+
+.status {
+    padding: 8px 16px;
+    background: #0f3460;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.status.connected {
+    background: #059669;
+}
+
+.status.error {
+    background: #dc2626;
+}
+
+/* Panels */
+.panel {
+    background: #16213e;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 8px;
+}
+
+.panel h2 {
+    color: #60a5fa;
+    font-size: 1rem;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #0f3460;
+}
+
+/* Form Elements */
+input, textarea, button {
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+
+input[type="text"], textarea {
+    background: #0f3460;
+    border: 1px solid #1e3a5f;
+    color: #eee;
+    padding: 8px 12px;
+    border-radius: 4px;
+    outline: none;
+}
+
+input[type="text"]:focus, textarea:focus {
+    border-color: #60a5fa;
+}
+
+button {
+    background: #e94560;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover:not(:disabled) {
+    background: #ff6b6b;
+}
+
+button:disabled {
+    background: #374151;
+    cursor: not-allowed;
+}
+
+button.secondary {
+    background: #0f3460;
+}
+
+button.secondary:hover:not(:disabled) {
+    background: #1e3a5f;
+}
+
+.form-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Game Board */
+.board {
+    position: relative;
+    width: 100%;
+    height: 400px;
+    background: #0a1628;
+    border-radius: 8px;
+    display: grid;
+    grid-template-areas:
+        ". top ."
+        "left center right"
+        ". bottom .";
+    grid-template-columns: 1fr 2fr 1fr;
+    grid-template-rows: 1fr 2fr 1fr;
+    gap: 10px;
+    padding: 10px;
+}
+
+.player-area {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+}
+
+.player-top { grid-area: top; }
+.player-right { grid-area: right; }
+.player-bottom { grid-area: bottom; }
+.player-left { grid-area: left; }
+
+.player-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+}
+
+.player-name {
+    color: #60a5fa;
+}
+
+.player-points {
+    color: #fbbf24;
+}
+
+.self .player-name {
+    color: #4ade80;
+    font-weight: bold;
+}
+
+.center-area {
+    grid-area: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    background: #0f3460;
+    border-radius: 8px;
+    padding: 15px;
+}
+
+.dora-indicator, .remaining-tiles, .current-turn {
+    font-size: 0.9rem;
+}
+
+.hand-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 50px;
+    padding: 8px;
+    background: #0f3460;
+    border-radius: 4px;
+}
+
+.discard-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    min-height: 30px;
+    padding: 4px;
+    background: rgba(15, 52, 96, 0.5);
+    border-radius: 4px;
+}
+
+/* Tiles */
+.tile {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    width: 28px;
+    height: 38px;
+    background: #fff;
+    color: #000;
+    font-size: 1.2rem;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.tile:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+}
+
+.tile.selected {
+    transform: translateY(-6px);
+    box-shadow: 0 6px 12px rgba(233, 69, 96, 0.5);
+    background: #fef2f2;
+}
+
+.tile.wan { color: #dc2626; }
+.tile.tiao { color: #16a34a; }
+.tile.tong { color: #2563eb; }
+.tile.feng { color: #1e40af; }
+.tile.dragon { color: #7c3aed; }
+
+/* Action Panel */
+.action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.action-buttons button {
+    min-width: 80px;
+}
+
+.custom-action {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.custom-action input, .custom-action textarea {
+    width: 100%;
+}
+
+.custom-action textarea {
+    min-height: 60px;
+    resize: vertical;
+}
+
+/* Players Panel */
+.players-list {
+    margin-bottom: 10px;
+}
+
+.players-list p {
+    color: #9ca3af;
+    font-size: 0.85rem;
+}
+
+.player-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    background: #0f3460;
+    border-radius: 4px;
+    margin-bottom: 5px;
+}
+
+.player-item .player-id {
+    font-weight: bold;
+}
+
+.player-item .player-status {
+    font-size: 0.8rem;
+    color: #9ca3af;
+}
+
+.add-player {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Log Panel */
+.log-controls {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.log-controls label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.85rem;
+    color: #9ca3af;
+}
+
+.log-container {
+    height: 200px;
+    overflow-y: auto;
+    background: #0f3460;
+    padding: 10px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+.log-entry {
+    margin-bottom: 4px;
+    padding: 2px 0;
+}
+
+.log-entry .time {
+    color: #6b7280;
+}
+
+.log-entry .level {
+    font-weight: bold;
+    margin: 0 8px;
+}
+
+.log-entry .level-RECV { color: #4ade80; }
+.log-entry .level-SEND { color: #60a5fa; }
+.log-entry .level-ERROR { color: #f87171; }
+.log-entry .level-INFO { color: #9ca3af; }
+
+.log-entry .route {
+    color: #fbbf24;
+}
+
+.log-entry .payload {
+    color: #d1d5db;
+    word-break: break-all;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .board {
+        height: 350px;
+    }
+    
+    .form-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .action-buttons {
+        justify-content: center;
+    }
+}

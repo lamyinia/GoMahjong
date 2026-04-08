@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mahjong Test Client</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>Mahjong Test Client</h1>
+            <div class="status" id="status">Not connected</div>
+        </header>
+
+        <!-- Connection Panel -->
+        <section class="panel connect-panel">
+            <h2>Connection</h2>
+            <div class="form-row">
+                <input type="text" id="playerId" placeholder="Player ID" value="player_001">
+                <input type="text" id="token" placeholder="Token (optional)">
+                <button id="connectBtn">Connect</button>
+                <button id="disconnectBtn" disabled>Disconnect</button>
+            </div>
+        </section>
+
+        <!-- Game Board -->
+        <section class="panel board-panel">
+            <h2>Game Board</h2>
+            <div class="board" id="board">
+                <!-- Player 2 (Top) -->
+                <div class="player-area player-top">
+                    <div class="player-info">
+                        <span class="player-name">Player 2</span>
+                        <span class="player-points">25000</span>
+                    </div>
+                    <div class="discard-area" id="discard-2"></div>
+                </div>
+
+                <!-- Player 3 (Right) -->
+                <div class="player-area player-right">
+                    <div class="player-info">
+                        <span class="player-name">Player 3</span>
+                        <span class="player-points">25000</span>
+                    </div>
+                    <div class="discard-area" id="discard-3"></div>
+                </div>
+
+                <!-- Player 4 (Bottom - Self) -->
+                <div class="player-area player-bottom self">
+                    <div class="player-info">
+                        <span class="player-name">Player 4 (You)</span>
+                        <span class="player-points">25000</span>
+                    </div>
+                    <div class="hand-area" id="hand"></div>
+                    <div class="discard-area" id="discard-4"></div>
+                </div>
+
+                <!-- Player 1 (Left) -->
+                <div class="player-area player-left">
+                    <div class="player-info">
+                        <span class="player-name">Player 1</span>
+                        <span class="player-points">25000</span>
+                    </div>
+                    <div class="discard-area" id="discard-1"></div>
+                </div>
+
+                <!-- Center Area -->
+                <div class="center-area">
+                    <div class="dora-indicator">
+                        <span>Dora:</span>
+                        <span id="dora" class="tile">?</span>
+                    </div>
+                    <div class="remaining-tiles">
+                        <span>Remaining:</span>
+                        <span id="remaining">70</span>
+                    </div>
+                    <div class="current-turn">
+                        <span>Turn:</span>
+                        <span id="turn">-</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Action Panel -->
+        <section class="panel action-panel">
+            <h2>Actions</h2>
+            <div class="action-buttons">
+                <button id="actionDraw" disabled>Draw (DrawTile)</button>
+                <button id="actionChi" disabled>Chi (Chi)</button>
+                <button id="actionPon" disabled>Pon (Pon)</button>
+                <button id="actionKan" disabled>Kan (Kan)</button>
+                <button id="actionRon" disabled>Ron (Ron)</button>
+                <button id="actionTsumo" disabled>Tsumo (Tsumo)</button>
+                <button id="actionRiichi" disabled>Riichi</button>
+                <button id="actionPass" disabled>Pass</button>
+            </div>
+            <div class="custom-action">
+                <input type="text" id="customRoute" placeholder="Route (e.g., game.play)">
+                <textarea id="customPayload" placeholder='Payload JSON'>{"tile": {"type": 1, "id": 0}}</textarea>
+                <button id="sendCustomBtn" disabled>Send</button>
+            </div>
+        </section>
+
+        <!-- Players Panel -->
+        <section class="panel players-panel">
+            <h2>Connected Players</h2>
+            <div class="players-list" id="playersList">
+                <p>No players connected</p>
+            </div>
+            <div class="add-player">
+                <input type="text" id="newPlayerId" placeholder="New Player ID">
+                <input type="text" id="newPlayerToken" placeholder="Token">
+                <button id="addPlayerBtn">Add Player</button>
+            </div>
+        </section>
+
+        <!-- Log Panel -->
+        <section class="panel log-panel">
+            <h2>Message Log</h2>
+            <div class="log-controls">
+                <button id="clearLogBtn">Clear</button>
+                <label><input type="checkbox" id="showPayload" checked> Show Payload</label>
+            </div>
+            <div class="log-container" id="logContainer"></div>
+        </section>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
