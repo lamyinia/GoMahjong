@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package gomahjong.net;
+
+option go_package = "webtest/proto";
+
+// 消息信封（统一消息格式）
+message Envelope {
+  string route = 1;        // 路由（如 "auth.login", "heartbeat.ping"）
+  bytes payload = 2;       // 业务数据（序列化的 protobuf）
+  uint64 client_seq = 3;   // 请求序列号（用于请求-响应匹配）
+}
