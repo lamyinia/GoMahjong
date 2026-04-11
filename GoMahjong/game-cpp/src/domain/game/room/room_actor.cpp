@@ -21,7 +21,7 @@ namespace domain::game::room {
         }
 
         worker_ = std::thread(&RoomActor::workerThread, this);
-        LOG_INFO("[RoomActor] started");
+        LOG_DEBUG("RoomActor 启动");
     }
 
     void RoomActor::stop() {
@@ -81,7 +81,7 @@ namespace domain::game::room {
     }
 
     void RoomActor::workerThread() {
-        LOG_INFO("[RoomActor] worker thread started");
+        LOG_DEBUG("RoomActor worker thread started");
 
         while (running_) {
             RoomEvent roomEvent;
@@ -131,14 +131,14 @@ namespace domain::game::room {
         for (auto &actor: actors_) {
             actor->start();
         }
-        LOG_INFO("[RoomActorPool] started with {} actors", actors_.size());
+        LOG_INFO("启动 {} 个 actors", actors_.size());
     }
 
     void RoomActorPool::stop() {
         for (auto &actor: actors_) {
             actor->stop();
         }
-        LOG_INFO("[RoomActorPool] stopped");
+        LOG_INFO("stopped");
     }
 
     bool RoomActorPool::submitEvent(const std::string &roomId, const event::GameEvent &event) {

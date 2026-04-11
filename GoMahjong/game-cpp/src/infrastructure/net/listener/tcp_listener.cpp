@@ -32,7 +32,7 @@ namespace infra::net::listener {
             return;
         }
 
-        LOG_INFO("[tcp_listener] listening on {}:{}", ep.address().to_string(), ep.port());
+        LOG_DEBUG("listening on {}:{}", ep.address().to_string(), ep.port());
     }
 
     void TcpListener::start(OnError onError, OnNewChannel onNewChannel) {
@@ -83,7 +83,7 @@ namespace infra::net::listener {
                 auto transport = std::make_shared<transport::TcpTransport>(std::move(socket));
                 auto channel = std::make_shared<channel::TcpChannel>(transport, transport->strand());
 
-                LOG_DEBUG("[tcp_listener] new connection: {}", channel->id());
+                LOG_DEBUG("tcp_listener 新连接: {}", channel->id());
 
                 if (onNewChannel_){
                     onNewChannel_(channel);

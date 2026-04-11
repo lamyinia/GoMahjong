@@ -197,7 +197,7 @@ namespace infra::persistence {
     }
 
     void MongoPool::worker_thread() {
-        LOG_DEBUG("[MongoPool] 工作线程启动: {}", thread_id_to_string(std::this_thread::get_id()));
+        LOG_DEBUG("Mongodb 工作线程启动: {}", thread_id_to_string(std::this_thread::get_id()));
 
         while (running_) {
             DbTask task;

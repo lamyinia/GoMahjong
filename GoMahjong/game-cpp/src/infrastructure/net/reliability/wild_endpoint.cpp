@@ -29,11 +29,11 @@ namespace infra::net::reliability {
 
     void WildEndpoint::start_wait_auth() {
         if (!channel_) {
-            LOG_ERROR("[WildEndpoint] channel is null");
+            LOG_ERROR("channel is null");
             return;
         }
 
-        LOG_DEBUG("[WildEndpoint] start waiting auth, channel_id={}", id_);
+        LOG_DEBUG("等待验证, channel_id={}", id_);
 
         // 进站：Bytes -> Bytes (拆包) -> MessagePtr (反序列化)
         channel_->add_inbound(std::make_shared<channel::LengthFieldDecoder>());
@@ -57,7 +57,7 @@ namespace infra::net::reliability {
             return; // 已经处理过
         }
 
-        LOG_INFO("[WildEndpoint] auth success, channel_id={}, player_id={}", id_, player_id);
+        LOG_INFO("auth success, channel_id={}, player_id={}", id_, player_id);
 
         cancel_timer();
 
@@ -71,7 +71,7 @@ namespace infra::net::reliability {
             return; // 已经处理过
         }
 
-        LOG_WARN("[WildEndpoint] auth failed, channel_id={}", id_);
+        LOG_WARN("验证失败, channel_id={}", id_);
 
         cancel_timer();
 

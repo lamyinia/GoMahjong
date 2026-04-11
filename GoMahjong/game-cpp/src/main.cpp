@@ -1,7 +1,6 @@
+#include "bootstrap/app.hpp"
 
- #include "bootstrap/app.hpp"
-
- int main() {
-     return gomahjong::bootstrap::run();
- }
+int main() {
+    return gomahjong::bootstrap::run();
+}
 

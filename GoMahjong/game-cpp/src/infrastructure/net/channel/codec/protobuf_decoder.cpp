@@ -17,7 +17,7 @@ namespace infra::net::channel {
         auto envelope = parse_envelope(data);
         if (!envelope) {
             // fix me 考虑发回错误码
-            LOG_ERROR("[ProtobufDecoder] failed to parse envelope");
+            LOG_WARN("ProtobufDecoder 解析 envelope 错误");
             ctx.fire_close();
             return;
         }

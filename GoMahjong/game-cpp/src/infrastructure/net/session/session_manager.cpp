@@ -23,7 +23,7 @@ namespace infra::net::session {
                 auto type = channel->type();
                 session->add_channel(type, std::move(channel));
             }
-            LOG_DEBUG("[SessionManager] player {} session updated, channels={}",player_id, session->channels().size());
+            LOG_DEBUG("player {} session updated, channels={}",player_id, session->channels().size());
         } else {
             session = std::make_shared<Session>(player_id);
             if (channel) {

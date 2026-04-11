@@ -57,7 +57,7 @@ namespace infra::net::reliability {
             return;
         }
 
-        LOG_DEBUG("[AuthHandler] auth request, token={}", auth_req.token().substr(0, 8) + "...");
+        LOG_DEBUG("auth request, token={}", auth_req.token().substr(0, 16));
 
         std::string player_id;
         bool verified = false;
@@ -67,7 +67,6 @@ namespace infra::net::reliability {
         if (pos != std::string::npos && auth_req.token().length() > pos + 1) {
             player_id = auth_req.token().substr(0, pos);
             verified = !player_id.empty();
-            // 提取数字部分（支持 "player_001" -> "001" -> 1）, 如果 player_id 包含非数字字符，尝试提取数字后缀
             if (verified) {
                 size_t digit_start = player_id.find_last_not_of("0123456789");
                 if (digit_start != std::string::npos) {
@@ -109,5 +108,4 @@ namespace infra::net::reliability {
             }
         }
     }
-
 } // namespace infra::net::reliability

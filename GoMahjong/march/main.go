@@ -20,7 +20,8 @@ var rootCmd = &cobra.Command{
 	Long:  `march 匹配服务`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := config.Load(configFile); err != nil {
-			log.Fatal("文件配置发生错误：%v", err)
+			fmt.Fprintf(os.Stderr, "文件配置发生错误：%v\n", err)
+			os.Exit(1)
 		}
 		log.InitLog(config.MarchNodeConfig.ID, config.MarchNodeConfig.LogConf.Level)
 		log.Info(fmt.Sprintf("配置文件: %+v", config.MarchNodeConfig))
@@ -32,7 +33,6 @@ var rootCmd = &cobra.Command{
 				panic(err)
 			}
 		}()
-
 		err := app.Run(context.Background())
 		if err != nil {
 			log.Error("发生异常: {}", err)
@@ -48,7 +48,7 @@ func init() {
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Error("error happen: %#v", err)
+		fmt.Fprintf(os.Stderr, "error happen: %v\n", err)
 		os.Exit(1)
 	}
 }

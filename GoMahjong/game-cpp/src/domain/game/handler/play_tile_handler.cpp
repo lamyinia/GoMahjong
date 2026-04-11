@@ -17,48 +17,37 @@ namespace domain::game::handler {
             "game.playTile", 
             &handlePlayTile
         );
-        
-        LOG_INFO("[GameHandler] registered game.playTile handler");
     }
 
     void handlePlayTile(channel::ChannelHandlerContext& ctx, 
                         const channel::MessagePtr& msg) {
-        // 解析请求
+        // 解析 proto
         gomahjong::game::PlayTileRequest request;
         if (!request.ParseFromArray(msg->payload.data(), static_cast<int>(msg->payload.size()))) {
             LOG_ERROR("[PlayTile] failed to parse request from player {}", ctx.player_id());
             return;
         }
-
-        // 验证牌数据
         if (!request.has_tile()) {
             LOG_WARN("[PlayTile] missing tile from player {}", ctx.player_id());
             return;
         }
 
         const auto& protoTile = request.tile();
-        LOG_DEBUG("[PlayTile] player {} plays tile: type={}, id={}", 
-                  ctx.player_id(), protoTile.type(), protoTile.id());
+        LOG_DEBUG("[PlayTile] player {} plays tile: type={}, id={}", ctx.player_id(), protoTile.type(), protoTile.id());
 
         // 通过 GameService 单例获取 RoomManager
         auto& roomManager = domain::game::service::GameService::instance().room_manager();
-
-        // 获取玩家所在房间
         auto* room = roomManager.get_player_room(ctx.player_id());
         if (!room) {
             LOG_WARN("[PlayTile] player {} not in any room", ctx.player_id());
             return;
         }
 
-        // 转换 proto Tile 到 domain Tile
+        // 转换 proto Tile 到 domain Tile，创建 GameEvent，提交事件到 Actor 池
         event::Tile tile;
         tile.type = static_cast<event::TileType>(protoTile.type());
         tile.id = static_cast<std::int8_t>(protoTile.id());
-
-        // 创建 GameEvent
         auto gameEvent = event::GameEvent::playTile(ctx.player_id(), tile);
-
-        // 提交事件到 Actor 池
         roomManager.submitEvent(room->getId(), gameEvent);
         
         LOG_DEBUG("[PlayTile] event submitted to room {}", room->getId());

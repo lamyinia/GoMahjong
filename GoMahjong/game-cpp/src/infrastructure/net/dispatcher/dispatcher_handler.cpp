@@ -6,13 +6,13 @@ namespace infra::net::dispatcher {
     void DispatcherHandler::register_handler(const std::string& route, BusinessHandler handler) {
         std::lock_guard<std::mutex> lock(mutex_);
         handlers_[route] = std::move(handler);
-        LOG_DEBUG("[Dispatcher] registered handler for route: {}", route);
+        LOG_DEBUG("registered 处理器 for 路由: {}", route);
     }
 
     void DispatcherHandler::unregister_handler(const std::string& route) {
         std::lock_guard<std::mutex> lock(mutex_);
         handlers_.erase(route);
-        LOG_DEBUG("[Dispatcher] unregistered handler for route: {}", route);
+        LOG_DEBUG("unregistered 处理器 for 路由: {}", route);
     }
 
     bool DispatcherHandler::has_handler(const std::string& route) const {
@@ -26,7 +26,7 @@ namespace infra::net::dispatcher {
 
     void DispatcherHandler::mark_initialized() {
         initialized_.store(true, std::memory_order_release);
-        LOG_DEBUG("[Dispatcher] initialized, lock-free lookup enabled");
+        LOG_DEBUG("initialized, lock-free lookup enabled");
     }
 
     bool DispatcherHandler::is_initialized() const {
@@ -58,7 +58,7 @@ namespace infra::net::dispatcher {
     void DispatcherHandler::handle_authorized_message(channel::ChannelHandlerContext& ctx,
                                                        const channel::MessagePtr& msg) {
         if (!msg->has_route()) {
-            LOG_WARN("[Dispatcher] message without route from player {}", ctx.player_id());
+            LOG_WARN("message without route from player {}", ctx.player_id());
             send_error_response(ctx, msg, "missing route");
             return;
         }
@@ -69,7 +69,7 @@ namespace infra::net::dispatcher {
             // 无锁查找
             auto it = handlers_.find(msg->route);
             if (it == handlers_.end()) {
-                LOG_WARN("[Dispatcher] no handler for route: {} from player {}", 
+                LOG_WARN("no handler for route: {} from player {}",
                          msg->route, ctx.player_id());
                 send_error_response(ctx, msg, "unknown route");
                 return;
@@ -80,7 +80,7 @@ namespace infra::net::dispatcher {
             std::lock_guard<std::mutex> lock(mutex_);
             auto it = handlers_.find(msg->route);
             if (it == handlers_.end()) {
-                LOG_WARN("[Dispatcher] no handler for route: {} from player {}", 
+                LOG_WARN("no handler for route: {} from player {}",
                          msg->route, ctx.player_id());
                 send_error_response(ctx, msg, "unknown route");
                 return;
@@ -92,7 +92,7 @@ namespace infra::net::dispatcher {
         try {
             handler(ctx, msg);
         } catch (const std::exception& e) {
-            LOG_ERROR("[Dispatcher] handler exception for route {}: {}", msg->route, e.what());
+            LOG_ERROR("handler exception for route {}: {}", msg->route, e.what());
             send_error_response(ctx, msg, "internal error");
         }
     }
@@ -113,7 +113,7 @@ namespace infra::net::dispatcher {
             return;
         }
 
-        LOG_WARN("[Dispatcher] unauthorized access to route: {}", msg->route);
+        LOG_WARN("unauthorized access to route: {}", msg->route);
         send_error_response(ctx, msg, "unauthorized");
         ctx.fire_close();
     }

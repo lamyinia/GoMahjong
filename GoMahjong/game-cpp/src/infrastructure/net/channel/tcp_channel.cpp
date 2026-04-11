@@ -23,14 +23,14 @@ namespace infra::net::channel {
         , strand_(strand)  // 拷贝，与 TcpTransport 共享同一个底层 strand 实现
         , id_(generate_id())
         , active_(true) {
-        LOG_DEBUG("[TcpChannel] created: {}", id_);
+        LOG_DEBUG("TcpChannel 创建: {}", id_);
     }
 
     TcpChannel::~TcpChannel() {
         if (active_.exchange(false)) {
             close();
         }
-        LOG_DEBUG("[TcpChannel] destroyed: {}", id_);
+        LOG_DEBUG("TcpChannel 摧毁: {}", id_);
     }
 
     // === Handler 管理 ===
@@ -128,18 +128,18 @@ namespace infra::net::channel {
 
     void TcpChannel::on_transport_bytes(Bytes&& data) {
         if (!active_) return;
-        LOG_DEBUG("[TcpChannel] on_transport_bytes, size={}, firing channel_read", data.size());
+        LOG_DEBUG("on_transport_bytes, size={}, firing channel_read", data.size());
         pipeline_.fire_channel_read(std::move(data));
     }
 
     void TcpChannel::on_transport_closed() {
         if (!active_.exchange(false)) return;
-        LOG_DEBUG("[TcpChannel] transport closed: {}", id_);
+        LOG_DEBUG("transport closed: {}", id_);
         pipeline_.fire_channel_inactive();
     }
 
     void TcpChannel::on_transport_error(const std::error_code& ec) {
-        LOG_ERROR("[TcpChannel] transport error: {} - {}", id_, ec.message());
+        LOG_ERROR("transport error: {} - {}", id_, ec.message());
         pipeline_.fire_exception_caught(ec);
         if (on_error_) {
             on_error_(ec);

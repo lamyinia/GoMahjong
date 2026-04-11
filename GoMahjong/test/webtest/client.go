@@ -2,13 +2,16 @@ package main
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 
 	"github.com/charmbracelet/log"
+	bizpb "webtest/proto"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // TCPClient connects to the C++ game server
@@ -22,12 +25,13 @@ type TCPClient struct {
 	RecvChan  chan *TCPMessage
 	done      chan struct{}
 	connected bool
+	seq       uint64
 }
 
 // TCPMessage represents a received message
 type TCPMessage struct {
 	Route   string
-	Payload json.RawMessage
+	Payload []byte
 }
 
 // NewTCPClient creates a new TCP client
@@ -39,6 +43,7 @@ func NewTCPClient(host string, port int, playerID string) *TCPClient {
 		sendCh:   make(chan []byte, 100),
 		RecvChan: make(chan *TCPMessage, 100),
 		done:     make(chan struct{}),
+		seq:      0,
 	}
 }
 
@@ -89,16 +94,58 @@ func (c *TCPClient) IsConnected() bool {
 
 // SendAuth sends authentication request
 func (c *TCPClient) SendAuth(token string) error {
-	// AuthRequest proto: token, device_id, version
-	payload := map[string]string{
-		"token":    token,
-		"deviceId": "webtest",
-		"version":  "1.0.0",
+	authReq := &bizpb.AuthRequest{
+		Token:    token,
+		DeviceId: "webtest",
+		Version:  "1.0.0",
 	}
-	return c.SendMessage("auth.login", payload)
+	return c.SendProtoMessage("auth.login", authReq)
 }
 
-// SendMessage sends a message with envelope wrapper
+// SendProtoMessage sends a protobuf message with envelope wrapper
+func (c *TCPClient) SendProtoMessage(route string, msg proto.Message) error {
+	if !c.IsConnected() {
+		return fmt.Errorf("not connected")
+	}
+
+	// Serialize payload
+	var payloadBytes []byte
+	var err error
+	if msg != nil {
+		payloadBytes, err = proto.Marshal(msg)
+		if err != nil {
+			return fmt.Errorf("marshal payload: %w", err)
+		}
+	}
+
+	// Create envelope
+	seq := atomic.AddUint64(&c.seq, 1)
+	envelope := &bizpb.Envelope{
+		Route:     route,
+		Payload:   payloadBytes,
+		ClientSeq: seq,
+	}
+
+	envelopeBytes, err := proto.Marshal(envelope)
+	if err != nil {
+		return fmt.Errorf("marshal envelope: %w", err)
+	}
+
+	// Add length prefix (4 bytes, big endian)
+	buf := make([]byte, 4+len(envelopeBytes))
+	binary.BigEndian.PutUint32(buf[:4], uint32(len(envelopeBytes)))
+	copy(buf[4:], envelopeBytes)
+
+	// Send to write channel
+	select {
+	case c.sendCh <- buf:
+		return nil
+	default:
+		return fmt.Errorf("send buffer full")
+	}
+}
+
+// SendMessage sends a raw payload message with envelope wrapper
 func (c *TCPClient) SendMessage(route string, payload interface{}) error {
 	if !c.IsConnected() {
 		return fmt.Errorf("not connected")
@@ -110,22 +157,24 @@ func (c *TCPClient) SendMessage(route string, payload interface{}) error {
 	switch p := payload.(type) {
 	case []byte:
 		payloadBytes = p
-	case json.RawMessage:
-		payloadBytes = p
-	default:
-		payloadBytes, err = json.Marshal(payload)
+	case proto.Message:
+		payloadBytes, err = proto.Marshal(p)
 		if err != nil {
 			return fmt.Errorf("marshal payload: %w", err)
 		}
+	default:
+		return fmt.Errorf("unsupported payload type, use SendProtoMessage for proto messages")
 	}
 
-	// Create envelope: route + payload
-	envelope := map[string]interface{}{
-		"route":   route,
-		"payload": payloadBytes,
+	// 创建 envelope
+	seq := atomic.AddUint64(&c.seq, 1)
+	envelope := &bizpb.Envelope{
+		Route:     route,
+		Payload:   payloadBytes,
+		ClientSeq: seq,
 	}
 
-	envelopeBytes, err := json.Marshal(envelope)
+	envelopeBytes, err := proto.Marshal(envelope)
 	if err != nil {
 		return fmt.Errorf("marshal envelope: %w", err)
 	}
@@ -135,7 +184,6 @@ func (c *TCPClient) SendMessage(route string, payload interface{}) error {
 	binary.BigEndian.PutUint32(buf[:4], uint32(len(envelopeBytes)))
 	copy(buf[4:], envelopeBytes)
 
-	// Send to write channel
 	select {
 	case c.sendCh <- buf:
 		return nil
@@ -165,7 +213,7 @@ func (c *TCPClient) writeLoop() {
 	}
 }
 
-// readLoop receives messages from server
+// readLoop receives messages from 游戏服务器
 func (c *TCPClient) readLoop() {
 	defer c.Close()
 
@@ -174,7 +222,6 @@ func (c *TCPClient) readLoop() {
 		case <-c.done:
 			return
 		default:
-			// Read length prefix (4 bytes)
 			lenBuf := make([]byte, 4)
 			if _, err := io.ReadFull(c.conn, lenBuf); err != nil {
 				if err != io.EOF {
@@ -195,18 +242,12 @@ func (c *TCPClient) readLoop() {
 				log.Error("TCP read payload error", "err", err)
 				return
 			}
-
-			// Parse envelope
-			var envelope struct {
-				Route   string          `json:"route"`
-				Payload json.RawMessage `json:"payload"`
-			}
-			if err := json.Unmarshal(payloadBuf, &envelope); err != nil {
+			envelope := &bizpb.Envelope{}
+			if err := proto.Unmarshal(payloadBuf, envelope); err != nil {
 				log.Error("Parse envelope error", "err", err)
 				continue
 			}
 
-			// Forward to recv channel
 			msg := &TCPMessage{
 				Route:   envelope.Route,
 				Payload: envelope.Payload,

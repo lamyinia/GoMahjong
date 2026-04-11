@@ -49,13 +49,13 @@ namespace gomahjong::bootstrap {
         // 停止数据库线程池
         if (mongo_pool_) {
             mongo_pool_->stop();
-            LOG_INFO("[hub] mongo pool stopped");
+            LOG_INFO("mongo pool stopped");
         }
 
         // 停止游戏房间管理器（Actor 线程池）
         if (room_manager_) {
             room_manager_->stop();
-            LOG_INFO("[hub] room manager stopped");
+            LOG_INFO("room manager stopped");
         }
 
         // 释放资源
@@ -80,19 +80,19 @@ namespace gomahjong::bootstrap {
                 ioc_.run();
             });
         }
-        LOG_INFO("[hub] io threads 数量: {}", threads);
+        LOG_INFO("io 线程池启动 threads 数量: {}", threads);
 
         // 创建数据库线程池
         mongo_pool_ = std::make_shared<infra::persistence::MongoPool>(cfg_.server().mongodb);
         mongo_pool_->start();
-        LOG_INFO("[hub] mongo pool started with {} threads", cfg_.server().mongodb.thread_count);
+        LOG_INFO("数据库线程池启动 threads 数量: {}", cfg_.server().mongodb.thread_count);
 
         // 创建游戏房间管理器（Actor 线程池）
         auto actorCount = cfg_.server().actor.count;
         auto queueCapacity = cfg_.server().actor.queue_capacity;
         room_manager_ = std::make_unique<domain::game::room::RoomManager>(actorCount, queueCapacity);
         room_manager_->start();
-        LOG_INFO("[hub] room manager started with {} actors, queue capacity {}", actorCount, queueCapacity);
+        LOG_INFO("room manager started with {} actors, queue capacity {}", actorCount, queueCapacity);
     }
 
     void ServerHub::build_services() {
@@ -121,17 +121,17 @@ namespace gomahjong::bootstrap {
 
         tcp_listener_->start(
                 [](const std::error_code &ec) {
-                    LOG_ERROR("[hub] accept error: {}", ec.message());
+                    LOG_ERROR("tcp_listener 的 OnError 回调触发, accept error: {}", ec.message());
                 },
                 [wild_manager](const std::shared_ptr<infra::net::channel::IChannel>& channel) {
-                    LOG_INFO("[hub] new connection accepted");
+                    LOG_INFO("tcp_listener 的 onNewChannel 回调触发");
                     // 将新连接交给 WildEndpointManager 管理
                     if (wild_manager && channel) {
                         wild_manager->add_channel(channel);
                     }
                 });
 
-        LOG_INFO("[hub] tcp listener started on port {}", port);
+        LOG_INFO("tcp listener started on port {}", port);
     }
 
     void ServerHub::write_back() {
@@ -140,7 +140,7 @@ namespace gomahjong::bootstrap {
 
     void ServerHub::setup_wild_endpoint_callbacks() {
         if (!wild_endpoint_manager_ || !session_manager_) {
-            LOG_ERROR("[hub] cannot setup callbacks: managers not initialized");
+            LOG_ERROR("cannot setup callbacks: managers not initialized");
             return;
         }
 
@@ -148,11 +148,11 @@ namespace gomahjong::bootstrap {
         wild_endpoint_manager_->set_on_authenticated(
             [session_mgr](const std::string& player_id,
                           std::shared_ptr<infra::net::channel::IChannel> channel) {
-                LOG_INFO("[hub] player {} authenticated, creating session", player_id);
+                LOG_INFO("player {} authenticated, creating session", player_id);
                 session_mgr->create_or_get_session(player_id, std::move(channel));
             }
         );
 
-        LOG_INFO("[hub] wild endpoint callbacks setup complete");
+        LOG_DEBUG("wild endpoint 回调完成");
     }
 }

@@ -37,6 +37,7 @@ func Run(ctx context.Context) error {
 		err      error
 	)
 
+	// gRPC 服务器实际监听的地址和 etcd 注册地址必须一致
 	lis, err = net.Listen("tcp", config.MarchNodeConfig.EtcdConf.Register.Addr)
 	if err != nil {
 		log.Fatal("监听 gRPC 地址失败: %v", err)

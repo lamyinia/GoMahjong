@@ -26,7 +26,7 @@ namespace infra::net::reliability {
         auto endpoint = std::make_shared<WildEndpoint>(executor_, channel, auth_timeout_);
         auto endpoint_id = endpoint->id();
 
-        LOG_DEBUG("[WildEndpointManager] add channel, endpoint_id={}", endpoint_id);
+        LOG_DEBUG("新增 channel, endpoint_id={}", endpoint_id);
 
         auto self = shared_from_this();
         // on_auth_success 回调链路 => auth_handler -> wild_endpoint -> wild_endpoint_mgr

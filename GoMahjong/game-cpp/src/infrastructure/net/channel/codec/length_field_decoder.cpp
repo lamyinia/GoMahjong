@@ -15,21 +15,19 @@ namespace infra::net::channel {
       , length_field_length_(length_field_length) {}
 
     void LengthFieldDecoder::channel_read(ChannelHandlerContext& ctx, InboundMessage&& msg) {
-        // 只处理 Bytes 类型
         if (!std::holds_alternative<Bytes>(msg)) {
             ctx.fire_channel_read(std::move(msg));
             return;
         }
 
         auto& data = std::get<Bytes>(msg);
-        LOG_DEBUG("[LengthFieldDecoder] received {} bytes, buffer size before: {}", data.size(), buffer_.size());
+        LOG_DEBUG("received {} bytes, buffer size before: {}", data.size(), buffer_.size());
         
         // 将新数据追加到缓冲区
         buffer_.insert(buffer_.end(), data.begin(), data.end());
 
-        // 尝试解析所有完整的消息
+        // 尝试解析所有完整的消息，长度字段是大端序
         while (buffer_.size() >= length_field_offset_ + length_field_length_) {
-            // 读取长度字段（大端序）
             uint32_t frame_len = read_length(buffer_);
 
             // 检查长度是否合理（防止恶意数据）
@@ -42,18 +40,14 @@ namespace infra::net::channel {
             // 检查是否收到完整消息
             size_t total_len = length_field_offset_ + length_field_length_ + frame_len;
             if (buffer_.size() < total_len) {
-                // 数据不完整，等待更多数据
                 break;
             }
 
-            // 提取消息体（不包含长度字段）
+            // 提取消息体（不包含长度字段），从缓冲区移除已处理的数据
             Bytes frame(buffer_.begin() + length_field_offset_ + length_field_length_, buffer_.begin() + total_len);
-            LOG_DEBUG("[LengthFieldDecoder] extracted frame, length={}, firing channel_read", frame_len);
-            
-            // 从缓冲区移除已处理的数据
+            LOG_DEBUG("extracted frame, length={}, firing channel_read", frame_len);
             buffer_.erase(buffer_.begin(), buffer_.begin() + total_len);
 
-            // 传播到下一个 Handler
             ctx.fire_channel_read(Bytes(std::move(frame)));
         }
     }

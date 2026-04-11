@@ -35,7 +35,7 @@ namespace infra::net::dispatcher {
     void Dispatcher::ensure_dispatcher() {
         if (!dispatcher_) {
             dispatcher_ = std::make_shared<DispatcherHandler>();
-            LOG_INFO("[Dispatcher] global dispatcher created");
+            LOG_DEBUG("global dispatcher 创建");
         }
     }
 

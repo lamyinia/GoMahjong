@@ -20,7 +20,8 @@ var rootCmd = &cobra.Command{
 	Long:  `connector 连接器`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := config.Load(configFile); err != nil {
-			log.Fatal("文件配置发生错误：%v", err)
+			fmt.Printf("文件配置发生错误：%v", err)
+			os.Exit(1)
 		}
 		log.InitLog(config.ConnectorConfig.ID, config.ConnectorConfig.LogConf.Level)
 		log.Info(fmt.Sprintf("配置文件: %+v", config.ConnectorConfig))

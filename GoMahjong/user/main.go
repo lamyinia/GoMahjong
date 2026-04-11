@@ -24,7 +24,7 @@ var rootCmd = &cobra.Command{
 	Long:  `user 玩家服务`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := config.Load(configFile); err != nil {
-			log.Fatal("文件配置发生错误：%v", err)
+			fmt.Println("文件配置发生错误：%v", err)
 		}
 		log.InitLog(config.UserNodeConfig.ID, config.UserNodeConfig.LogConf.Level)
 		log.Info(fmt.Sprintf("配置文件: %+v", config.UserNodeConfig))
