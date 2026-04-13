@@ -122,10 +122,22 @@ func (s *WebServer) forwardTCPMessages(session *PlayerSession) {
 							payloadForWS = fmt.Sprintf("protojson marshal error: %v", err)
 						}
 					} else {
-						payloadForWS = fmt.Sprintf("proto unmarshal error: %v", err)
+						// proto unmarshal 失败，可能是服务端发送的 JSON 错误响应
+						var jsonPayload interface{}
+						if json.Unmarshal(msg.Payload, &jsonPayload) == nil {
+							payloadForWS = jsonPayload
+						} else {
+							payloadForWS = fmt.Sprintf("proto unmarshal error: %v", err)
+						}
 					}
 				} else {
-					payloadForWS = fmt.Sprintf("[binary %d bytes, unknown route]", len(msg.Payload))
+					// 未知路由，尝试当 JSON 解析
+					var jsonPayload interface{}
+					if json.Unmarshal(msg.Payload, &jsonPayload) == nil {
+						payloadForWS = jsonPayload
+					} else {
+						payloadForWS = fmt.Sprintf("[binary %d bytes, unknown route]", len(msg.Payload))
+					}
 				}
 			} else {
 				payloadForWS = nil
@@ -158,7 +170,10 @@ func (s *WebServer) forwardLogs(session *PlayerSession, conn *websocket.Conn, do
 			if !ok {
 				return
 			}
-			if err := conn.WriteJSON(logMsg); err != nil {
+			session.WSConnMu.Lock()
+			err := conn.WriteJSON(logMsg)
+			session.WSConnMu.Unlock()
+			if err != nil {
 				return
 			}
 		}

@@ -13,14 +13,6 @@ message Tile {
 // 出牌请求
 message PlayTileRequest {
   Tile tile = 1;           // 打出的牌
-  uint64 room_id = 2;      // 房间 ID
-}
-
-// 出牌响应
-message PlayTileResponse {
-  bool success = 1;
-  string message = 2;      // 错误信息
-  int32 next_turn = 3;     // 下一个玩家的座位号 (0-3)
 }
 
 // 游戏状态推送
@@ -28,6 +20,16 @@ message GameStatePush {
   uint64 room_id = 1;
   repeated Tile hand_tiles = 2;    // 手牌
   repeated Tile discard_tiles = 3; // 弃牌区
-  int32 current_turn = 4;          // 当前玩家座位号
   int32 remaining_tiles = 5;       // 剩余牌数
+}
+
+// Debug: 创建房间请求（跳过 march 匹配）
+message DebugCreateRoomRequest {
+  int32 engine_type = 1;           // 1: RiichiMahjong4P
+  repeated string player_ids = 2;  // 玩家 ID 列表
+}
+
+// Debug: 创建房间响应
+message DebugCreateRoomResponse {
+  string room_id = 1;              // 创建成功的房间 ID
 }

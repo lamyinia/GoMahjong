@@ -132,16 +132,6 @@ target_link_libraries(gomahjong_server PRIVATE
         mongo::mongocxx_shared
 )
 
-# Test executables
-add_executable(tcp_server_test tests/tcp_server_test.cpp)
-setup_target(tcp_server_test)
-
-target_link_libraries(tcp_server_test PRIVATE
-        Boost::boost
-        spdlog::spdlog
-        Threads::Threads
-)
-
 add_executable(mongo_pool_test
         tests/mongo_pool_test.cpp
         src/infrastructure/persistence/mongo_pool.cpp
@@ -159,30 +149,39 @@ target_link_libraries(mongo_pool_test PRIVATE
 # Room test
 file(GLOB_RECURSE ROOM_SOURCES CONFIGURE_DEPENDS "src/domain/game/room/*.cpp")
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "src/domain/game/engine/*.cpp")
+file(GLOB_RECURSE OUTBOUND_SOURCES CONFIGURE_DEPENDS "src/domain/game/outbound/*.cpp")
+file(GLOB_RECURSE SESSION_SOURCES CONFIGURE_DEPENDS "src/infrastructure/net/session/*.cpp")
+file(GLOB_RECURSE CHANNEL_SOURCES CONFIGURE_DEPENDS "src/infrastructure/net/channel/*.cpp")
 
 add_executable(room_test
         tests/room_test.cpp
         ${ROOM_SOURCES}
         ${ENGINE_SOURCES}
+        ${OUTBOUND_SOURCES}
+        ${SESSION_SOURCES}
+        ${CHANNEL_SOURCES}
+        src/infrastructure/util/timing_wheel.cpp
         src/infrastructure/log/logger.cpp
 )
 setup_target(room_test)
 
 target_link_libraries(room_test PRIVATE
         Boost::boost
+        proto_generated
         spdlog::spdlog
         nlohmann_json::nlohmann_json
         Threads::Threads
 )
 
 # Integration test
-file(GLOB_RECURSE SESSION_SOURCES CONFIGURE_DEPENDS "src/infrastructure/net/session/*.cpp")
-
 add_executable(integration_test
         tests/integration_test.cpp
         ${ROOM_SOURCES}
         ${ENGINE_SOURCES}
+        ${OUTBOUND_SOURCES}
         ${SESSION_SOURCES}
+        ${CHANNEL_SOURCES}
+        src/infrastructure/util/timing_wheel.cpp
         src/infrastructure/log/logger.cpp
 )
 setup_target(integration_test)
@@ -192,5 +191,23 @@ target_link_libraries(integration_test PRIVATE
         proto_generated
         spdlog::spdlog
         nlohmann_json::nlohmann_json
+        Threads::Threads
+)
+
+# Game timer test
+file(GLOB_RECURSE TIMER_SOURCES CONFIGURE_DEPENDS "src/domain/game/engine/mahjong/timer/*.cpp")
+file(GLOB_RECURSE UTIL_TIMER_SOURCES CONFIGURE_DEPENDS "src/infrastructure/util/timing_wheel.cpp" "src/infrastructure/util/timer_thread.cpp")
+
+add_executable(game_timer_test
+        tests/game_timer_test.cpp
+        ${TIMER_SOURCES}
+        ${UTIL_TIMER_SOURCES}
+        src/infrastructure/log/logger.cpp
+)
+setup_target(game_timer_test)
+
+target_link_libraries(game_timer_test PRIVATE
+        Boost::boost
+        spdlog::spdlog
         Threads::Threads
 )

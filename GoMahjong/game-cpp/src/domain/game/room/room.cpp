@@ -17,7 +17,8 @@ namespace domain::game::room {
         : id_(std::move(other.id_))
         , engineType_(other.engineType_)
         , players_(std::move(other.players_))
-        , engine_(std::move(other.engine_)) {
+        , engine_(std::move(other.engine_))
+        , engineContext_(std::move(other.engineContext_)) {
     }
 
     Room& Room::operator=(Room&& other) noexcept {
@@ -26,6 +27,7 @@ namespace domain::game::room {
             engineType_ = other.engineType_;
             players_ = std::move(other.players_);
             engine_ = std::move(other.engine_);
+            engineContext_ = std::move(other.engineContext_);
         }
         return *this;
     }
@@ -46,7 +48,12 @@ namespace domain::game::room {
     }
 
     void Room::initGame() {
-        // 创建游戏引擎
+        // 创建 EngineContext
+        engineContext_ = std::make_unique<engine::EngineContext>();
+        engineContext_->setRoomId(id_);
+        engineContext_->setPlayerIds(players_);
+
+        // 创建游戏状态机
         auto engineType = static_cast<engine::EngineType>(engineType_);
         engine_ = engine::Engine::create(engineType);
         
@@ -55,17 +62,17 @@ namespace domain::game::room {
             return;
         }
 
-        // 添加玩家到引擎
-        for (const auto& userId : players_) {
-            engine_->onPlayerJoin(userId);
-        }
+        // 注入 EngineContext
+        engine_->setContext(engineContext_.get());
 
-        // 检查是否可以开始
+        for (const auto& playId : players_) {
+            engine_->onPlayerJoin(playId);
+        }
         if (engine_->canStart()) {
             engine_->start();
-            LOG_INFO("[Room] game initialized for room {} with {} players", id_, players_.size());
+            LOG_DEBUG("game initialized for room {} with {} players", id_, players_.size());
         } else {
-            LOG_WARN("[Room] cannot start game for room {}, not enough players", id_);
+            LOG_WARN("cannot start game for room {}, not enough players", id_);
         }
     }
 
@@ -78,8 +85,8 @@ namespace domain::game::room {
         engine_->handleEvent(event);
     }
 
-    void Room::broadcast(const std::string& route, const std::string& payload) {
-
+    bool Room::isGameOver() const {
+        return engine_ && engine_->isGameOver();
     }
 
 } // namespace domain::game::room

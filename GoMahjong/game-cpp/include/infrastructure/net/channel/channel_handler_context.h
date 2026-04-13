@@ -57,6 +57,12 @@ namespace infra::net::channel {
         virtual void fire_write(OutboundMessage&& msg) = 0;
         virtual void fire_flush() = 0;
         virtual void fire_close() = 0;
+
+        // 发送错误响应（route + ".response"，携带 client_seq）
+        void send_error_response(const std::string& route, uint64_t client_seq, const std::string& error);
+
+        // 发送错误响应（从 MessagePtr 中提取 route 和 client_seq）
+        void send_error_response(const MessagePtr& msg, const std::string& error);
     };
 
 } // namespace infra::net::channel

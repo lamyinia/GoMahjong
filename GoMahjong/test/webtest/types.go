@@ -56,15 +56,16 @@ type WSMessage struct {
 // routeRegistry maps routes to proto message constructors for JSON↔Protobuf conversion
 var routeRegistry = map[string]func() proto.Message{
 	// Request routes (frontend → C++)
-	"auth.login":     func() proto.Message { return &bizpb.AuthRequest{} },
-	"heartbeat.ping": func() proto.Message { return &bizpb.HeartbeatPing{} },
-	"game.play":      func() proto.Message { return &bizpb.PlayTileRequest{} },
+	"auth.login":      func() proto.Message { return &bizpb.AuthRequest{} },
+	"heartbeat.ping":  func() proto.Message { return &bizpb.HeartbeatPing{} },
+	"game.playTile":   func() proto.Message { return &bizpb.PlayTileRequest{} },
+	"game.createRoom": func() proto.Message { return &bizpb.DebugCreateRoomRequest{} },
 
 	// Response/Push routes (C++ → frontend)
-	"auth.login.response": func() proto.Message { return &bizpb.AuthResponse{} },
-	"heartbeat.pong":      func() proto.Message { return &bizpb.HeartbeatPong{} },
-	"game.state":          func() proto.Message { return &bizpb.GameStatePush{} },
-	"game.play.response":  func() proto.Message { return &bizpb.PlayTileResponse{} },
+	"auth.login.response":      func() proto.Message { return &bizpb.AuthResponse{} },
+	"heartbeat.pong":           func() proto.Message { return &bizpb.HeartbeatPong{} },
+	"game.state":               func() proto.Message { return &bizpb.GameStatePush{} },
+	"game.createRoom.response": func() proto.Message { return &bizpb.DebugCreateRoomResponse{} },
 }
 
 // protojsonMarshaler uses camelCase JSON names matching proto json tags

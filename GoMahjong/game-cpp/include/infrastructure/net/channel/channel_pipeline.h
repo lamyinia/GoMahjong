@@ -28,9 +28,9 @@ namespace infra::net::channel {
         IChannel& channel() override { return channel_; }
         ChannelPipeline& pipeline() override { return pipeline_; }
 
-        // === 授权状态 ===
-        bool is_authorized() const noexcept override { return authorized_; }
-        const std::string& player_id() const noexcept override { return player_id_; }
+        // === 授权状态（委托给 Pipeline 共享，实现在 .cpp） ===
+        bool is_authorized() const noexcept override;
+        const std::string& player_id() const noexcept override;
         void set_authorized(const std::string& player_id) override;
 
         void fire_channel_active() override;
@@ -52,10 +52,6 @@ namespace infra::net::channel {
         size_t index_;
         std::shared_ptr<ChannelInboundHandler> inbound_;
         std::shared_ptr<ChannelOutboundHandler> outbound_;
-        
-        // 授权状态
-        bool authorized_{false};
-        std::string player_id_;
     };
 
     /**
@@ -94,6 +90,12 @@ namespace infra::net::channel {
     private:
         IChannel& channel_;
         std::vector<std::shared_ptr<DefaultChannelHandlerContext>> contexts_;
+
+        // 共享授权状态（所有 context 委托访问）
+        bool authorized_{false};
+        std::string player_id_;
+
+        friend class DefaultChannelHandlerContext;
     };
 
 } // namespace infra::net::channel

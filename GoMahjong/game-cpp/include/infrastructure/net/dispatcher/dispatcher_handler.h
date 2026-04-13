@@ -77,10 +77,6 @@ namespace infra::net::dispatcher {
         void handle_unauthorized_message(channel::ChannelHandlerContext& ctx,
                                           const channel::MessagePtr& msg);
 
-        void send_error_response(channel::ChannelHandlerContext& ctx,
-                                  const channel::MessagePtr& msg,
-                                  const std::string& error);
-
         mutable std::mutex mutex_;
         std::unordered_map<std::string, BusinessHandler> handlers_;
         std::atomic<bool> initialized_{false};  // 初始化完成后，查找无需加锁

@@ -48,13 +48,6 @@ export interface GameState {
 
 export interface PlayTileRequest {
   tile: Tile;
-  roomId?: string;
-}
-
-export interface PlayTileResponse {
-  success: boolean;
-  message?: string;
-  nextTurn?: number;
 }
 
 // UI state

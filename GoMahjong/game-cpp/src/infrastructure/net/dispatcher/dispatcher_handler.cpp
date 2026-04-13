@@ -59,11 +59,10 @@ namespace infra::net::dispatcher {
                                                        const channel::MessagePtr& msg) {
         if (!msg->has_route()) {
             LOG_WARN("message without route from player {}", ctx.player_id());
-            send_error_response(ctx, msg, "missing route");
+            ctx.send_error_response(msg, "missing route");
             return;
         }
 
-        // 查找 Handler（初始化完成后无需加锁）
         BusinessHandler handler;
         if (initialized_.load(std::memory_order_acquire)) {
             // 无锁查找
@@ -71,7 +70,7 @@ namespace infra::net::dispatcher {
             if (it == handlers_.end()) {
                 LOG_WARN("no handler for route: {} from player {}",
                          msg->route, ctx.player_id());
-                send_error_response(ctx, msg, "unknown route");
+                ctx.send_error_response(msg, "unknown route");
                 return;
             }
             handler = it->second;
@@ -82,7 +81,7 @@ namespace infra::net::dispatcher {
             if (it == handlers_.end()) {
                 LOG_WARN("no handler for route: {} from player {}",
                          msg->route, ctx.player_id());
-                send_error_response(ctx, msg, "unknown route");
+                ctx.send_error_response(msg, "unknown route");
                 return;
             }
             handler = it->second;
@@ -93,7 +92,7 @@ namespace infra::net::dispatcher {
             handler(ctx, msg);
         } catch (const std::exception& e) {
             LOG_ERROR("handler exception for route {}: {}", msg->route, e.what());
-            send_error_response(ctx, msg, "internal error");
+            ctx.send_error_response(msg, "internal error");
         }
     }
 
@@ -114,23 +113,8 @@ namespace infra::net::dispatcher {
         }
 
         LOG_WARN("unauthorized access to route: {}", msg->route);
-        send_error_response(ctx, msg, "unauthorized");
+        ctx.send_error_response(msg, "unauthorized");
         ctx.fire_close();
-    }
-
-    void DispatcherHandler::send_error_response(channel::ChannelHandlerContext& ctx,
-                                                 const channel::MessagePtr& msg,
-                                                 const std::string& error) {
-        auto resp_msg = std::make_shared<channel::Message>();
-        resp_msg->route = msg->route + ".response";
-        resp_msg->client_seq = msg->client_seq;
-        
-        // 简单错误响应（后续可以用 protobuf）
-        std::string error_payload = R"({"error":")" + error + R"("})";
-        resp_msg->payload.assign(error_payload.begin(), error_payload.end());
-
-        ctx.fire_write(channel::MessagePtr(std::move(resp_msg)));
-        ctx.fire_flush();
     }
 
 } // namespace infra::net::dispatcher

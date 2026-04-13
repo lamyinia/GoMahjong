@@ -36,17 +36,17 @@ namespace domain::game::service {
             }
 
             // 调用 RoomManager 创建房间
-            auto* room = room_manager_.create_room(players, request->engine_type());
-            if (!room) {
+            auto roomId = room_manager_.create_room(players, request->engine_type());
+            if (roomId.empty()) {
                 response->set_success(false);
                 response->set_message("创建房间失败：玩家数量不正确或玩家已在其他房间");
                 return grpc::Status::OK;
             }
 
-            LOG_INFO("[GameService] 创建房间成功: {}, 玩家数: {}", room->getId(), players.size());
+            LOG_INFO("创建房间成功: {}, 玩家数: {}", roomId, players.size());
 
             response->set_success(true);
-            response->set_room_id(room->getId());
+            response->set_room_id(roomId);
             response->set_message("房间创建成功");
             return grpc::Status::OK;
         }
@@ -58,11 +58,12 @@ namespace domain::game::service {
     // GameService::Impl
     class GameService::Impl {
     public:
-        domain::game::room::RoomManager room_manager;  // 改为值类型（单例内部持有）
+        domain::game::room::RoomManager* room_manager{nullptr};
         std::shared_ptr<GameServiceImpl> grpc_service;
 
-        Impl() {
-            grpc_service = std::make_shared<GameServiceImpl>(room_manager);
+        void init(domain::game::room::RoomManager& rm) {
+            room_manager = &rm;
+            grpc_service = std::make_shared<GameServiceImpl>(rm);
         }
     };
 
@@ -73,24 +74,36 @@ namespace domain::game::service {
 
     GameService::GameService()
         : impl_(std::make_unique<Impl>()) {
-        LOG_INFO("[GameService] 单例实例已创建");
+        LOG_INFO("单例实例已创建");
     }
 
     GameService::~GameService() = default;
 
+    void GameService::init(domain::game::room::RoomManager& room_manager) {
+        impl_->init(room_manager);
+        LOG_INFO("initialized with external RoomManager");
+    }
+
     CreateRoomResponse GameService::create_room(const CreateRoomRequest &request) {
+        if (!impl_->room_manager) {
+            CreateRoomResponse response;
+            response.success = false;
+            response.message = "RoomManager not initialized";
+            return response;
+        }
+
         std::vector<std::string> players;
         players.reserve(request.players.size());
         for (const auto &[user_id, _] : request.players) {
             players.push_back(user_id);
         }
 
-        const auto *room = impl_->room_manager.create_room(players, request.engine_type);
+        auto roomId = impl_->room_manager->create_room(players, request.engine_type);
 
         CreateRoomResponse response;
-        if (room) {
+        if (!roomId.empty()) {
             response.success = true;
-            response.room_id = room->getId();
+            response.room_id = roomId;
             response.message = "房间创建成功";
         } else {
             response.success = false;
@@ -104,7 +117,12 @@ namespace domain::game::service {
     }
 
     domain::game::room::RoomManager& GameService::room_manager() {
-        return impl_->room_manager;
+        if (!impl_->room_manager) {
+            static domain::game::room::RoomManager dummy;
+            LOG_ERROR("room_manager() called before init()");
+            return dummy;
+        }
+        return *impl_->room_manager;
     }
 
 } // namespace domain::game::service

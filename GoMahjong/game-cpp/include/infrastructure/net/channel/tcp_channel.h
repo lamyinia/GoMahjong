@@ -57,8 +57,9 @@ namespace infra::net::channel {
         void transport_flush() override;
         void transport_close() override;
 
-        // 错误处理
+        // 回调
         void set_on_error(OnError on_error) override;
+        void set_on_inactive(OnInactive on_inactive) override;
 
     private:
         void on_transport_bytes(Bytes&& data);
@@ -75,6 +76,7 @@ namespace infra::net::channel {
         std::atomic<bool> active_{false};
         std::atomic<bool> reading_{false};
         OnError on_error_;
+        OnInactive on_inactive_;
     };
 
 } // namespace infra::net::channel

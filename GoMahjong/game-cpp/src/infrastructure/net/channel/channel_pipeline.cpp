@@ -1,5 +1,6 @@
 #include "infrastructure/net/channel/channel_pipeline.h"
 #include "infrastructure/net/channel/i_channel.h"
+#include "infrastructure/net/channel/message.h"
 #include "infrastructure/net/transport/i_transport.h"
 
 namespace infra::net::channel {
@@ -20,8 +21,16 @@ namespace infra::net::channel {
       , outbound_(std::move(outbound)) {}
 
     void DefaultChannelHandlerContext::set_authorized(const std::string& player_id) {
-        authorized_ = true;
-        player_id_ = player_id;
+        pipeline_.authorized_ = true;
+        pipeline_.player_id_ = player_id;
+    }
+
+    bool DefaultChannelHandlerContext::is_authorized() const noexcept {
+        return pipeline_.authorized_;
+    }
+
+    const std::string& DefaultChannelHandlerContext::player_id() const noexcept {
+        return pipeline_.player_id_;
     }
 
     // 进站事件传播
@@ -197,6 +206,24 @@ namespace infra::net::channel {
             }
         }
         channel_.transport_close();
+    }
+
+    // === ChannelHandlerContext 便捷方法 ===
+
+    void ChannelHandlerContext::send_error_response(const std::string& route, uint64_t client_seq, const std::string& error) {
+        auto resp_msg = std::make_shared<Message>();
+        resp_msg->route = route + ".response";
+        resp_msg->client_seq = client_seq;
+
+        std::string error_payload = R"({"error":")" + error + R"("})";
+        resp_msg->payload.assign(error_payload.begin(), error_payload.end());
+
+        fire_write(MessagePtr(std::move(resp_msg)));
+        fire_flush();
+    }
+
+    void ChannelHandlerContext::send_error_response(const MessagePtr& msg, const std::string& error) {
+        send_error_response(msg->route, msg->client_seq, error);
     }
 
 } // namespace infra::net::channel

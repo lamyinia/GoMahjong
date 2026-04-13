@@ -237,7 +237,7 @@ function sendAction(route: string, extraPayload?: Record<string, unknown>) {
   let payload: Record<string, unknown> = extraPayload || {};
   
   // Add selected tile for play action
-  if (route === 'game.play' && selectedTile) {
+  if (route === 'game.playTile' && selectedTile) {
     payload.tile = selectedTile;
     gameBoard.clearSelection();
     selectedTile = null;

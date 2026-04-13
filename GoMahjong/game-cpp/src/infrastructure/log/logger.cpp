@@ -32,7 +32,11 @@ void init(const config::LogConfig& cfg) {
     // stdout_color_mt 会自动注册到全局注册表，如果已存在会抛异常
     try {
         g_logger = spdlog::stdout_color_mt("gomahjong");
-        g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%t] [%s:%# %!] %v");
+        if (cfg.short_source) {
+            g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%t] [%s:%#] %v");
+        } else {
+            g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%t] [%s:%# %!] %v");
+        }
         g_logger->set_level(parse_level(cfg.level));
     } catch (const spdlog::spdlog_ex&) {
         // 如果抛异常说明其他线程刚创建了，再次获取

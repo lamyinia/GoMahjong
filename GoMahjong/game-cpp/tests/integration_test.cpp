@@ -27,7 +27,7 @@
 // Domain
 #include "domain/game/room/room_manager.h"
 #include "domain/game/room/room_actor.h"
-#include "domain/game/event/game_event.h"
+#include "domain/game/event/mahjong_game_event.h"
 
 using namespace infra::net::channel;
 using namespace infra::net::session;
@@ -253,6 +253,10 @@ public:
         on_error_ = std::move(on_error);
     }
 
+    void set_on_inactive(OnInactive on_inactive) override {
+        on_inactive_ = std::move(on_inactive);
+    }
+
     // === Mock 辅助方法 ===
 
     void setId(const std::string &id) { id_ = id; }
@@ -291,6 +295,7 @@ private:
     ChannelType type_;
     std::atomic<bool> active_;
     OnError on_error_;
+    OnInactive on_inactive_;
 
     std::vector<std::shared_ptr<ChannelInboundHandler>> inbound_handlers_;
     std::vector<std::shared_ptr<ChannelOutboundHandler>> outbound_handlers_;
@@ -425,17 +430,16 @@ void test_room_and_game_event() {
 
     // 3. Create a room with 4 players
     std::vector<std::string> players = {"player_100", "player_101", "player_102", "player_103"};
-    Room *room = roomManager.create_room(players, 1);  // Engine type 1 = Riichi Mahjong
+    auto roomId = roomManager.create_room(players, 1);  // Engine type 1 = Riichi Mahjong
 
-    assert(room != nullptr);
-    assert(!room->getId().empty());
-    LOG_INFO("[test] room created, id={}", room->getId());
+    assert(!roomId.empty());
+    LOG_INFO("[test] room created, id={}", roomId);
 
     // 4. Submit a game event
     auto event = event::GameEvent::playTile("player_100",
                                             event::Tile{event::TileType::Wan1, 0});
 
-    roomManager.submitEvent(room->getId(), std::move(event));
+    roomManager.submitEvent(roomId, event);
 
     // 5. Wait for event processing
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -459,40 +463,39 @@ void test_room_lifecycle_with_sessions() {
     RoomManager roomManager(4, 1000);
     roomManager.start();
 
-    // 2. 创建 SessionManager
-    SessionManager sessionMgr;
+    // 2. 创建 SessionManager（必须 shared_ptr 持有，因为内部调用 shared_from_this）
+    auto sessionMgr = std::make_shared<SessionManager>();
 
     // 3. 创建 4 个玩家会话
     std::vector<std::string> playerIds = {"player_200", "player_201", "player_202", "player_203"};
     std::vector<std::shared_ptr<Session>> sessions;
 
     for (const auto &pid: playerIds) {
-        auto channel = std::make_shared<MockChannel>("channel_" + pid);
-        auto session = sessionMgr.create_or_get_session(pid, channel);
+        auto channel = std::static_pointer_cast<channel::IChannel>(std::make_shared<MockChannel>("channel_" + pid));
+        auto session = sessionMgr->create_or_get_session(pid, channel);
         sessions.push_back(session);
     }
 
-    assert(sessionMgr.size() == 4);
+    assert(sessionMgr->size() == 4);
     LOG_INFO("[test] 4 player sessions created");
 
     // 4. 创建房间
-    Room *room = roomManager.create_room(playerIds, 1);
-    assert(room != nullptr);
-    assert(!room->getId().empty());
+    auto roomId = roomManager.create_room(playerIds, 1);
+    assert(!roomId.empty());
 
-    LOG_INFO("[test] room created, id={}", room->getId());
+    LOG_INFO("[test] room created, id={}", roomId);
 
     // 5. 验证玩家-房间映射
     for (const auto &pid: playerIds) {
-        auto *foundRoom = roomManager.get_player_room(pid);
-        assert(foundRoom == room);
+        auto foundRoomId = roomManager.get_player_room_id(pid);
+        assert(foundRoomId.has_value() && *foundRoomId == roomId);
     }
 
     LOG_INFO("[test] player-room mapping verified");
 
     // 6. 发送游戏事件
-    auto event = event::GameEvent::gameStart(room->getId());
-    roomManager.submitEvent(room->getId(), std::move(event));
+    auto event = event::GameEvent::gameStart(roomId);
+    roomManager.submitEvent(roomId, event);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
@@ -528,11 +531,11 @@ void test_concurrent_room_operations() {
                     "player_" + std::to_string(i * 4 + 3)
             };
 
-            Room *room = roomManager.create_room(players, 1);
-            if (room != nullptr) {
+            auto roomId = roomManager.create_room(players, 1);
+            if (!roomId.empty()) {
                 successCount++;
                 std::lock_guard<std::mutex> lock(roomsMutex);
-                roomIds.push_back(room->getId());
+                roomIds.push_back(roomId);
             }
         });
     }
@@ -550,7 +553,7 @@ void test_concurrent_room_operations() {
     for (const auto &roomId: roomIds) {
         threads.emplace_back([&roomManager, roomId]() {
             auto event = event::GameEvent::roundStart(1, "player_0");
-            roomManager.submitEvent(roomId, std::move(event));
+            roomManager.submitEvent(roomId, event);
         });
     }
 
@@ -575,20 +578,21 @@ void test_error_duplicate_player() {
 
     // 1. 创建第一个房间
     std::vector<std::string> players1 = {"p1", "p2", "p3", "p4"};
-    Room *room1 = roomManager.create_room(players1, 1);
-    assert(room1 != nullptr);
+    auto roomId1 = roomManager.create_room(players1, 1);
+    assert(!roomId1.empty());
 
     LOG_INFO("[test] first room created");
 
     // 2. 尝试用重复玩家创建房间
     std::vector<std::string> players2 = {"p1", "p5", "p6", "p7"};  // p1 已在 room1
-    Room *room2 = roomManager.create_room(players2, 1);
-    assert(room2 == nullptr);  // 应该失败
+    auto roomId2 = roomManager.create_room(players2, 1);
+    assert(roomId2.empty());  // 应该失败
 
     LOG_INFO("[test] duplicate player rejected correctly");
 
     // 3. 验证原房间不受影响
-    assert(roomManager.get_player_room("p1") == room1);
+    auto foundRoomId = roomManager.get_player_room_id("p1");
+    assert(foundRoomId.has_value() && *foundRoomId == roomId1);
 
     LOG_INFO("[test] original room unaffected");
 
@@ -609,8 +613,8 @@ void test_actor_pool_stress() {
 
     // 1. 创建一个房间
     std::vector<std::string> players = {"s1", "s2", "s3", "s4"};
-    Room *room = roomManager.create_room(players, 1);
-    assert(room != nullptr);
+    auto roomId = roomManager.create_room(players, 1);
+    assert(!roomId.empty());
 
     LOG_INFO("[test] room created for stress test");
 
@@ -619,7 +623,7 @@ void test_actor_pool_stress() {
 
     for (int i = 0; i < numEvents; i++) {
         auto event = event::GameEvent::turnStart("s1", 30);
-        roomManager.submitEvent(room->getId(), std::move(event));
+        roomManager.submitEvent(roomId, event);
     }
 
     auto end = std::chrono::high_resolution_clock::now();
@@ -652,7 +656,7 @@ int main() {
     auto start = std::chrono::steady_clock::now();
 
     test_authentication_flow();      // Requires server
-//    test_auth_timeout();              // Requires server
+    test_auth_timeout();              // Requires server
     test_multiple_clients_auth();     // Requires server
 
     auto end = std::chrono::steady_clock::now();
@@ -662,15 +666,15 @@ int main() {
      * 有递归锁+3000client 5925ms
      */
 
-//    test_room_and_game_event();         // Standalone
-//    test_session_management();          // Standalone
-//    test_room_lifecycle_with_sessions();// Standalone
-//    test_concurrent_room_operations();  // Standalone
-//    test_error_duplicate_player();      // Standalone
-//    test_actor_pool_stress();           // Standalone
-//    std::cout << "========================================" << std::endl;
-//    std::cout << "Standalone tests PASSED!" << std::endl;
-//    std::cout << "========================================" << std::endl;
+    test_room_and_game_event();         // Standalone
+    test_session_management();          // Standalone
+    test_room_lifecycle_with_sessions();// Standalone
+    test_concurrent_room_operations();  // Standalone
+    test_error_duplicate_player();      // Standalone
+    test_actor_pool_stress();           // Standalone
+    std::cout << "========================================" << std::endl;
+    std::cout << "Standalone tests PASSED!" << std::endl;
+    std::cout << "========================================" << std::endl;
 
     return 0;
 }

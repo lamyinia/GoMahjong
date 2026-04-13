@@ -53,6 +53,9 @@ Config Config::load_from_file(const std::string& path) {
             if (log.contains("level")) {
                 cfg.server_.log.level = log.at("level").get<std::string>();
             }
+            if (log.contains("short_source")) {
+                cfg.server_.log.short_source = log.at("short_source").get<bool>();
+            }
         }
 
         // Parse etcd
@@ -94,6 +97,25 @@ Config Config::load_from_file(const std::string& path) {
             }
             if (mongodb.contains("password")) {
                 cfg.server_.mongodb.password = mongodb.at("password").get<std::string>();
+            }
+        }
+
+        // Parse timer_wheel
+        if (server.contains("timer_wheel")) {
+            const auto& tw = server["timer_wheel"];
+            if (tw.contains("tick_duration_ms")) {
+                cfg.server_.timer_wheel.tick_duration_ms = tw.at("tick_duration_ms").get<std::uint32_t>();
+            }
+            if (tw.contains("wheel_size")) {
+                cfg.server_.timer_wheel.wheel_size = tw.at("wheel_size").get<std::uint32_t>();
+            }
+        }
+
+        // Parse debug
+        if (server.contains("debug")) {
+            const auto& debug = server["debug"];
+            if (debug.contains("enabled")) {
+                cfg.server_.debug.enabled = debug.at("enabled").get<bool>();
             }
         }
     }

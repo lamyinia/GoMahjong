@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/charmbracelet/log"
+	bizpb "webtest/proto"
 )
 
 // handleGetPlayers returns list of connected players
@@ -117,4 +118,64 @@ func (s *WebServer) handleDisconnectPlayer(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "disconnected"})
+}
+
+// handleCreateRoom sends a debug createRoom request via the first connected player's TCP client
+func (s *WebServer) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		PlayerIDs []string `json:"playerIds"`
+		EngineType int32   `json:"engineType"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if len(req.PlayerIDs) == 0 {
+		http.Error(w, "playerIds required", http.StatusBadRequest)
+		return
+	}
+
+	if req.EngineType == 0 {
+		req.EngineType = 1 // default: RiichiMahjong4P
+	}
+
+	// Find first connected player to send the request
+	s.mu.RLock()
+	var client *TCPClient
+	for _, p := range s.players {
+		if p.TCPClient.IsConnected() {
+			client = p.TCPClient
+			break
+		}
+	}
+	s.mu.RUnlock()
+
+	if client == nil {
+		http.Error(w, "no connected player to send request", http.StatusBadRequest)
+		return
+	}
+
+	createReq := &bizpb.DebugCreateRoomRequest{
+		EngineType: req.EngineType,
+		PlayerIds:  req.PlayerIDs,
+	}
+
+	if err := client.SendProtoMessage("game.createRoom", createReq); err != nil {
+		http.Error(w, fmt.Sprintf("send failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Info("CreateRoom request sent", "playerIds", req.PlayerIDs, "engineType", req.EngineType)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":    "sent",
+		"playerIds": req.PlayerIDs,
+	})
 }

@@ -16,9 +16,8 @@ namespace infra::net::channel {
         auto& data = std::get<Bytes>(msg);
         auto envelope = parse_envelope(data);
         if (!envelope) {
-            // fix me 考虑发回错误码
             LOG_WARN("ProtobufDecoder 解析 envelope 错误");
-            ctx.fire_close();
+            ctx.send_error_response("sys.decode", 0, "invalid envelope");
             return;
         }
 
@@ -29,8 +28,8 @@ namespace infra::net::channel {
         message->client_seq = envelope->client_seq();
 
         if (message->route.empty()) {
-            LOG_WARN("[ProtobufDecoder] empty route, close channel");
-            ctx.fire_close();
+            LOG_WARN("message empty route");
+            ctx.send_error_response("sys.decode", 0, "empty route");
             return;
         }
 

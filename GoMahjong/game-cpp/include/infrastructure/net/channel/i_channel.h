@@ -34,6 +34,7 @@ namespace infra::net::channel {
     public:
         using Bytes = std::vector<std::uint8_t>;
         using OnError = std::function<void(const std::error_code&)>;
+        using OnInactive = std::function<void()>;
 
         virtual ~IChannel() = default;
 
@@ -66,9 +67,10 @@ namespace infra::net::channel {
         virtual void transport_flush() = 0;
         virtual void transport_close() = 0;
 
-        // === 错误处理 ===
+        // === 回调 ===
 
         virtual void set_on_error(OnError on_error) = 0;
+        virtual void set_on_inactive(OnInactive on_inactive) = 0;
     };
 
 } // namespace infra::net::channel

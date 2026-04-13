@@ -1,5 +1,6 @@
 #include "domain/game/room/room_manager.h"
-#include "domain/game/event/game_event.h"
+#include "domain/game/event/mahjong_game_event.h"
+#include "domain/game/engine/engine.h"
 
 #include <iostream>
 #include <thread>
@@ -24,16 +25,16 @@ bool test_create_room() {
     manager.start();
 
     std::vector<std::string> players = {"player1", "player2", "player3", "player4"};
-    auto* room = manager.create_room(players, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
+    auto roomId = manager.create_room(players, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
 
-    TEST_ASSERT(room != nullptr, "Room should be created");
+    TEST_ASSERT(!roomId.empty(), "Room should be created");
     TEST_ASSERT(manager.room_count() == 1, "Room count should be 1");
     TEST_ASSERT(manager.player_count() == 4, "Player count should be 4");
 
     // 验证玩家路由
-    auto* playerRoom = manager.get_player_room("player1");
-    TEST_ASSERT(playerRoom != nullptr, "Player1 should have a room");
-    TEST_ASSERT(playerRoom == room, "Player1's room should be the created room");
+    auto playerRoomId = manager.get_player_room_id("player1");
+    TEST_ASSERT(playerRoomId.has_value(), "Player1 should have a room");
+    TEST_ASSERT(*playerRoomId == roomId, "Player1's room should be the created room");
 
     manager.stop();
     return true;
@@ -45,37 +46,36 @@ bool test_create_room_duplicate_player() {
     manager.start();
 
     std::vector<std::string> players1 = {"player1", "player2", "player3", "player4"};
-    auto* room1 = manager.create_room(players1, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
-    TEST_ASSERT(room1 != nullptr, "First room should be created");
+    auto roomId1 = manager.create_room(players1, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
+    TEST_ASSERT(!roomId1.empty(), "First room should be created");
 
     // 尝试用已存在的玩家创建第二个房间
     std::vector<std::string> players2 = {"player1", "player5", "player6", "player7"};
-    auto* room2 = manager.create_room(players2, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
-    TEST_ASSERT(room2 == nullptr, "Second room should not be created (duplicate player)");
+    auto roomId2 = manager.create_room(players2, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
+    TEST_ASSERT(roomId2.empty(), "Second room should not be created (duplicate player)");
     TEST_ASSERT(manager.room_count() == 1, "Room count should still be 1");
 
     manager.stop();
     return true;
 }
 
-// 测试 3：获取房间
+// 测试 3：获取房间 ID
 bool test_get_room() {
     room::RoomManager manager(2, 1024);
     manager.start();
 
     std::vector<std::string> players = {"player1", "player2", "player3", "player4"};
-    auto* createdRoom = manager.create_room(players, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
-    TEST_ASSERT(createdRoom != nullptr, "Room should be created");
+    auto roomId = manager.create_room(players, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
+    TEST_ASSERT(!roomId.empty(), "Room should be created");
 
-    // 通过 roomId 获取
-    auto roomId = createdRoom->getId();
-    auto* fetchedRoom = manager.get_room(roomId);
-    TEST_ASSERT(fetchedRoom != nullptr, "Room should be found by ID");
-    TEST_ASSERT(fetchedRoom == createdRoom, "Fetched room should be the same as created");
+    // 通过玩家 ID 获取房间 ID
+    auto foundRoomId = manager.get_player_room_id("player1");
+    TEST_ASSERT(foundRoomId.has_value(), "Room should be found by player ID");
+    TEST_ASSERT(*foundRoomId == roomId, "Found room ID should match created room ID");
 
-    // 获取不存在的房间
-    auto* notFound = manager.get_room("non_existent_room");
-    TEST_ASSERT(notFound == nullptr, "Non-existent room should return nullptr");
+    // 获取不存在的玩家
+    auto notFound = manager.get_player_room_id("non_existent_player");
+    TEST_ASSERT(!notFound.has_value(), "Non-existent player should return nullopt");
 
     manager.stop();
     return true;
@@ -87,10 +87,8 @@ bool test_delete_room() {
     manager.start();
 
     std::vector<std::string> players = {"player1", "player2", "player3", "player4"};
-    auto* room = manager.create_room(players, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
-    TEST_ASSERT(room != nullptr, "Room should be created");
-
-    auto roomId = room->getId();
+    auto roomId = manager.create_room(players, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
+    TEST_ASSERT(!roomId.empty(), "Room should be created");
 
     // 删除房间
     bool deleted = manager.delete_room(roomId);
@@ -99,8 +97,8 @@ bool test_delete_room() {
     TEST_ASSERT(manager.player_count() == 0, "Player count should be 0 after deletion");
 
     // 验证玩家路由已清理
-    auto* playerRoom = manager.get_player_room("player1");
-    TEST_ASSERT(playerRoom == nullptr, "Player1 should not have a room after deletion");
+    auto playerRoomId = manager.get_player_room_id("player1");
+    TEST_ASSERT(!playerRoomId.has_value(), "Player1 should not have a room after deletion");
 
     // 删除不存在的房间
     bool deletedAgain = manager.delete_room(roomId);
@@ -116,10 +114,12 @@ bool test_submit_event() {
     manager.start();
 
     std::vector<std::string> players = {"player1", "player2", "player3", "player4"};
-    auto* room = manager.create_room(players, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
-    TEST_ASSERT(room != nullptr, "Room should be created");
+    auto roomId = manager.create_room(players, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
+    TEST_ASSERT(!roomId.empty(), "Room should be created");
 
-    auto roomId = room->getId();
+    auto playerRoomId = manager.get_player_room_id("player1");
+    TEST_ASSERT(playerRoomId.has_value(), "Player1 should have a room");
+    TEST_ASSERT(*playerRoomId == roomId, "Player1's room should be the created room");
 
     // 提交出牌事件
     event::Tile tile{event::TileType::Wan1, 0};
@@ -154,9 +154,9 @@ bool test_multiple_rooms() {
             "room" + std::to_string(i) + "_p3",
             "room" + std::to_string(i) + "_p4"
         };
-        auto* room = manager.create_room(players, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
-        TEST_ASSERT(room != nullptr, "Room " + std::to_string(i) + " should be created");
-        roomIds.push_back(room->getId());
+        auto roomId = manager.create_room(players, static_cast<std::int32_t>(engine::EngineType::RiichiMahjong4P));
+        TEST_ASSERT(!roomId.empty(), "Room " + std::to_string(i) + " should be created");
+        roomIds.push_back(roomId);
     }
 
     TEST_ASSERT(manager.room_count() == 10, "Room count should be 10");
@@ -229,13 +229,13 @@ int main() {
         }
     };
 
-//    runTest("Create Room", test_create_room);
-//    runTest("Create Room with Duplicate Player", test_create_room_duplicate_player);
-//    runTest("Get Room", test_get_room);
-//    runTest("Delete Room", test_delete_room);
+    runTest("Create Room", test_create_room);
+    runTest("Create Room with Duplicate Player", test_create_room_duplicate_player);
+    runTest("Get Room", test_get_room);
+    runTest("Delete Room", test_delete_room);
     runTest("Submit Event", test_submit_event);
-//    runTest("Multiple Rooms Concurrent", test_multiple_rooms);
-//    runTest("Statistics", test_statistics);
+    runTest("Multiple Rooms Concurrent", test_multiple_rooms);
+    runTest("Statistics", test_statistics);
 
     std::cout << "=== Summary ===" << std::endl;
     std::cout << "Passed: " << passed << std::endl;

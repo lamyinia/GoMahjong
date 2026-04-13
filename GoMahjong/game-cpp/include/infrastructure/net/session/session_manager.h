@@ -64,6 +64,12 @@ namespace infra::net::session {
         bool has_session(const std::string& player_id) const;
 
     private:
+        void set_on_inactive_callback(
+            std::shared_ptr<channel::IChannel> channel,
+            const std::string& player_id,
+            channel::ChannelType type
+        );
+
         mutable std::mutex mutex_;
         std::unordered_map<std::string, std::shared_ptr<Session>> sessions_;
     };

@@ -39,9 +39,6 @@ namespace infra::net::reliability {
         channel_->add_inbound(std::make_shared<channel::LengthFieldDecoder>());
         channel_->add_inbound(std::make_shared<channel::ProtobufDecoder>());
 
-        // 出站：MessagePtr -> Bytes (序列化) -> Bytes (加长度头)
-        // 注意：出站 Handler 是反向传播的，所以先添加 LengthFieldEncoder，再添加 ProtobufEncoder
-        // 这样 ProtobufEncoder 先执行（MessagePtr -> Bytes），然后 LengthFieldEncoder（Bytes -> Bytes with length）
         channel_->add_outbound(std::make_shared<channel::LengthFieldEncoder>());
         channel_->add_outbound(std::make_shared<channel::ProtobufEncoder>());
 

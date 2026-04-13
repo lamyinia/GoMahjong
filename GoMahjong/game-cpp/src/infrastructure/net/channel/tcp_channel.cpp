@@ -124,6 +124,10 @@ namespace infra::net::channel {
         on_error_ = std::move(on_error);
     }
 
+    void TcpChannel::set_on_inactive(OnInactive on_inactive) {
+        on_inactive_ = std::move(on_inactive);
+    }
+
     // === Transport 回调 ===
 
     void TcpChannel::on_transport_bytes(Bytes&& data) {
@@ -136,6 +140,9 @@ namespace infra::net::channel {
         if (!active_.exchange(false)) return;
         LOG_DEBUG("transport closed: {}", id_);
         pipeline_.fire_channel_inactive();
+        if (on_inactive_) {
+            on_inactive_();
+        }
     }
 
     void TcpChannel::on_transport_error(const std::error_code& ec) {

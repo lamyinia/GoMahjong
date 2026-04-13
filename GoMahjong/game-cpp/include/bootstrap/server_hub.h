@@ -20,6 +20,10 @@ namespace infra::persistence { class MongoPool; }
 
 namespace domain::game::room { class RoomManager; }
 
+namespace domain::game::outbound { class OutDispatcher; }
+
+namespace infra::util { class TimingWheel; class TimerThread; }
+
 // 生命周期管理器，以及依赖的组装
 namespace gomahjong::bootstrap {
     class ServerHub {
@@ -69,6 +73,13 @@ namespace gomahjong::bootstrap {
 
         // 游戏房间管理器（包含 Actor 线程池）
         std::unique_ptr<domain::game::room::RoomManager> room_manager_;
+
+        // 出站调度器（单例）
+        std::unique_ptr<domain::game::outbound::OutDispatcher> out_dispatcher_;
+
+        // 时间轮 + 定时器线程
+        std::unique_ptr<infra::util::TimingWheel> timing_wheel_;
+        std::unique_ptr<infra::util::TimerThread> timer_thread_;
 
         bool started_ = false;
     };

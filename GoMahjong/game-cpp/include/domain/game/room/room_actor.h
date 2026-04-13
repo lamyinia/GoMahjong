@@ -1,6 +1,8 @@
 #pragma once
 
-#include "domain/game/event/game_event.h"
+#include "domain/game/event/mahjong_game_event.h"
+#include "domain/game/outbound/out_dispatcher.h"
+#include "infrastructure/util/timing_wheel.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -10,74 +12,98 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <set>
 #include <string>
 #include <thread>
+#include <variant>
 #include <vector>
 
 namespace domain::game::room {
-
-    // 前向声明
     class Room;
 
-    // 房间事件包装
-    struct RoomEvent {
+    // === 生命周期通知接口 ===
+    class RoomLifecycleNotifier {
+    public:
+        virtual ~RoomLifecycleNotifier() = default;
+        virtual void onGameEnd(const std::string& roomId) = 0;
+    };
+
+
+    struct GameEventData {
         std::string roomId;
         event::GameEvent event;
     };
 
-    // 单个 Actor：独占线程，管理多个房间
+    struct AddRoomData {
+        std::string roomId;
+        std::unique_ptr<Room> room;
+    };
+
+    struct RemoveRoomData {
+        std::string roomId;
+    };
+
+    struct TimerEventData {
+        std::string roomId;
+        uint64_t timerId;
+    };
+
+    using ActorEvent = std::variant<GameEventData, AddRoomData, RemoveRoomData, TimerEventData>;
+
+    // 单个 Actor：独占线程，管理多个房间，rooms_ 只在 worker 线程读写，完全无锁
     class RoomActor {
     public:
-        using EventHandler = std::function<void(const std::string& roomId, const event::GameEvent& event)>;
-
         explicit RoomActor(std::uint32_t queueCapacity = 1024);
         ~RoomActor();
 
-        // 禁止拷贝和移动
         RoomActor(const RoomActor&) = delete;
         RoomActor& operator=(const RoomActor&) = delete;
         RoomActor(RoomActor&&) = delete;
         RoomActor& operator=(RoomActor&&) = delete;
 
-        // === 生命周期 ===
         void start();
         void stop();
 
-        // === 事件提交 ===
         bool submitEvent(const std::string& roomId, const event::GameEvent& event);
 
-        // === 房间管理 ===
-        void addRoom(const std::string& roomId);
-        void removeRoom(const std::string& roomId);
-        [[nodiscard]] std::size_t roomCount() const;
+        bool submitAddRoom(std::unique_ptr<Room> room);
+        bool submitRemoveRoom(const std::string& roomId);
+        bool submitTimerEvent(const std::string& roomId, uint64_t timerId);
+
+        [[nodiscard]] std::size_t roomCount() const { return roomCount_.load(std::memory_order_relaxed); }
         [[nodiscard]] std::size_t pendingEvents() const;
 
-        // === 回调设置 ===
-        void setEventHandler(EventHandler handler);
+        void setLifecycleNotifier(RoomLifecycleNotifier* notifier);
+        void setOutDispatcher(outbound::OutDispatcher* dispatcher);
+        void setTimingWheel(infra::util::TimingWheel* wheel);
 
     private:
         void workerThread();
-        void processEvent(const RoomEvent& roomEvent);
+        void processEvent(ActorEvent& evt);
+
+        void handleGameEvent(GameEventData& data);
+        void handleAddRoom(AddRoomData& data);
+        void handleRemoveRoom(RemoveRoomData& data);
+        void handleTimerEvent(TimerEventData& data);
 
     private:
         std::atomic<bool> running_{false};
         std::thread worker_;
-        
-        // 事件队列（单生产者-单消费者，使用 mutex 保护）
+
         mutable std::mutex queueMutex_;
-        std::queue<RoomEvent> eventQueue_;
+        std::queue<ActorEvent> eventQueue_;
         std::condition_variable queueCv_;
         std::uint32_t queueCapacity_;
-        
-        // 房间集合（用于统计）
-        mutable std::mutex roomsMutex_;
-        std::map<std::string, bool> rooms_;
-        
-        // 事件处理器
-        EventHandler eventHandler_;
+
+        std::map<std::string, std::unique_ptr<Room>> rooms_;
+        std::atomic<std::size_t> roomCount_{0};
+        std::set<std::string> gameOverRooms_;  // 待清理的房间（回调中记录，handleGameEvent返回后清理）
+
+        RoomLifecycleNotifier* lifecycleNotifier_{nullptr};
+        outbound::OutDispatcher* outDispatcher_{nullptr};
+        infra::util::TimingWheel* timingWheel_{nullptr};
     };
 
-    // Actor 池：管理多个 Actor，提供负载均衡
     class RoomActorPool {
     public:
         explicit RoomActorPool(std::uint32_t actorCount = 4, std::uint32_t queueCapacity = 1024);
@@ -86,47 +112,36 @@ namespace domain::game::room {
         RoomActorPool(const RoomActorPool&) = delete;
         RoomActorPool& operator=(const RoomActorPool&) = delete;
 
-        // === 生命周期 ===
         void start();
         void stop();
 
-        // === 事件提交（自动路由到对应 Actor）===
         bool submitEvent(const std::string& roomId, const event::GameEvent& event);
 
-        // === 房间管理 ===
-        // 分配房间到负载最低的 Actor
-        void assignRoom(const std::string& roomId);
-        // 移除房间
-        void removeRoom(const std::string& roomId);
-        // 获取房间所在的 Actor
+        // === 房间管理（通过队列，无锁） ===
+        bool assignRoom(std::unique_ptr<Room> room);
+        bool removeRoom(const std::string& roomId);
+        bool submitTimerEvent(const std::string& roomId, uint64_t timerId);
         [[nodiscard]] RoomActor* getActorForRoom(const std::string& roomId) const;
 
-        // === 统计 ===
+        void setLifecycleNotifier(RoomLifecycleNotifier* notifier);
+        void setOutDispatcher(outbound::OutDispatcher* dispatcher);
+        void setTimingWheel(infra::util::TimingWheel* wheel);
+
         [[nodiscard]] std::size_t actorCount() const { return actors_.size(); }
         [[nodiscard]] std::size_t totalRooms() const;
         [[nodiscard]] std::size_t totalPendingEvents() const;
 
-        // === 回调设置 ===
-        void setEventHandler(RoomActor::EventHandler handler);
-
     private:
-        // 选择负载最低的 Actor
         [[nodiscard]] RoomActor* selectLeastLoadedActor() const;
-        // 计算房间 ID 的哈希值（用于一致性）
         [[nodiscard]] std::size_t hashRoomId(const std::string& roomId) const;
 
     private:
         std::vector<std::unique_ptr<RoomActor>> actors_;
         
-        // 房间到 Actor 的映射
         mutable std::mutex roomActorMapMutex_;
         std::map<std::string, RoomActor*> roomActorMap_;
         
-        // 下一个分配的 Actor 索引（轮询）
         mutable std::atomic<std::size_t> nextActorIndex_{0};
-        
-        // 事件处理器
-        RoomActor::EventHandler eventHandler_;
     };
 
 } // namespace domain::game::room

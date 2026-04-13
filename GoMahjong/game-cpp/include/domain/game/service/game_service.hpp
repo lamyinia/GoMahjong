@@ -57,6 +57,9 @@ namespace domain::game::service {
         // 获取 grpc 服务实现（用于注册到 GrpcServer）
         [[nodiscard]] std::shared_ptr<grpc::Service> get_grpc_service() const;
 
+        // 初始化：注入外部 RoomManager（由 ServerHub 调用）
+        void init(domain::game::room::RoomManager& room_manager);
+
         // 获取 RoomManager（供 Handler 使用）
         domain::game::room::RoomManager& room_manager();
 

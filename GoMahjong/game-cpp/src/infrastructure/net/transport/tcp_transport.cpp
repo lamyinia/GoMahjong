@@ -67,7 +67,7 @@ namespace infra::net::transport {
 ITransport::Strand TcpTransport::strand() const { return strand_; }
 
     void TcpTransport::do_read() {
-        LOG_DEBUG("do_read() 回调触发, closed_={}, socket_open={}", closed_, socket_.is_open());
+        LOG_DEBUG("do_read(), closed_={}, socket_open={}", closed_, socket_.is_open());
         if (closed_) return;
         if (!socket_.is_open()) {
             do_close();

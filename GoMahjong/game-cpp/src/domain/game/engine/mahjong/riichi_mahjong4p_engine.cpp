@@ -1,7 +1,8 @@
 #include "domain/game/engine/mahjong/riichi_mahjong4p_engine.h"
 
 #include "infrastructure/log/logger.hpp"
-#include "domain/game/event/game_event.h"
+#include "domain/game/event/mahjong_game_event.h"
+#include "generated/game_mahjong.pb.h"
 
 namespace domain::game::engine {
     using EventType = event::EventType;
@@ -46,7 +47,17 @@ namespace domain::game::engine {
 
     void RiichiMahjong4PEngine::handlePlayTile(const event::PlayTileEvent& e) {
         (void)e;
+
         // TODO: 实现出牌逻辑
+
+        // 测试：广播 GameStatePush
+        if (context_) {
+            gomahjong::game::GameStatePush push;
+            push.set_room_id(0);
+            push.set_current_turn(0);
+            push.set_remaining_tiles(136);
+            context_->broadcast("game.state", push);
+        }
     }
 
     void RiichiMahjong4PEngine::handleDrawTile(const event::DrawTileEvent& e) {
@@ -72,16 +83,22 @@ namespace domain::game::engine {
     void RiichiMahjong4PEngine::handleRon(const event::RonEvent& e) {
         (void)e;
         // TODO: 实现荣胡逻辑
+        phase_ = GamePhase::GameOver;
+        if (context_) context_->notifyGameOver();
     }
 
     void RiichiMahjong4PEngine::handleTsumo(const event::TsumoEvent& e) {
         (void)e;
         // TODO: 实现自摸逻辑
+        phase_ = GamePhase::GameOver;
+        if (context_) context_->notifyGameOver();
     }
 
     void RiichiMahjong4PEngine::handleDraw(const event::DrawEvent& e) {
         (void)e;
         // TODO: 实现流局逻辑
+        phase_ = GamePhase::GameOver;
+        if (context_) context_->notifyGameOver();
     }
 
 
@@ -143,11 +160,8 @@ namespace domain::game::engine {
         LOG_INFO("[RiichiMahjong4PEngine] game reset");
     }
 
-    void RiichiMahjong4PEngine::destroy() {
-        players_.clear();
-        phase_ = GamePhase::GameOver;
-        started_ = false;
-        LOG_INFO("[RiichiMahjong4PEngine] game destroyed");
+    void RiichiMahjong4PEngine::setContext(EngineContext* context) {
+        context_ = context;
     }
 
 } // namespace domain::game::engine

@@ -35,6 +35,7 @@ func NewWebServer(webPort int, tcpHost string, tcpPort int) *WebServer {
 	mux.HandleFunc("/api/players", s.handleGetPlayers)
 	mux.HandleFunc("/api/connect", s.handleConnectPlayer)
 	mux.HandleFunc("/api/disconnect", s.handleDisconnectPlayer)
+	mux.HandleFunc("/api/createRoom", s.handleCreateRoom)
 
 	s.app = &http.Server{
 		Addr:    fmt.Sprintf(":%d", webPort),

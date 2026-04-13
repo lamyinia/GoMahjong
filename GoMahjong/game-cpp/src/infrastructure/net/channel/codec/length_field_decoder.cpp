@@ -37,13 +37,11 @@ namespace infra::net::channel {
                 return;
             }
 
-            // 检查是否收到完整消息
             size_t total_len = length_field_offset_ + length_field_length_ + frame_len;
             if (buffer_.size() < total_len) {
                 break;
             }
 
-            // 提取消息体（不包含长度字段），从缓冲区移除已处理的数据
             Bytes frame(buffer_.begin() + length_field_offset_ + length_field_length_, buffer_.begin() + total_len);
             LOG_DEBUG("extracted frame, length={}, firing channel_read", frame_len);
             buffer_.erase(buffer_.begin(), buffer_.begin() + total_len);

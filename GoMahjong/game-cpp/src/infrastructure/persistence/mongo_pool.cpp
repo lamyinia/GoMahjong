@@ -32,9 +32,9 @@ namespace infra::persistence {
         try {
             mongocxx::uri uri{config_.uri};
             mongo_pool_ = std::make_unique<mongocxx::pool>(uri);
-            LOG_INFO("[MongoPool] 连接池创建成功: {}", config_.uri);
+            LOG_INFO("连接池创建成功: {}", config_.uri);
         } catch (const mongocxx::exception& e) {
-            LOG_ERROR("[MongoPool] 连接池创建失败: {}", e.what());
+            LOG_ERROR("连接池创建失败: {}", e.what());
             throw;
         }
     }
@@ -47,7 +47,7 @@ namespace infra::persistence {
 
     void MongoPool::start() {
         if (running_) {
-            LOG_WARN("[MongoPool] 线程池已在运行");
+            LOG_WARN("线程池已在运行");
             return;
         }
 
@@ -58,7 +58,7 @@ namespace infra::persistence {
             workers_.emplace_back(&MongoPool::worker_thread, this);
         }
 
-        LOG_INFO("[MongoPool] 线程池启动成功，线程数: {}", config_.thread_count);
+        LOG_INFO("线程池启动成功，线程数: {}", config_.thread_count);
     }
 
     void MongoPool::stop() {
@@ -79,7 +79,7 @@ namespace infra::persistence {
         }
         workers_.clear();
 
-        LOG_INFO("[MongoPool] 线程池已停止");
+        LOG_INFO("线程池已停止");
     }
 
     bool MongoPool::is_running() const noexcept {
@@ -90,7 +90,7 @@ namespace infra::persistence {
 
     void MongoPool::async_execute(DbTask operation) {
         if (!running_) {
-            LOG_ERROR("[MongoPool] 线程池未启动");
+            LOG_ERROR("线程池未启动");
             return;
         }
 
@@ -99,7 +99,7 @@ namespace infra::persistence {
 
             // 检查队列容量
             if (task_queue_.size() >= config_.queue_max_size) {
-                LOG_ERROR("[MongoPool] 任务队列已满，丢弃任务");
+                LOG_ERROR("任务队列已满，丢弃任务");
                 return;
             }
 
@@ -115,7 +115,7 @@ namespace infra::persistence {
         std::function<void(std::exception_ptr)> error_callback
     ) {
         if (!running_) {
-            LOG_ERROR("[MongoPool] 线程池未启动");
+            LOG_ERROR("线程池未启动");
             if (error_callback) {
                 error_callback(std::make_exception_ptr(std::runtime_error("线程池未启动")));
             }
@@ -138,7 +138,7 @@ namespace infra::persistence {
 
             // 检查队列容量
             if (task_queue_.size() >= config_.queue_max_size) {
-                LOG_ERROR("[MongoPool] 任务队列已满，丢弃任务");
+                LOG_ERROR("任务队列已满，丢弃任务");
                 if (error_callback) {
                     error_callback(std::make_exception_ptr(std::runtime_error("任务队列已满")));
                 }
@@ -156,7 +156,7 @@ namespace infra::persistence {
 
     void MongoPool::execute(DbTask operation) {
         if (!running_) {
-            LOG_ERROR("[MongoPool] 线程池未启动");
+            LOG_ERROR("线程池未启动");
             throw std::runtime_error("线程池未启动");
         }
 
@@ -232,16 +232,16 @@ namespace infra::persistence {
                     task(*conn);
 
                 } catch (const mongocxx::exception& e) {
-                    LOG_ERROR("[MongoPool] 数据库操作失败: {}", e.what());
+                    LOG_ERROR("数据库操作失败: {}", e.what());
                 } catch (const std::exception& e) {
-                    LOG_ERROR("[MongoPool] 任务执行失败: {}", e.what());
+                    LOG_ERROR("任务执行失败: {}", e.what());
                 } catch (...) {
-                    LOG_ERROR("[MongoPool] 未知异常");
+                    LOG_ERROR("未知异常");
                 }
             }
         }
 
-        LOG_DEBUG("[MongoPool] 工作线程退出: {}", thread_id_to_string(std::this_thread::get_id()));
+        LOG_DEBUG("工作线程退出: {}", thread_id_to_string(std::this_thread::get_id()));
     }
 
 } // namespace infra::persistence

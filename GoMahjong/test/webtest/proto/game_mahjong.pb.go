@@ -77,8 +77,7 @@ func (x *Tile) GetId() int32 {
 // 出牌请求
 type PlayTileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tile          *Tile                  `protobuf:"bytes,1,opt,name=tile,proto3" json:"tile,omitempty"`                    // 打出的牌
-	RoomId        uint64                 `protobuf:"varint,2,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"` // 房间 ID
+	Tile          *Tile                  `protobuf:"bytes,1,opt,name=tile,proto3" json:"tile,omitempty"` // 打出的牌
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -120,81 +119,12 @@ func (x *PlayTileRequest) GetTile() *Tile {
 	return nil
 }
 
-func (x *PlayTileRequest) GetRoomId() uint64 {
-	if x != nil {
-		return x.RoomId
-	}
-	return 0
-}
-
-// 出牌响应
-type PlayTileResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`                    // 错误信息
-	NextTurn      int32                  `protobuf:"varint,3,opt,name=next_turn,json=nextTurn,proto3" json:"next_turn,omitempty"` // 下一个玩家的座位号 (0-3)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PlayTileResponse) Reset() {
-	*x = PlayTileResponse{}
-	mi := &file_proto_game_mahjong_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PlayTileResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PlayTileResponse) ProtoMessage() {}
-
-func (x *PlayTileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_game_mahjong_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PlayTileResponse.ProtoReflect.Descriptor instead.
-func (*PlayTileResponse) Descriptor() ([]byte, []int) {
-	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *PlayTileResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *PlayTileResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *PlayTileResponse) GetNextTurn() int32 {
-	if x != nil {
-		return x.NextTurn
-	}
-	return 0
-}
-
 // 游戏状态推送
 type GameStatePush struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	RoomId         uint64                 `protobuf:"varint,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
 	HandTiles      []*Tile                `protobuf:"bytes,2,rep,name=hand_tiles,json=handTiles,proto3" json:"hand_tiles,omitempty"`                 // 手牌
 	DiscardTiles   []*Tile                `protobuf:"bytes,3,rep,name=discard_tiles,json=discardTiles,proto3" json:"discard_tiles,omitempty"`        // 弃牌区
-	CurrentTurn    int32                  `protobuf:"varint,4,opt,name=current_turn,json=currentTurn,proto3" json:"current_turn,omitempty"`          // 当前玩家座位号
 	RemainingTiles int32                  `protobuf:"varint,5,opt,name=remaining_tiles,json=remainingTiles,proto3" json:"remaining_tiles,omitempty"` // 剩余牌数
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -202,7 +132,7 @@ type GameStatePush struct {
 
 func (x *GameStatePush) Reset() {
 	*x = GameStatePush{}
-	mi := &file_proto_game_mahjong_proto_msgTypes[3]
+	mi := &file_proto_game_mahjong_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -214,7 +144,7 @@ func (x *GameStatePush) String() string {
 func (*GameStatePush) ProtoMessage() {}
 
 func (x *GameStatePush) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_game_mahjong_proto_msgTypes[3]
+	mi := &file_proto_game_mahjong_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -227,7 +157,7 @@ func (x *GameStatePush) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GameStatePush.ProtoReflect.Descriptor instead.
 func (*GameStatePush) Descriptor() ([]byte, []int) {
-	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{3}
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GameStatePush) GetRoomId() uint64 {
@@ -251,18 +181,109 @@ func (x *GameStatePush) GetDiscardTiles() []*Tile {
 	return nil
 }
 
-func (x *GameStatePush) GetCurrentTurn() int32 {
-	if x != nil {
-		return x.CurrentTurn
-	}
-	return 0
-}
-
 func (x *GameStatePush) GetRemainingTiles() int32 {
 	if x != nil {
 		return x.RemainingTiles
 	}
 	return 0
+}
+
+// Debug: 创建房间请求（跳过 march 匹配）
+type DebugCreateRoomRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EngineType    int32                  `protobuf:"varint,1,opt,name=engine_type,json=engineType,proto3" json:"engine_type,omitempty"` // 1: RiichiMahjong4P
+	PlayerIds     []string               `protobuf:"bytes,2,rep,name=player_ids,json=playerIds,proto3" json:"player_ids,omitempty"`     // 玩家 ID 列表
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DebugCreateRoomRequest) Reset() {
+	*x = DebugCreateRoomRequest{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DebugCreateRoomRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DebugCreateRoomRequest) ProtoMessage() {}
+
+func (x *DebugCreateRoomRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DebugCreateRoomRequest.ProtoReflect.Descriptor instead.
+func (*DebugCreateRoomRequest) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *DebugCreateRoomRequest) GetEngineType() int32 {
+	if x != nil {
+		return x.EngineType
+	}
+	return 0
+}
+
+func (x *DebugCreateRoomRequest) GetPlayerIds() []string {
+	if x != nil {
+		return x.PlayerIds
+	}
+	return nil
+}
+
+// Debug: 创建房间响应
+type DebugCreateRoomResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"` // 创建成功的房间 ID
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DebugCreateRoomResponse) Reset() {
+	*x = DebugCreateRoomResponse{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DebugCreateRoomResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DebugCreateRoomResponse) ProtoMessage() {}
+
+func (x *DebugCreateRoomResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DebugCreateRoomResponse.ProtoReflect.Descriptor instead.
+func (*DebugCreateRoomResponse) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *DebugCreateRoomResponse) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
 }
 
 var File_proto_game_mahjong_proto protoreflect.FileDescriptor
@@ -272,21 +293,22 @@ const file_proto_game_mahjong_proto_rawDesc = "" +
 	"\x18proto/game_mahjong.proto\x12\x0egomahjong.game\"*\n" +
 	"\x04Tile\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\x05R\x04type\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\"T\n" +
+	"\x02id\x18\x02 \x01(\x05R\x02id\";\n" +
 	"\x0fPlayTileRequest\x12(\n" +
-	"\x04tile\x18\x01 \x01(\v2\x14.gomahjong.game.TileR\x04tile\x12\x17\n" +
-	"\aroom_id\x18\x02 \x01(\x04R\x06roomId\"c\n" +
-	"\x10PlayTileResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1b\n" +
-	"\tnext_turn\x18\x03 \x01(\x05R\bnextTurn\"\xe4\x01\n" +
+	"\x04tile\x18\x01 \x01(\v2\x14.gomahjong.game.TileR\x04tile\"\xc1\x01\n" +
 	"\rGameStatePush\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\x04R\x06roomId\x123\n" +
 	"\n" +
 	"hand_tiles\x18\x02 \x03(\v2\x14.gomahjong.game.TileR\thandTiles\x129\n" +
-	"\rdiscard_tiles\x18\x03 \x03(\v2\x14.gomahjong.game.TileR\fdiscardTiles\x12!\n" +
-	"\fcurrent_turn\x18\x04 \x01(\x05R\vcurrentTurn\x12'\n" +
-	"\x0fremaining_tiles\x18\x05 \x01(\x05R\x0eremainingTilesB\x0fZ\rwebtest/protob\x06proto3"
+	"\rdiscard_tiles\x18\x03 \x03(\v2\x14.gomahjong.game.TileR\fdiscardTiles\x12'\n" +
+	"\x0fremaining_tiles\x18\x05 \x01(\x05R\x0eremainingTiles\"X\n" +
+	"\x16DebugCreateRoomRequest\x12\x1f\n" +
+	"\vengine_type\x18\x01 \x01(\x05R\n" +
+	"engineType\x12\x1d\n" +
+	"\n" +
+	"player_ids\x18\x02 \x03(\tR\tplayerIds\"2\n" +
+	"\x17DebugCreateRoomResponse\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomIdB\x0fZ\rwebtest/protob\x06proto3"
 
 var (
 	file_proto_game_mahjong_proto_rawDescOnce sync.Once
@@ -300,12 +322,13 @@ func file_proto_game_mahjong_proto_rawDescGZIP() []byte {
 	return file_proto_game_mahjong_proto_rawDescData
 }
 
-var file_proto_game_mahjong_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proto_game_mahjong_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_proto_game_mahjong_proto_goTypes = []any{
-	(*Tile)(nil),             // 0: gomahjong.game.Tile
-	(*PlayTileRequest)(nil),  // 1: gomahjong.game.PlayTileRequest
-	(*PlayTileResponse)(nil), // 2: gomahjong.game.PlayTileResponse
-	(*GameStatePush)(nil),    // 3: gomahjong.game.GameStatePush
+	(*Tile)(nil),                    // 0: gomahjong.game.Tile
+	(*PlayTileRequest)(nil),         // 1: gomahjong.game.PlayTileRequest
+	(*GameStatePush)(nil),           // 2: gomahjong.game.GameStatePush
+	(*DebugCreateRoomRequest)(nil),  // 3: gomahjong.game.DebugCreateRoomRequest
+	(*DebugCreateRoomResponse)(nil), // 4: gomahjong.game.DebugCreateRoomResponse
 }
 var file_proto_game_mahjong_proto_depIdxs = []int32{
 	0, // 0: gomahjong.game.PlayTileRequest.tile:type_name -> gomahjong.game.Tile
@@ -329,7 +352,7 @@ func file_proto_game_mahjong_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_game_mahjong_proto_rawDesc), len(file_proto_game_mahjong_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

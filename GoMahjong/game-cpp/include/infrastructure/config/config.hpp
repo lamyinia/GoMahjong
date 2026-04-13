@@ -16,7 +16,8 @@ struct NetConfig {
 };
 
 struct LogConfig {
-    std::string level{"info"};  // trace, debug, info, warn, error, critical, off
+    std::string level{"info"};          // trace, debug, info, warn, error, critical, off
+    bool short_source{false};            // true: 只显示 file:line，不显示函数签名
 };
 
 struct EtcdConfig {
@@ -42,7 +43,16 @@ struct MongoConfig {
 
 struct ActorConfig {
     std::uint32_t count{4};              // Actor 数量（建议 = CPU 核心数）
-    std::uint32_t queue_capacity{1024};  // 每个 Actor 的队列容量
+    std::uint32_t queue_capacity{1024 * 64};  // 每个 Actor 的队列容量
+};
+
+struct TimerWheelConfig {
+    std::uint32_t tick_duration_ms{50};  // tick 间隔（毫秒）
+    std::uint32_t wheel_size{512};        // 时间轮槽数
+};
+
+struct DebugConfig {
+    bool enabled{false};                 // 调试模式开关
 };
 
 struct ServerConfig {
@@ -52,6 +62,8 @@ struct ServerConfig {
     GrpcConfig grpc;
     MongoConfig mongodb;
     ActorConfig actor;
+    TimerWheelConfig timer_wheel;
+    DebugConfig debug;
 };
 
 class Config {
