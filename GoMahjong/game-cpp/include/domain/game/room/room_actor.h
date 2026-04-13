@@ -43,12 +43,7 @@ namespace domain::game::room {
         std::string roomId;
     };
 
-    struct TimerEventData {
-        std::string roomId;
-        uint64_t timerId;
-    };
-
-    using ActorEvent = std::variant<GameEventData, AddRoomData, RemoveRoomData, TimerEventData>;
+    using ActorEvent = std::variant<GameEventData, AddRoomData, RemoveRoomData>;
 
     // 单个 Actor：独占线程，管理多个房间，rooms_ 只在 worker 线程读写，完全无锁
     class RoomActor {
@@ -68,8 +63,6 @@ namespace domain::game::room {
 
         bool submitAddRoom(std::unique_ptr<Room> room);
         bool submitRemoveRoom(const std::string& roomId);
-        bool submitTimerEvent(const std::string& roomId, uint64_t timerId);
-
         [[nodiscard]] std::size_t roomCount() const { return roomCount_.load(std::memory_order_relaxed); }
         [[nodiscard]] std::size_t pendingEvents() const;
 
@@ -84,8 +77,6 @@ namespace domain::game::room {
         void handleGameEvent(GameEventData& data);
         void handleAddRoom(AddRoomData& data);
         void handleRemoveRoom(RemoveRoomData& data);
-        void handleTimerEvent(TimerEventData& data);
-
     private:
         std::atomic<bool> running_{false};
         std::thread worker_;
@@ -120,7 +111,6 @@ namespace domain::game::room {
         // === 房间管理（通过队列，无锁） ===
         bool assignRoom(std::unique_ptr<Room> room);
         bool removeRoom(const std::string& roomId);
-        bool submitTimerEvent(const std::string& roomId, uint64_t timerId);
         [[nodiscard]] RoomActor* getActorForRoom(const std::string& roomId) const;
 
         void setLifecycleNotifier(RoomLifecycleNotifier* notifier);

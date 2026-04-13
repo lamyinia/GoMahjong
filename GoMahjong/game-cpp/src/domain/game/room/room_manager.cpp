@@ -161,13 +161,6 @@ namespace domain::game::room {
         }
     }
 
-    bool RoomManager::submitTimerEvent(const std::string& roomId, uint64_t timerId) {
-        if (actorPool_) {
-            return actorPool_->submitTimerEvent(roomId, timerId);
-        }
-        return false;
-    }
-
     std::size_t RoomManager::room_count() const {
         std::lock_guard lock(mutex_);
         return roomPlayers_.size();

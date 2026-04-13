@@ -12,6 +12,8 @@ namespace domain::game::engine::mahjong::timer {
         }
     }
 
+    TurnManager::~TurnManager() = default;
+
     void TurnManager::enterDrawPhase(int seatIndex) {
         if (seatIndex < 0 || seatIndex >= TurnManager::PlayerCount) {
             LOG_ERROR("invalid seat index: {}", seatIndex);
@@ -41,7 +43,9 @@ namespace domain::game::engine::mahjong::timer {
         allocatedTime = std::min(allocatedTime, DefaultMaxRoundTime);
         ticker->setAvailable(allocatedTime);
 
-        if (!ticker->start(allocatedTime)) {
+        if (!ticker->start(allocatedTime, [this, seatIndex]() {
+                onTickerTimeout(seatIndex);
+            })) {
             LOG_ERROR("failed to start ticker for seat {}", seatIndex);
             return false;
         }
@@ -61,7 +65,9 @@ namespace domain::game::engine::mahjong::timer {
                 continue;
             }
             auto* ticker = tickers_[seat].get();
-            if (!ticker->start(timeLimitSec)) {
+            if (!ticker->start(timeLimitSec, [this, seat]() {
+                    onTickerTimeout(seat);
+                })) {
                 LOG_WARN("failed to start ticker for seat {} in reaction phase", seat);
             }
         }
@@ -110,6 +116,45 @@ namespace domain::game::engine::mahjong::timer {
                 ticker->stop();
             }
         }
+    }
+
+    void TurnManager::setRoomId(const std::string& roomId) {
+        roomId_ = roomId;
+    }
+
+    void TurnManager::setPlayerIds(const std::vector<std::string>& playerIds) {
+        playerIds_ = playerIds;
+    }
+
+    void TurnManager::setTimeoutEventCallback(TimeoutEventCallback cb) {
+        timeoutEventCallback_ = std::move(cb);
+    }
+
+    void TurnManager::onTickerTimeout(int seatIndex) {
+        // 只投递 PlayerTimeout 游戏事件，不修改 ticker 状态
+        // ticker 状态由 RoomActor 线程在处理事件时通过 applyTimeout 更新，保证线程安全
+        if (timeoutEventCallback_) {
+            std::string playerId = (seatIndex < static_cast<int>(playerIds_.size())) ? playerIds_[seatIndex] : "";
+            auto event = event::GameEvent::playerTimeout(playerId, seatIndex);
+            timeoutEventCallback_(roomId_, event);
+        }
+
+        LOG_DEBUG("[TurnManager] seat {} timer expired, submitted PlayerTimeout event for room {}", seatIndex, roomId_);
+    }
+
+    bool TurnManager::applyTimeout(int seatIndex) {
+        if (seatIndex < 0 || seatIndex >= TurnManager::PlayerCount) {
+            return false;
+        }
+        auto* ticker = tickers_[seatIndex].get();
+        // 只有 Running 状态才应用超时（玩家可能已操作，ticker 已 Stopped）
+        if (ticker->getState() != TickerState::Running) {
+            LOG_DEBUG("[TurnManager] seat {} ticker not Running, skip applyTimeout", seatIndex);
+            return false;
+        }
+        ticker->onTimerExpired();
+        LOG_DEBUG("[TurnManager] seat {} applied timeout", seatIndex);
+        return true;
     }
 
 } // namespace domain::game::engine::mahjong::timer

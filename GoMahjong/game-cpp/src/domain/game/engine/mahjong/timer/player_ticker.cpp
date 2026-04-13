@@ -13,7 +13,7 @@ namespace domain::game::engine::mahjong::timer {
           wheel_(wheel) {
     }
 
-    bool PlayerTicker::start(int duration) {
+    bool PlayerTicker::start(int duration, TimeoutCallback onTimeout) {
         if (state_ == TickerState::Running) {
             LOG_WARN("[PlayerTicker] seat {} already running", seatIndex_);
             return false;
@@ -32,12 +32,10 @@ namespace domain::game::engine::mahjong::timer {
         currentDuration_ = duration;
         roundStartTime_ = std::chrono::steady_clock::now();
 
-        // 调度定时器
-        auto self = this;
+        // 调度定时器，传入超时回调（在 TimerThread 线程调用）
         currentHandle_ = wheel_->schedule(
             static_cast<uint64_t>(duration) * 1000,  // 秒 → 毫秒
-            "",  // roomId 由上层 TurnManager 设置
-            [self]() { self->onTimerExpired(); }
+            std::move(onTimeout)
         );
 
         transitionTo(TickerState::Running);
@@ -78,10 +76,6 @@ namespace domain::game::engine::mahjong::timer {
         available_ = available;
     }
 
-    void PlayerTicker::setOnTimeout(TimeoutCallback cb) {
-        onTimeout_ = std::move(cb);
-    }
-
     void PlayerTicker::setOnStop(StopCallback cb) {
         onStop_ = std::move(cb);
     }
@@ -109,10 +103,6 @@ namespace domain::game::engine::mahjong::timer {
 
         available_ = 0;
         transitionTo(TickerState::Timeout);
-
-        if (onTimeout_) {
-            onTimeout_();
-        }
 
         LOG_DEBUG("[PlayerTicker] seat {} timeout", seatIndex_);
     }

@@ -37,14 +37,9 @@ static std::vector<TestFunc> test_funcs;
 TEST(timing_wheel_schedule_and_fire) {
     TimingWheel wheel(50, 512);
 
-    std::atomic<int> fireCount{0};
-    wheel.setExpiredCallback([&](const std::string& roomId, uint64_t timerId) {
-        fireCount.fetch_add(1);
-        wheel.fire(timerId);
-    });
-
-    auto handle = wheel.schedule(100, "room1", [&]() {
-        fireCount.fetch_add(10);
+    std::atomic<int> expireCount{0};
+    auto handle = wheel.schedule(50, [&]() {
+        expireCount.fetch_add(1);
     });
 
     // 手动 tick 到期
@@ -52,20 +47,15 @@ TEST(timing_wheel_schedule_and_fire) {
         wheel.tick();
     }
 
-    ASSERT_EQ(fireCount.load(), 11);  // 1 (expiredCallback) + 10 (callback)
+    ASSERT_EQ(expireCount.load(), 1);  // callback 触发 1 次
 }
 
 TEST(timing_wheel_cancel) {
     TimingWheel wheel(50, 512);
 
-    std::atomic<int> fireCount{0};
-    wheel.setExpiredCallback([&](const std::string& roomId, uint64_t timerId) {
-        fireCount.fetch_add(1);
-        wheel.fire(timerId);
-    });
-
-    auto handle = wheel.schedule(100, "room1", [&]() {
-        fireCount.fetch_add(10);
+    std::atomic<int> expireCount{0};
+    auto handle = wheel.schedule(100, [&]() {
+        expireCount.fetch_add(1);
     });
 
     wheel.cancel(handle);
@@ -74,49 +64,37 @@ TEST(timing_wheel_cancel) {
         wheel.tick();
     }
 
-    ASSERT_EQ(fireCount.load(), 0);
+    ASSERT_EQ(expireCount.load(), 0);
 }
 
 TEST(timing_wheel_multiple_timers) {
     TimingWheel wheel(50, 512);
 
-    std::atomic<int> fireCount{0};
-    wheel.setExpiredCallback([&](const std::string& roomId, uint64_t timerId) {
-        fireCount.fetch_add(1);
-        wheel.fire(timerId);
-    });
+    std::atomic<int> expireCount{0};
+    wheel.schedule(50, [&]() { expireCount.fetch_add(1); });
+    wheel.schedule(100, [&]() { expireCount.fetch_add(1); });
+    wheel.schedule(150, [&]() { expireCount.fetch_add(1); });
 
-    wheel.schedule(50, "room1", [&]() { fireCount.fetch_add(1); });
-    wheel.schedule(100, "room2", [&]() { fireCount.fetch_add(2); });
-    wheel.schedule(150, "room3", [&]() { fireCount.fetch_add(3); });
-
-    // tick 3 次：50ms, 100ms, 150ms
+    // tick 4 次：50ms, 100ms, 150ms
     for (int i = 0; i < 4; ++i) {
         wheel.tick();
     }
 
-    ASSERT_EQ(fireCount.load(), 1 + 1 + 1 + 2 + 1 + 3);
-    // 3 (expiredCallback×3) + 1 + 2 + 3 (callbacks)
+    ASSERT_EQ(expireCount.load(), 3);
 }
 
 TEST(timing_wheel_long_delay_rounds) {
     TimingWheel wheel(50, 8);  // 8 slots × 50ms = 400ms 一轮
 
-    std::atomic<int> fireCount{0};
-    wheel.setExpiredCallback([&](const std::string& roomId, uint64_t timerId) {
-        fireCount.fetch_add(1);
-        wheel.fire(timerId);
-    });
-
-    // 500ms = 10 ticks, 需要 1 轮 + 2 ticks
-    wheel.schedule(500, "room1", [&]() { fireCount.fetch_add(10); });
+    std::atomic<int> expireCount{0};
+    wheel.schedule(500, [&]() { expireCount.fetch_add(1); });
 
     // tick 11 次 (超过 10 ticks)
     for (int i = 0; i < 12; ++i) {
         wheel.tick();
     }
 
-    ASSERT_EQ(fireCount.load(), 11);  // 1 (expired) + 10 (callback)
+    ASSERT_EQ(expireCount.load(), 1);
 }
 
 // === TimerThread 集成测试 ===
@@ -125,19 +103,15 @@ TEST(timer_thread_basic) {
     TimingWheel wheel(50, 512);
     TimerThread thread(wheel, 50);
 
-    std::atomic<int> fireCount{0};
+    std::atomic<int> expireCount{0};
     std::mutex mtx;
     std::condition_variable cv;
     bool callbackExecuted = false;
 
-    wheel.setExpiredCallback([&](const std::string& roomId, uint64_t timerId) {
-        wheel.fire(timerId);
-    });
-
     thread.start();
 
-    wheel.schedule(200, "room1", [&]() {
-        fireCount.fetch_add(1);
+    wheel.schedule(200, [&]() {
+        expireCount.fetch_add(1);
         std::lock_guard lock(mtx);
         callbackExecuted = true;
         cv.notify_one();
@@ -149,7 +123,7 @@ TEST(timer_thread_basic) {
     ASSERT_TRUE(ok);
 
     thread.stop();
-    ASSERT_EQ(fireCount.load(), 1);
+    ASSERT_EQ(expireCount.load(), 1);
 }
 
 // === PlayerTicker 测试 ===
@@ -158,19 +132,14 @@ TEST(player_ticker_start_and_stop) {
     TimingWheel wheel(50, 512);
     TimerThread thread(wheel, 50);
 
-    wheel.setExpiredCallback([&](const std::string& roomId, uint64_t timerId) {
-        wheel.fire(timerId);
-    });
+    std::atomic<int> expireCount{0};
 
     thread.start();
 
     PlayerTicker ticker(0, 300, &wheel);
 
-    std::atomic<int> timeoutCount{0};
-    ticker.setOnTimeout([&]() { timeoutCount.fetch_add(1); });
-
     // 启动 10 秒计时
-    ASSERT_TRUE(ticker.start(10));
+    ASSERT_TRUE(ticker.start(10, [&]() { expireCount.fetch_add(1); }));
     ASSERT_EQ(ticker.getState(), TickerState::Running);
 
     // 等待 500ms 后停止
@@ -182,37 +151,37 @@ TEST(player_ticker_start_and_stop) {
     ASSERT_TRUE(ticker.getAvailable() < 300);
 
     thread.stop();
-    ASSERT_EQ(timeoutCount.load(), 0);  // 未超时
+    ASSERT_EQ(expireCount.load(), 0);  // 未超时
 }
 
 TEST(player_ticker_timeout) {
     TimingWheel wheel(50, 512);
     TimerThread thread(wheel, 50);
 
-    wheel.setExpiredCallback([&](const std::string& roomId, uint64_t timerId) {
-        wheel.fire(timerId);
-    });
+    std::mutex mtx;
+    std::condition_variable cv;
+    bool timeoutFired = false;
 
     thread.start();
 
     PlayerTicker ticker(0, 300, &wheel);
 
-    std::mutex mtx;
-    std::condition_variable cv;
-    bool timeoutFired = false;
-
-    ticker.setOnTimeout([&]() {
+    // 启动 1 秒计时，传入超时回调
+    ASSERT_TRUE(ticker.start(1, [&]() {
+        // 模拟 TurnManager::onTickerTimeout：只投递事件，不修改 ticker 状态
+        // ticker 状态由 RoomActor 线程通过 applyTimeout 更新
         std::lock_guard lock(mtx);
         timeoutFired = true;
         cv.notify_one();
-    });
-
-    // 启动 1 秒计时
-    ASSERT_TRUE(ticker.start(1));
+    }));
 
     std::unique_lock lock(mtx);
     bool ok = cv.wait_for(lock, std::chrono::seconds(3), [&] { return timeoutFired; });
     ASSERT_TRUE(ok);
+
+    // callback 不改 ticker 状态，ticker 仍为 Running
+    // 模拟 RoomActor 线程处理 PlayerTimeout 事件时调用 applyTimeout
+    ticker.onTimerExpired();
     ASSERT_EQ(ticker.getState(), TickerState::Timeout);
 
     thread.stop();
@@ -233,10 +202,6 @@ TEST(turn_manager_enter_main_action_phase) {
     TimingWheel wheel(50, 512);
     TimerThread thread(wheel, 50);
 
-    wheel.setExpiredCallback([&](const std::string& roomId, uint64_t timerId) {
-        wheel.fire(timerId);
-    });
-
     thread.start();
 
     TurnManager tm(&wheel);
@@ -255,10 +220,6 @@ TEST(turn_manager_enter_main_action_phase) {
 TEST(turn_manager_enter_reaction_phase) {
     TimingWheel wheel(50, 512);
     TimerThread thread(wheel, 50);
-
-    wheel.setExpiredCallback([&](const std::string& roomId, uint64_t timerId) {
-        wheel.fire(timerId);
-    });
 
     thread.start();
 
@@ -312,22 +273,16 @@ TEST(turn_manager_full_flow) {
     TimingWheel wheel(50, 512);
     TimerThread thread(wheel, 50);
 
-    std::atomic<int> timeoutCount{0};
-
-    wheel.setExpiredCallback([&](const std::string& roomId, uint64_t timerId) {
-        wheel.fire(timerId);
-    });
+    std::atomic<int> timeoutEventCount{0};
 
     thread.start();
 
     TurnManager tm(&wheel);
-
-    // 设置超时回调
-    for (int i = 0; i < TurnManager::PlayerCount; ++i) {
-        tm.getPlayerTicker(i)->setOnTimeout([&]() {
-            timeoutCount.fetch_add(1);
-        });
-    }
+    tm.setRoomId("test_room");
+    tm.setPlayerIds({"p0", "p1", "p2", "p3"});
+    tm.setTimeoutEventCallback([&](const std::string& roomId, const domain::game::event::GameEvent& event) {
+        timeoutEventCount.fetch_add(1);
+    });
 
     // 1. 摸牌
     tm.enterDrawPhase(0);
@@ -350,6 +305,7 @@ TEST(turn_manager_full_flow) {
 
     thread.stop();
 }
+
 
 // === main ===
 int main() {

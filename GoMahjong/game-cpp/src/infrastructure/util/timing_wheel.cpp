@@ -11,13 +11,7 @@ namespace infra::util {
           slots_(wheelSize) {
     }
 
-    void TimingWheel::setExpiredCallback(ExpiredCallback cb) {
-        expiredCallback_ = std::move(cb);
-    }
-
-    TimerHandle TimingWheel::schedule(std::uint64_t delayMs,
-                                       const std::string& roomId,
-                                       std::function<void()> cb) {
+    TimerHandle TimingWheel::schedule(std::uint64_t delayMs, TimerCallback callback) {
         auto id = nextTimerId_.fetch_add(1, std::memory_order_relaxed);
 
         // 计算目标 slot 和轮数
@@ -29,15 +23,8 @@ namespace infra::util {
 
         auto entry = std::make_shared<TimerEntry>();
         entry->id = id;
-        entry->roomId = roomId;
         entry->remainingRounds = rounds;
-        entry->callback = std::move(cb);
-
-        // 存入 pending map（供 fire 查找）
-        {
-            std::lock_guard lock(pendingMutex_);
-            pendingEntries_[id] = entry;
-        }
+        entry->callback = std::move(callback);
 
         // 插入目标 slot
         {
@@ -45,26 +32,24 @@ namespace infra::util {
             slots_[targetSlot].entries.push_front(entry);
         }
 
-        LOG_TRACE("scheduled timer {} in room {}, delay={}ms, slot={}, rounds={}",
-                  id, roomId, delayMs, targetSlot, rounds);
+        LOG_TRACE("scheduled timer {}, delay={}ms, slot={}, rounds={}",
+                  id, delayMs, targetSlot, rounds);
 
         return TimerHandle{id};
     }
 
     void TimingWheel::cancel(const TimerHandle& handle) {
         // 标记取消（延迟删除，tick 时清理）
-        std::shared_ptr<TimerEntry> entry;
-        {
-            std::lock_guard lock(pendingMutex_);
-            auto it = pendingEntries_.find(handle.id);
-            if (it != pendingEntries_.end()) {
-                entry = it->second;
-                pendingEntries_.erase(it);
+        // 遍历所有 slot 查找并标记（cancel 不高频，可接受）
+        for (auto& slot : slots_) {
+            std::lock_guard lock(slot.mutex);
+            for (auto& entry : slot.entries) {
+                if (entry->id == handle.id) {
+                    entry->cancelled.store(true, std::memory_order_relaxed);
+                    LOG_TRACE("cancelled timer {}", handle.id);
+                    return;
+                }
             }
-        }
-        if (entry) {
-            entry->cancelled.store(true, std::memory_order_relaxed);
-            LOG_TRACE("cancelled timer {}", handle.id);
         }
     }
 
@@ -99,31 +84,15 @@ namespace infra::util {
             }
         }
 
-        // 通知到期（不在锁内）
+        // 通知到期（不在 slot 锁内）
+        // 检查 cancelled 标志：cancel 可能在此期间被调用
         for (auto& entry : expired) {
-            LOG_TRACE("timer {} in room {} expired", entry->id, entry->roomId);
-
-            if (expiredCallback_) {
-                expiredCallback_(entry->roomId, entry->id);
+            if (entry->cancelled.load(std::memory_order_relaxed)) {
+                LOG_TRACE("timer {} expired but cancelled, skipping", entry->id);
+                continue;
             }
-        }
-    }
-
-    void TimingWheel::fire(uint64_t timerId) {
-        std::shared_ptr<TimerEntry> entry;
-        {
-            std::lock_guard lock(pendingMutex_);
-            auto it = pendingEntries_.find(timerId);
-            if (it != pendingEntries_.end()) {
-                entry = it->second;
-                pendingEntries_.erase(it);
-            }
-        }
-
-        if (entry && !entry->cancelled.load(std::memory_order_relaxed)) {
-            if (entry->callback) {
-                entry->callback();
-            }
+            LOG_TRACE("timer {} expired, invoking callback", entry->id);
+            entry->callback();
         }
     }
 

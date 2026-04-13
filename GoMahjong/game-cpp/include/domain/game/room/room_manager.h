@@ -2,7 +2,6 @@
 
 #include "domain/game/room/room_actor.h"
 #include "domain/game/outbound/out_dispatcher.h"
-#include "infrastructure/util/timing_wheel.h"
 
 #include <cstdint>
 #include <map>
@@ -40,7 +39,6 @@ namespace domain::game::room {
 
         void setOutDispatcher(outbound::OutDispatcher* dispatcher);
         void setTimingWheel(infra::util::TimingWheel* wheel);
-        bool submitTimerEvent(const std::string& roomId, uint64_t timerId);
 
         [[nodiscard]] std::size_t room_count() const;
         [[nodiscard]] std::size_t player_count() const;

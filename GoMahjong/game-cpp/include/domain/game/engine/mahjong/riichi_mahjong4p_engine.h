@@ -2,8 +2,10 @@
 
 #include "domain/game/engine/engine.h"
 #include "domain/game/engine/engine_context.h"
+#include "domain/game/engine/mahjong/timer/turn_manager.h"
 #include "domain/game/event/mahjong_game_event.h"
 
+#include <memory>
 #include <set>
 #include <string>
 
@@ -33,11 +35,18 @@ namespace domain::game::engine {
         void reset() override;
         void setContext(EngineContext* context) override;
 
+        // 初始化计时系统（由 RoomActor 在创建房间后调用）
+        void initTimerSystem(infra::util::TimingWheel* wheel);
+
+        // 获取 TurnManager（供外部查询状态）
+        [[nodiscard]] mahjong::timer::TurnManager* getTurnManager() { return turnManager_.get(); }
+
     private:
         std::set<std::string> players_;
         GamePhase phase_{GamePhase::Waiting};
         bool started_{false};
         EngineContext* context_{nullptr};
+        std::unique_ptr<mahjong::timer::TurnManager> turnManager_;
 
         void handlePlayTile(const event::PlayTileEvent& e);
         void handleDrawTile(const event::DrawTileEvent& e);
@@ -47,6 +56,7 @@ namespace domain::game::engine {
         void handleRon(const event::RonEvent& e);
         void handleTsumo(const event::TsumoEvent& e);
         void handleDraw(const event::DrawEvent& e);
+        void handlePlayerTimeout(const event::PlayerTimeoutEvent& e);
     };
 
 } // namespace domain::game::engine

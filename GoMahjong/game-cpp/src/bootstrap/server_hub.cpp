@@ -126,14 +126,10 @@ namespace gomahjong::bootstrap {
             room_manager_->setOutDispatcher(out_dispatcher_.get());
         }
 
-        // 配置时间轮：到期回调路由到对应 Actor
-        if (timing_wheel_ && room_manager_) {
-            timing_wheel_->setExpiredCallback(
-                [this](const std::string& roomId, uint64_t timerId) {
-                    room_manager_->submitTimerEvent(roomId, timerId);
-                });
+        // 配置时间轮：注入到 RoomManager，启动 TimerThread
+        // expiredCallback 由各房间的 TurnManager 在 initTimerSystem 时设置
+        if (timing_wheel_) {
             room_manager_->setTimingWheel(timing_wheel_.get());
-
             timer_thread_ = std::make_unique<infra::util::TimerThread>(*timing_wheel_, cfg_.server().timer_wheel.tick_duration_ms);
             timer_thread_->start();
         }

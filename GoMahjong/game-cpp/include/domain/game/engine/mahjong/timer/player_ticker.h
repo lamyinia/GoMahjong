@@ -16,18 +16,19 @@ namespace domain::game::engine::mahjong::timer {
         Timeout     // 已超时
     };
 
-    // 底层通过 TimingWheel 调度，支持：跨回合累计剩余时间、每回合补偿、超时/停止回调
+    // 底层通过 TimingWheel 调度，支持：跨回合累计剩余时间、每回合补偿
+    // 超时回调由上层 TurnManager 在 start 时注入，投递 PlayerTimeout 游戏事件
     class PlayerTicker {
     public:
-        using StateChangeCallback = std::function<void(TickerState oldState, TickerState newState)>;
         using TimeoutCallback = std::function<void()>;
+        using StateChangeCallback = std::function<void(TickerState oldState, TickerState newState)>;
         using StopCallback = std::function<void()>;
 
         explicit PlayerTicker(int seatIndex, int totalAvailableTime,
                                infra::util::TimingWheel* wheel = nullptr);
 
-        // 启动计时（分配时间 = available + roundCompensation，上限 maxRoundTime），duration: 本次分配时间（秒）
-        bool start(int duration);
+        // 启动计时，duration: 本次分配时间（秒），onTimeout: 定时器到期回调（在 TimerThread 调用）
+        bool start(int duration, TimeoutCallback onTimeout);
 
         // 停止计时（玩家操作），返回已用时间（秒）
         bool stop();
@@ -38,9 +39,9 @@ namespace domain::game::engine::mahjong::timer {
         [[nodiscard]] int getAvailable() const { return available_; }
         [[nodiscard]] TickerState getState() const { return state_; }
         [[nodiscard]] int getSeatIndex() const { return seatIndex_; }
+        [[nodiscard]] infra::util::TimerHandle currentHandle() const { return currentHandle_; }
 
         // 回调设置
-        void setOnTimeout(TimeoutCallback cb);
         void setOnStop(StopCallback cb);
         void setOnStateChange(StateChangeCallback cb);
 
@@ -53,6 +54,9 @@ namespace domain::game::engine::mahjong::timer {
 
     private:
         void transitionTo(TickerState newState);
+
+    public:
+        // 由 TurnManager::onTickerTimeout 调用，更新 ticker 状态为 Timeout
         void onTimerExpired();
 
         int seatIndex_;
@@ -65,7 +69,6 @@ namespace domain::game::engine::mahjong::timer {
         std::chrono::steady_clock::time_point roundStartTime_;  // 本回合开始时间
         int currentDuration_{0};  // 本回合分配的时间（秒）
 
-        TimeoutCallback onTimeout_;
         StopCallback onStop_;
         StateChangeCallback onStateChange_;
     };

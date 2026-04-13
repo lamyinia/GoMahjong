@@ -1,5 +1,6 @@
 #pragma once
 
+#include "domain/game/event/mahjong_game_event.h"
 #include "domain/game/outbound/out_dispatcher.h"
 
 #include <functional>
@@ -17,10 +18,13 @@ namespace domain::game::engine {
     class EngineContext {
     public:
         using GameOverCallback = std::function<void(const std::string& roomId)>;
+        // Engine 内部组件（如 TurnManager）通过此回调投递游戏事件到 RoomActor 队列
+        using SubmitEventCallback = std::function<void(const std::string& roomId, const event::GameEvent& event)>;
 
         void setRoomId(std::string roomId) { roomId_ = std::move(roomId); }
         void setPlayerIds(std::vector<std::string> playerIds) { playerIds_ = std::move(playerIds); }
         void setGameOverCallback(GameOverCallback cb) { onGameOver_ = std::move(cb); }
+        void setSubmitEventCallback(SubmitEventCallback cb) { submitEvent_ = std::move(cb); }
         void setOutDispatcher(outbound::OutDispatcher* dispatcher) { outDispatcher_ = dispatcher; }
 
         [[nodiscard]] const std::string& roomId() const { return roomId_; }
@@ -28,6 +32,9 @@ namespace domain::game::engine {
 
         // Engine 调用：游戏结束时主动通知
         void notifyGameOver();
+
+        // Engine 内部组件调用：投递游戏事件到 RoomActor 队列（跨线程安全）
+        void submitEvent(const std::string& roomId, const event::GameEvent& event);
 
         // Engine 调用：向房间所有玩家广播（业务 DTO 自动序列化为 protobuf）
         void broadcast(const std::string& route,
@@ -44,6 +51,7 @@ namespace domain::game::engine {
         std::string roomId_;
         std::vector<std::string> playerIds_;
         GameOverCallback onGameOver_;
+        SubmitEventCallback submitEvent_;
         outbound::OutDispatcher* outDispatcher_{nullptr};
     };
 

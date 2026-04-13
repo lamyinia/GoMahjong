@@ -12,6 +12,14 @@ namespace domain::game::engine {
         }
     }
 
+    void EngineContext::submitEvent(const std::string& roomId, const event::GameEvent& event) {
+        if (submitEvent_) {
+            submitEvent_(roomId, event);
+        } else {
+            LOG_WARN("[EngineContext] submitEvent callback not set, dropping event for room {}", roomId);
+        }
+    }
+
     void EngineContext::broadcast(const std::string& route,
                                   const google::protobuf::Message& dto,
                                   outbound::ProtocolPreference preference) {

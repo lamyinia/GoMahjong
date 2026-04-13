@@ -37,6 +37,9 @@ namespace domain::game::engine {
             HANDLE_EVENT(Tsumo, event::TsumoEvent, handleTsumo);
             HANDLE_EVENT(Draw, event::DrawEvent, handleDraw);
 
+            // 超时
+            HANDLE_EVENT(PlayerTimeout, event::PlayerTimeoutEvent, handlePlayerTimeout);
+
             default:
                 LOG_WARN("[RiichiMahjong4PEngine] unhandled event type: {}", static_cast<int>(event.type));
                 break;
@@ -101,6 +104,21 @@ namespace domain::game::engine {
         if (context_) context_->notifyGameOver();
     }
 
+    void RiichiMahjong4PEngine::handlePlayerTimeout(const event::PlayerTimeoutEvent& e) {
+        LOG_WARN("[RiichiMahjong4PEngine] player {} (seat {}) timeout", e.playerId, e.seatIndex);
+
+        // 在 RoomActor 线程中安全地更新 ticker 状态
+        if (turnManager_) {
+            if (!turnManager_->applyTimeout(e.seatIndex)) {
+                // ticker 已非 Running（玩家在超时前已操作），忽略此超时
+                LOG_DEBUG("[RiichiMahjong4PEngine] seat {} timeout ignored, player already acted", e.seatIndex);
+                return;
+            }
+        }
+
+        // TODO: 实现超时逻辑（自动出牌/跳过操作）
+    }
+
 
 
     void RiichiMahjong4PEngine::onPlayerJoin(const std::string &userId) {
@@ -162,6 +180,31 @@ namespace domain::game::engine {
 
     void RiichiMahjong4PEngine::setContext(EngineContext* context) {
         context_ = context;
+    }
+
+    void RiichiMahjong4PEngine::initTimerSystem(infra::util::TimingWheel* wheel) {
+        if (!wheel) {
+            LOG_ERROR("[RiichiMahjong4PEngine] cannot init timer system with null wheel");
+            return;
+        }
+
+        turnManager_ = std::make_unique<mahjong::timer::TurnManager>(wheel);
+
+        // 配置 TurnManager 的超时事件回调：通过 EngineContext 投递到 RoomActor 队列
+        if (context_) {
+            turnManager_->setRoomId(context_->roomId());
+            turnManager_->setPlayerIds(context_->playerIds());
+            turnManager_->setTimeoutEventCallback(
+                [this](const std::string& roomId, const event::GameEvent& event) {
+                    if (context_) {
+                        context_->submitEvent(roomId, event);
+                    }
+                }
+            );
+        }
+
+        LOG_INFO("[RiichiMahjong4PEngine] timer system initialized for room {}",
+                 context_ ? context_->roomId() : "unknown");
     }
 
 } // namespace domain::game::engine

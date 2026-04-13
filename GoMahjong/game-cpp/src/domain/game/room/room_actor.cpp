@@ -1,5 +1,6 @@
 #include "domain/game/room/room_actor.h"
 #include "domain/game/room/room.h"
+#include "domain/game/engine/mahjong/riichi_mahjong4p_engine.h"
 #include "infrastructure/log/logger.hpp"
 
 #include <algorithm>
@@ -84,20 +85,6 @@ namespace domain::game::room {
         return true;
     }
 
-    bool RoomActor::submitTimerEvent(const std::string &roomId, uint64_t timerId) {
-        if (!running_) {
-            return false;
-        }
-
-        std::lock_guard lock(queueMutex_);
-        if (eventQueue_.size() >= queueCapacity_) {
-            LOG_WARN("[RoomActor] queue full, dropping timerEvent for room {}", roomId);
-            return false;
-        }
-        eventQueue_.push(TimerEventData{roomId, timerId});
-        queueCv_.notify_one();
-        return true;
-    }
 
     std::size_t RoomActor::pendingEvents() const {
         std::lock_guard lock(queueMutex_);
@@ -151,8 +138,6 @@ namespace domain::game::room {
                 handleAddRoom(arg);
             } else if constexpr (std::is_same_v<T, RemoveRoomData>) {
                 handleRemoveRoom(arg);
-            } else if constexpr (std::is_same_v<T, TimerEventData>) {
-                handleTimerEvent(arg);
             }
         }, evt);
     }
@@ -203,6 +188,20 @@ namespace domain::game::room {
                     // 仅记录，不直接删除（避免在 Room::handleEvent 调用栈中销毁 Room）
                     gameOverRooms_.insert(id);
                 });
+                // 注入 SubmitEventCallback：TurnManager 超时回调通过此投递事件到 RoomActor 队列
+                ctx->setSubmitEventCallback([this](const std::string& rid, const event::GameEvent& evt) {
+                    submitEvent(rid, evt);
+                });
+            }
+
+            // 初始化计时系统：Engine 持有 TurnManager，配置超时回调
+            auto* engine = it->second->getEngine();
+            if (engine && timingWheel_) {
+                // 通过 Engine 基类接口无法调用 initTimerSystem，需要 dynamic_cast
+                auto* riichiEngine = dynamic_cast<engine::RiichiMahjong4PEngine*>(engine);
+                if (riichiEngine) {
+                    riichiEngine->initTimerSystem(timingWheel_);
+                }
             }
         }
 
@@ -216,19 +215,6 @@ namespace domain::game::room {
             rooms_.erase(it);
             roomCount_.store(rooms_.size(), std::memory_order_relaxed);
             LOG_DEBUG("[RoomActor] removed room {}, total: {}", data.roomId, rooms_.size());
-        }
-    }
-
-    void RoomActor::handleTimerEvent(TimerEventData &data) {
-        // 检查房间是否还存在（可能已 gameOver 被移除）
-        if (rooms_.find(data.roomId) == rooms_.end()) {
-            LOG_DEBUG("[RoomActor] timer {} for room {} dropped (room not found)", data.timerId, data.roomId);
-            return;
-        }
-
-        // 在 Actor 线程中安全执行回调
-        if (timingWheel_) {
-            timingWheel_->fire(data.timerId);
         }
     }
 
@@ -348,15 +334,6 @@ namespace domain::game::room {
         for (auto &actor: actors_) {
             actor->setTimingWheel(wheel);
         }
-    }
-
-    bool RoomActorPool::submitTimerEvent(const std::string &roomId, uint64_t timerId) {
-        auto *actor = getActorForRoom(roomId);
-        if (!actor) {
-            LOG_WARN("[RoomActorPool] no actor for room {}, dropping timer {}", roomId, timerId);
-            return false;
-        }
-        return actor->submitTimerEvent(roomId, timerId);
     }
 
     RoomActor *RoomActorPool::selectLeastLoadedActor() const {

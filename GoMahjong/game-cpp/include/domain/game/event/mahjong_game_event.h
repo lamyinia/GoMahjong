@@ -42,6 +42,9 @@ namespace domain::game::event {
         Tsumo,          // 自摸
         Draw,           // 流局
         
+        // 超时
+        PlayerTimeout,  // 玩家超时
+
         // 游戏流程
         TurnStart,      // 回合开始
         TurnEnd,        // 回合结束
@@ -104,6 +107,12 @@ namespace domain::game::event {
         bool isKyuushuKyuukai = false;  // 是否九种九牌流局
     };
 
+    // 玩家超时事件
+    struct PlayerTimeoutEvent {
+        std::string playerId;
+        std::int32_t seatIndex = 0;
+    };
+
     // 回合开始事件
     struct TurnStartEvent {
         std::string playerId;
@@ -150,6 +159,7 @@ namespace domain::game::event {
             RonEvent,
             TsumoEvent,
             DrawEvent,
+            PlayerTimeoutEvent,
             TurnStartEvent,
             TurnEndEvent,
             RoundStartEvent,
@@ -212,6 +222,13 @@ namespace domain::game::event {
             GameEvent e;
             e.type = EventType::Draw;
             e.data = DrawEvent{isKyuushuKyuukai};
+            return e;
+        }
+
+        static GameEvent playerTimeout(const std::string& playerId, std::int32_t seatIndex) {
+            GameEvent e;
+            e.type = EventType::PlayerTimeout;
+            e.data = PlayerTimeoutEvent{playerId, seatIndex};
             return e;
         }
 
