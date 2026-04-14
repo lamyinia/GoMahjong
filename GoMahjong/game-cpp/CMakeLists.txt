@@ -211,3 +211,45 @@ target_link_libraries(game_timer_test PRIVATE
         spdlog::spdlog
         Threads::Threads
 )
+
+# Coroutine test
+add_executable(coroutine_test
+        tests/coroutine_test.cpp
+        src/infrastructure/util/thread_pool.cpp
+        src/infrastructure/util/timing_wheel.cpp
+        src/infrastructure/util/timer_thread.cpp
+        src/infrastructure/log/logger.cpp
+)
+setup_target(coroutine_test)
+
+target_link_libraries(coroutine_test PRIVATE
+        Boost::boost
+        spdlog::spdlog
+        Threads::Threads
+)
+
+# Memory pool test
+add_executable(memory_pool_test
+        tests/memory_pool_test.cpp
+        src/infrastructure/log/logger.cpp
+)
+setup_target(memory_pool_test)
+
+target_link_libraries(memory_pool_test PRIVATE
+        Boost::boost
+        spdlog::spdlog
+        Threads::Threads
+)
+
+# GameEvent pool test
+add_executable(game_event_pool_test
+        tests/game_event_pool_test.cpp
+        src/infrastructure/log/logger.cpp
+)
+setup_target(game_event_pool_test)
+
+target_link_libraries(game_event_pool_test PRIVATE
+        Boost::boost
+        spdlog::spdlog
+        Threads::Threads
+)

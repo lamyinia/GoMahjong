@@ -33,6 +33,17 @@ Config Config::load_from_file(const std::string& path) {
     if (j.contains("server")) {
         const auto& server = j["server"];
 
+        // Parse node identity
+        if (server.contains("node_id")) {
+            cfg.server_.node_id = server.at("node_id").get<std::string>();
+        }
+        if (server.contains("host")) {
+            cfg.server_.host = server.at("host").get<std::string>();
+        }
+        if (server.contains("service_name")) {
+            cfg.server_.service_name = server.at("service_name").get<std::string>();
+        }
+
         // Parse net.tcp
         if (server.contains("net") && server["net"].contains("tcp")) {
             const auto& tcp = server["net"]["tcp"];
@@ -66,6 +77,9 @@ Config Config::load_from_file(const std::string& path) {
             }
             if (etcd.contains("ttl_seconds")) {
                 cfg.server_.etcd.ttl_seconds = etcd.at("ttl_seconds").get<std::int64_t>();
+            }
+            if (etcd.contains("report_interval_seconds")) {
+                cfg.server_.etcd.report_interval_seconds = etcd.at("report_interval_seconds").get<std::int64_t>();
             }
         }
 
