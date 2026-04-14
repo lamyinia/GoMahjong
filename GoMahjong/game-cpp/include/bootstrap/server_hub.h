@@ -1,8 +1,10 @@
 #pragma once
 
 #include <boost/asio.hpp>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -23,6 +25,10 @@ namespace domain::game::room { class RoomManager; }
 namespace domain::game::outbound { class OutDispatcher; }
 
 namespace infra::util { class TimingWheel; class TimerThread; }
+
+namespace infra::rpc { class GrpcServer; }
+
+namespace infra::discovery { class ServiceRegistry; }
 
 // 生命周期管理器，以及依赖的组装
 namespace gomahjong::bootstrap {
@@ -47,11 +53,18 @@ namespace gomahjong::bootstrap {
 
         void build_services();
 
-        void build_listeners();
+        void start_listeners();
 
         void write_back();
 
-        void setup_wild_endpoint_callbacks();
+        // Load reporter
+        void start_load_reporter();
+        std::map<std::string, std::string> collect_load_metadata();
+
+        // System metrics (platform-specific)
+        static double get_cpu_percent();
+        static double get_memory_mb();
+        static std::int64_t get_uptime_seconds();
 
     private:
         const infra::config::Config &cfg_;
@@ -80,6 +93,14 @@ namespace gomahjong::bootstrap {
         // 时间轮 + 定时器线程
         std::unique_ptr<infra::util::TimingWheel> timing_wheel_;
         std::unique_ptr<infra::util::TimerThread> timer_thread_;
+
+        // gRPC 服务
+        std::unique_ptr<infra::rpc::GrpcServer> grpc_server_;
+
+        // 服务注册与发现
+        std::unique_ptr<infra::discovery::ServiceRegistry> service_registry_;
+        std::thread load_report_thread_;
+        std::atomic<bool> load_report_running_{false};
 
         bool started_ = false;
     };

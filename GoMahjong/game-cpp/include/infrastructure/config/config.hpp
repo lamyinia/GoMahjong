@@ -23,6 +23,7 @@ struct LogConfig {
 struct EtcdConfig {
     std::string endpoints{"http://127.0.0.1:2379"};
     std::int64_t ttl_seconds{10};
+    std::int64_t report_interval_seconds{5};  // Load report interval
 };
 
 struct GrpcConfig {
@@ -56,6 +57,9 @@ struct DebugConfig {
 };
 
 struct ServerConfig {
+    std::string node_id;           // Node unique identifier
+    std::string host;               // External access host
+    std::string service_name;       // Service name in etcd
     NetConfig net;
     LogConfig log;
     EtcdConfig etcd;

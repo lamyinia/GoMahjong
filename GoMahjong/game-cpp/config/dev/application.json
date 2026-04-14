@@ -1,5 +1,8 @@
 {
   "server": {
+    "node_id": "game-node-001",
+    "host": "127.0.0.1",
+    "service_name": "game-service",
     "net": {
       "tcp": {
         "port": 8010,
@@ -13,7 +16,8 @@
     },
     "etcd": {
       "endpoints": "http://127.0.0.1:2379",
-      "ttl_seconds": 10
+      "ttl_seconds": 10,
+      "report_interval_seconds": 5
     },
     "grpc": {
       "port": 9010
