@@ -1,0 +1,56 @@
+package database
+
+import (
+	"connector/infrastructure/config"
+	"connector/infrastructure/log"
+	"context"
+	"time"
+
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
+)
+
+type MongoManager struct {
+	Cli *mongo.Client
+	Db  *mongo.Database
+}
+
+func NewMongo(mongoConf config.MongoConf) *MongoManager {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	clientOptions := options.Client().ApplyURI(mongoConf.Url)
+	clientOptions.SetMinPoolSize(uint64(mongoConf.MinPoolSize))
+	clientOptions.SetMaxPoolSize(uint64(mongoConf.MaxPoolSize))
+
+	if mongoConf.Username != "" && mongoConf.Password != "" {
+		clientOptions.SetAuth(options.Credential{
+			Username: mongoConf.Username,
+			Password: mongoConf.Password,
+		})
+	}
+
+	client, err := mongo.Connect(ctx, clientOptions)
+	if err != nil {
+		log.Fatal("mongodb 连接错误: %v", err)
+		return nil
+	}
+	if err = client.Ping(ctx, readpref.Primary()); err != nil {
+		log.Fatal("mongodb Ping 错误: %v", err)
+		return nil
+	}
+	m := &MongoManager{
+		Cli: client,
+	}
+	m.Db = m.Cli.Database(mongoConf.Db)
+
+	return m
+}
+
+func (m *MongoManager) Close() error {
+	if m == nil {
+		return nil
+	}
+	return m.Cli.Disconnect(context.TODO())
+}

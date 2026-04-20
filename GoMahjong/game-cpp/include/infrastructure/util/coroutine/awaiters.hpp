@@ -114,7 +114,7 @@ public:
     bool await_ready() const noexcept { return duration_.count() == 0; }
 
     void await_suspend(std::coroutine_handle<> handle) {
-        wheel_.addTimer(duration_, [handle]() {
+        wheel_.schedule(static_cast<std::uint64_t>(duration_.count()), [handle]() {
             handle.resume();
         });
     }

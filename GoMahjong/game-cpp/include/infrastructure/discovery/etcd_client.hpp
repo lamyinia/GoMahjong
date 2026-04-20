@@ -71,8 +71,10 @@ namespace infra::discovery {
         std::int64_t grant_lease(std::int64_t ttl_seconds);
 
         // 启动后台心跳续约
+        // ttl_seconds: 续约间隔（秒），通常与 lease TTL 一致
+        // lease_id: 要续约的 lease ID
         // 成功返回 true，后台线程会自动续约直到 revoke 或析构
-        bool start_keepalive(std::int64_t lease_id);
+        bool start_keepalive(std::int64_t ttl_seconds, std::int64_t lease_id);
 
         // 停止指定 lease 的续约
         void stop_keepalive(std::int64_t lease_id);

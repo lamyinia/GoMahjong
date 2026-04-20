@@ -1,12 +1,12 @@
 package app
 
 import (
-	"common/config"
-	"common/http"
-	"common/log"
 	"context"
 	"fmt"
 	"gate/api"
+	"gate/infrastructure/config"
+	"gate/infrastructure/http"
+	"gate/infrastructure/log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,10 +14,9 @@ import (
 )
 
 func Run(ctx context.Context) error {
-	// 使用 common 封装的 gin 库 http-server
 	server := http.NewHttpServer(
 		http.WithPort(config.GateNodeConfig.HttpPort),
-		http.WithMode(config.GameNodeConfig.LogConf.Level),
+		http.WithMode(config.GateNodeConfig.LogConf.Level),
 	)
 
 	// 中间处理器注册

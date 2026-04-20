@@ -3,6 +3,7 @@
 #include "domain/game/event/mahjong_game_event.h"
 #include "infrastructure/util/memory/typed_object_pool.hpp"
 
+#include <type_traits>
 #include <utility>
 
 namespace domain::game::event {
@@ -156,24 +157,24 @@ private:
     // ==================== Type-to-EventType Mapping ====================
 
     template <typename EventT>
-    static constexpr EventType eventTypeFrom();
-
-    // Specializations for each event type
-    template <> static constexpr EventType eventTypeFrom<PlayTileEvent>() { return EventType::PlayTile; }
-    template <> static constexpr EventType eventTypeFrom<DrawTileEvent>() { return EventType::DrawTile; }
-    template <> static constexpr EventType eventTypeFrom<ChiEvent>() { return EventType::Chi; }
-    template <> static constexpr EventType eventTypeFrom<PonEvent>() { return EventType::Pon; }
-    template <> static constexpr EventType eventTypeFrom<KanEvent>() { return EventType::Kan; }
-    template <> static constexpr EventType eventTypeFrom<RonEvent>() { return EventType::Ron; }
-    template <> static constexpr EventType eventTypeFrom<TsumoEvent>() { return EventType::Tsumo; }
-    template <> static constexpr EventType eventTypeFrom<DrawEvent>() { return EventType::Draw; }
-    template <> static constexpr EventType eventTypeFrom<PlayerTimeoutEvent>() { return EventType::PlayerTimeout; }
-    template <> static constexpr EventType eventTypeFrom<TurnStartEvent>() { return EventType::TurnStart; }
-    template <> static constexpr EventType eventTypeFrom<TurnEndEvent>() { return EventType::TurnEnd; }
-    template <> static constexpr EventType eventTypeFrom<RoundStartEvent>() { return EventType::RoundStart; }
-    template <> static constexpr EventType eventTypeFrom<RoundEndEvent>() { return EventType::RoundEnd; }
-    template <> static constexpr EventType eventTypeFrom<GameStartEvent>() { return EventType::GameStart; }
-    template <> static constexpr EventType eventTypeFrom<GameEndEvent>() { return EventType::GameEnd; }
+    static constexpr EventType eventTypeFrom() {
+        if constexpr (std::is_same_v<EventT, PlayTileEvent>) return EventType::PlayTile;
+        else if constexpr (std::is_same_v<EventT, DrawTileEvent>) return EventType::DrawTile;
+        else if constexpr (std::is_same_v<EventT, ChiEvent>) return EventType::Chi;
+        else if constexpr (std::is_same_v<EventT, PonEvent>) return EventType::Pon;
+        else if constexpr (std::is_same_v<EventT, KanEvent>) return EventType::Kan;
+        else if constexpr (std::is_same_v<EventT, RonEvent>) return EventType::Ron;
+        else if constexpr (std::is_same_v<EventT, TsumoEvent>) return EventType::Tsumo;
+        else if constexpr (std::is_same_v<EventT, DrawEvent>) return EventType::Draw;
+        else if constexpr (std::is_same_v<EventT, PlayerTimeoutEvent>) return EventType::PlayerTimeout;
+        else if constexpr (std::is_same_v<EventT, TurnStartEvent>) return EventType::TurnStart;
+        else if constexpr (std::is_same_v<EventT, TurnEndEvent>) return EventType::TurnEnd;
+        else if constexpr (std::is_same_v<EventT, RoundStartEvent>) return EventType::RoundStart;
+        else if constexpr (std::is_same_v<EventT, RoundEndEvent>) return EventType::RoundEnd;
+        else if constexpr (std::is_same_v<EventT, GameStartEvent>) return EventType::GameStart;
+        else if constexpr (std::is_same_v<EventT, GameEndEvent>) return EventType::GameEnd;
+        else static_assert(!sizeof(EventT*), "Unhandled event type in eventTypeFrom");
+    }
 };
 
 } // namespace domain::game::event

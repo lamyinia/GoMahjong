@@ -44,6 +44,12 @@ namespace infra::net::reliability {
 
         channel_->add_inbound(std::make_shared<AuthHandler>(shared_from_this()));
 
+        // 连接在认证前断开时，立即清理而非等待超时
+        channel_->set_on_inactive([self = shared_from_this()]() {
+            LOG_INFO("连接在认证前断开, channel_id={}", self->id_);
+            self->on_auth_failed();
+        });
+
         start_timeout_timer();
 
         channel_->start_read();

@@ -1,6 +1,6 @@
 package api
 
-import "common/http"
+import "gate/infrastructure/http"
 
 // GetRoomsHandler 获取房间列表
 func GetRoomsHandler(c *http.Context) error {

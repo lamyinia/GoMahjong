@@ -1,12 +1,12 @@
 package api
 
 import (
-	"common/http"
-	"common/rpc"
 	"context"
+	"gate/infrastructure/http"
+	"gate/infrastructure/rpc"
+	userpb "gate/pb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	userpb "user/pb"
 )
 
 func LoginHandler(c *http.Context) error {

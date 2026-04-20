@@ -1,10 +1,10 @@
 package app
 
 import (
-	"common/config"
-	"common/log"
 	"context"
-	"core/container"
+	"game/container"
+	"game/infrastructure/config"
+	"game/infrastructure/log"
 	provider "game/interfaces/grpc"
 	"game/pb"
 	"google.golang.org/grpc"
@@ -16,7 +16,7 @@ import (
 )
 
 func Run(ctx context.Context) error {
-	gameContainer := container.NewGameContainer()
+	gameContainer := container.NewContainer()
 
 	if gameContainer == nil {
 		log.Fatal("game 容器初始化失败")

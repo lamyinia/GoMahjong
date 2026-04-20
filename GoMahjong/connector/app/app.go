@@ -1,13 +1,13 @@
 package app
 
 import (
-	"common/config"
-	"common/log"
-	"common/rpc"
+	"connector/container"
+	"connector/infrastructure/config"
+	"connector/infrastructure/log"
+	"connector/infrastructure/rpc"
+	matchpb "connector/pb"
 	"context"
-	"core/container"
 	"fmt"
-	matchpb "march/pb"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,7 +15,7 @@ import (
 )
 
 func Run(ctx context.Context) error {
-	connectorContainer := container.NewConnectorContainer()
+	connectorContainer := container.NewContainer()
 	defer connectorContainer.Close()
 
 	// 初始化 RPC 客户端并检测 march gRPC 是否可达

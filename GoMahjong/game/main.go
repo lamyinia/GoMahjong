@@ -1,12 +1,12 @@
 package main
 
 import (
-	"common/config"
-	"common/log"
-	"common/metrics"
 	"context"
 	"fmt"
 	"game/app"
+	"game/infrastructure/config"
+	"game/infrastructure/log"
+	"game/infrastructure/metrics"
 	"os"
 
 	"github.com/spf13/cobra"

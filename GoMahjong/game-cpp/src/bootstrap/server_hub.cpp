@@ -4,6 +4,7 @@
 #include <atomic>
 #include <iostream>
 #include <chrono>
+#include <fstream>
 
 #include "infrastructure/config/config.hpp"
 #include "infrastructure/net/listener/tcp_listener.h"
@@ -29,6 +30,7 @@ namespace gomahjong::bootstrap {
 
     void ServerHub::start() {
         if (started_) return;
+
         build_pools();
 
         build_services();
@@ -134,7 +136,6 @@ namespace gomahjong::bootstrap {
         auto twSize = cfg_.server().timer_wheel.wheel_size;
         timing_wheel_ = std::make_unique<infra::util::TimingWheel>(twTickMs, twSize);
 
-        // 创建服务注册器
         infra::discovery::RegistryConfig registryCfg{
             cfg_.server().etcd.endpoints,
             cfg_.server().etcd.ttl_seconds
@@ -182,53 +183,17 @@ namespace gomahjong::bootstrap {
         );
     }
 
-    void ServerHub::start_listeners() {
-        // ========== 启动 TCP 监听器 ==========
-        using namespace infra::net::listener;
-
-        auto tcpPort = cfg_.server().net.tcp.port;
-
-        tcp_listener_ = std::make_unique<TcpListener>(ioc_,
-                                                      boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), tcpPort));
-
-        auto wild_manager = wild_endpoint_manager_;
-
-        tcp_listener_->start(
-                [](const std::error_code &ec) {
-                    LOG_ERROR("tcp_listener 的 OnError 回调触发, accept error: {}", ec.message());
-                },
-                [wild_manager](const std::shared_ptr<infra::net::channel::IChannel>& channel) {
-                    LOG_INFO("tcp_listener 的 onNewChannel 回调触发");
-                    // 将新连接交给 WildEndpointManager 管理
-                    if (wild_manager && channel) {
-                        wild_manager->add_channel(channel);
-                    }
-                });
-
-        LOG_INFO("tcp listener started on port {}", tcpPort);
-
-        // ========== 启动 gRPC 服务 ==========
-        // 所有内部依赖已就绪，最后启动 gRPC
-        if (grpc_server_) {
-            if (grpc_server_->start(false)) {
-                LOG_INFO("gRPC server started on port {}", cfg_.server().grpc.port);
-            } else {
-                LOG_ERROR("gRPC server failed to start on port {}", cfg_.server().grpc.port);
-            }
-        }
-    }
-
     // 额外的注入逻辑（回调设置、服务注册、负载上报）
     void ServerHub::write_back() {
         // 1. 设置认证回调
         if (wild_endpoint_manager_ && session_manager_) {
             auto session_mgr = session_manager_;
             wild_endpoint_manager_->set_on_authenticated(
-                [session_mgr](const std::string& player_id,
-                              std::shared_ptr<infra::net::channel::IChannel> channel) {
-                    LOG_INFO("player {} authenticated, creating session", player_id);
-                    session_mgr->create_or_get_session(player_id, std::move(channel));
-                }
+                    [session_mgr](const std::string& player_id,
+                                  std::shared_ptr<infra::net::channel::IChannel> channel) {
+                        LOG_INFO("player {} authenticated, creating session", player_id);
+                        session_mgr->create_or_get_session(player_id, std::move(channel));
+                    }
             );
             LOG_DEBUG("wild endpoint 回调完成");
         }
@@ -251,6 +216,38 @@ namespace gomahjong::bootstrap {
         }
     }
 
+    void ServerHub::start_listeners() {
+        using namespace infra::net::listener;
+
+        auto tcpPort = cfg_.server().net.tcp.port;
+
+        tcp_listener_ = std::make_unique<TcpListener>(ioc_, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), tcpPort));
+
+        auto wild_manager = wild_endpoint_manager_;
+
+        tcp_listener_->start(
+                [](const std::error_code &ec) {
+                    LOG_ERROR("tcp_listener 的 OnError 回调触发, accept error: {}", ec.message());
+                },
+                [wild_manager](const std::shared_ptr<infra::net::channel::IChannel>& channel) {
+                    LOG_INFO("tcp_listener 的 onNewChannel 回调触发");
+                    // 将新连接交给 WildEndpointManager 管理
+                    if (wild_manager && channel) {
+                        wild_manager->add_channel(channel);
+                    }
+                });
+
+        LOG_INFO("tcp listener started on port {}", tcpPort);
+
+        if (grpc_server_) {
+            if (grpc_server_->start(false)) {
+                LOG_INFO("gRPC server started on port {}", cfg_.server().grpc.port);
+            } else {
+                LOG_ERROR("gRPC server failed to start on port {}", cfg_.server().grpc.port);
+            }
+        }
+    }
+
     void ServerHub::start_load_reporter() {
         if (!service_registry_ || !room_manager_) {
             return;
@@ -265,13 +262,13 @@ namespace gomahjong::bootstrap {
             LOG_INFO("load reporter started, interval: {}s", interval.count());
 
             while (load_report_running_.load()) {
-                // 采集负载信息
                 auto metadata = collect_load_metadata();
 
                 // 上报到 etcd
                 if (service_registry_->update_metadata(serviceName, nodeId, metadata)) {
-                    LOG_DEBUG("load reported: rooms={}, players={}",
-                              metadata["room_count"], metadata["player_count"]);
+//                    LOG_DEBUG("load reported: rooms={}, players={}", metadata["room_count"], metadata["player_count"]);
+                } else {
+                    LOG_WARN("load reported failure");
                 }
 
                 // 分段睡眠以支持快速停止

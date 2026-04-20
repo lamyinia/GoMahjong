@@ -306,8 +306,6 @@ TEST(turn_manager_full_flow) {
     thread.stop();
 }
 
-
-// === main ===
 int main() {
     infra::log::init({"debug", true});
 

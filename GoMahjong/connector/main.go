@@ -1,10 +1,10 @@
 package main
 
 import (
-	"common/config"
-	"common/log"
-	"common/metrics"
 	"connector/app"
+	"connector/infrastructure/config"
+	"connector/infrastructure/log"
+	"connector/infrastructure/metrics"
 	"context"
 	"fmt"
 	"os"

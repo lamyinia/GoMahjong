@@ -153,7 +153,7 @@ namespace infra::discovery {
         }
     }
 
-    bool EtcdClient::start_keepalive(std::int64_t lease_id) {
+    bool EtcdClient::start_keepalive(std::int64_t ttl_seconds, std::int64_t lease_id) {
         if (!impl_->connected || !impl_->client || lease_id == 0) {
             return false;
         }
@@ -167,7 +167,7 @@ namespace infra::discovery {
             }
 
             // 创建 KeepAlive，后台线程自动续约
-            auto keepalive = std::make_unique<etcd::KeepAlive>(*impl_->client, lease_id);
+            auto keepalive = std::make_unique<etcd::KeepAlive>(*impl_->client, static_cast<int>(ttl_seconds), lease_id);
             impl_->keepalives.emplace(lease_id, std::move(keepalive));
             return true;
         } catch (const std::exception &) {

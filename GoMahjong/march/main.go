@@ -1,12 +1,12 @@
 package main
 
 import (
-	"common/config"
-	"common/log"
-	"common/metrics"
 	"context"
 	"fmt"
 	"march/app"
+	"march/infrastructure/config"
+	"march/infrastructure/log"
+	"march/infrastructure/metrics"
 	"os"
 
 	"github.com/spf13/cobra"

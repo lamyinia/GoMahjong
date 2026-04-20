@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 	pb "game/pb"
-	"runtime/game/application/service"
+	"game/runtime/application/service"
 )
 
 type GameProvider struct {

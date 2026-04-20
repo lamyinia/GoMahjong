@@ -13,8 +13,7 @@ namespace domain::game::service {
     // grpc 服务实现（内部类）
     class GameServiceImpl final : public gomahjong::rpc::GameService::Service {
     public:
-        explicit GameServiceImpl(domain::game::room::RoomManager &room_manager) : room_manager_(room_manager) {
-        }
+        explicit GameServiceImpl(domain::game::room::RoomManager &room_manager) : room_manager_(room_manager) {}
 
         grpc::Status CreateRoom(
                 grpc::ServerContext *context,
@@ -31,8 +30,8 @@ namespace domain::game::service {
 
             // 转换 players（只取 userId）
             std::vector<std::string> players;
-            for (const auto &[user_id, _]: request->players()) {
-                players.push_back(user_id);
+            for (const auto &[player_id, _]: request->players()) {
+                players.push_back(player_id);
             }
 
             // 调用 RoomManager 创建房间
@@ -55,7 +54,6 @@ namespace domain::game::service {
         domain::game::room::RoomManager &room_manager_;
     };
 
-    // GameService::Impl
     class GameService::Impl {
     public:
         domain::game::room::RoomManager* room_manager{nullptr};
@@ -72,8 +70,7 @@ namespace domain::game::service {
         return instance;
     }
 
-    GameService::GameService()
-        : impl_(std::make_unique<Impl>()) {
+    GameService::GameService(): impl_(std::make_unique<Impl>()) {
         LOG_INFO("单例实例已创建");
     }
 

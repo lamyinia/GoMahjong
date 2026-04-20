@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+option go_package = "connector/pb;pb";
+
+service MatchService {
+  rpc JoinQueue(JoinQueueRequest) returns (JoinQueueResponse);
+  rpc LeaveQueue(LeaveQueueRequest) returns (LeaveQueueResponse);
+  rpc QueryStatus(QueryStatusRequest) returns (QueryStatusResponse); // 便于前端轮询
+}
+
+message JoinQueueRequest {
+  string userID = 1;          // 必填，用户唯一 ID
+  string poolID = 2;          // 必填，匹配池ID（如 "classic:rank4", "classic:casual4", "classic:casual3"）
+  string traceID = 3;         // 可选，用于链路跟踪/日志
+}
+
+message JoinQueueResponse {
+  string message = 1;
+  int32 estimatedSeconds = 2; // 估计等待时间
+}
+
+message LeaveQueueRequest {
+  string userID = 1;
+}
+
+message LeaveQueueResponse {
+  string message = 1;
+}
+
+message QueryStatusRequest {
+  string userID = 1;
+}
+
+message QueryStatusResponse {
+  enum Status {
+    STATUS_UNKNOWN = 0;
+    STATUS_WAITING = 1;
+    STATUS_MATCHING = 2;
+    STATUS_SUCCESS = 3;
+    STATUS_CANCELLED = 4;
+  }
+  Status status = 1;
+  int32 position = 2;            // 排队位次，便于前端展示
+  int32 estimatedSeconds = 3;
+  string gameNodeID = 4;         // 匹配成功后返回
+}

@@ -1,7 +1,7 @@
 package api
 
 import (
-	"common/http"
+	"gate/infrastructure/http"
 	"time"
 )
 

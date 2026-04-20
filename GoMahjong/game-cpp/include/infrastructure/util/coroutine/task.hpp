@@ -160,6 +160,9 @@ public:
 
     explicit Task(std::coroutine_handle<promise_type> h) noexcept : handle_(h) {}
 
+    Task(std::coroutine_handle<promise_type> h, std::shared_ptr<detail::TaskState<T>> state) noexcept
+        : handle_(h), state_(std::move(state)) {}
+
     Task(Task&& other) noexcept : handle_(other.handle_), state_(std::move(other.state_)) {
         other.handle_ = nullptr;
     }
@@ -192,11 +195,6 @@ public:
     T get() {
         if (!handle_) {
             throw std::runtime_error("Task is empty");
-        }
-        
-        if (!state_) {
-            state_ = std::make_shared<detail::TaskState<T>>();
-            handle_.promise().setState(state_);
         }
 
         {
@@ -239,11 +237,6 @@ public:
             }
         };
 
-        if (!state_) {
-            state_ = std::make_shared<detail::TaskState<T>>();
-            handle_.promise().setState(state_);
-        }
-
         return Awaiter{handle_, state_};
     }
 
@@ -273,6 +266,9 @@ public:
     Task() noexcept : handle_(nullptr) {}
 
     explicit Task(std::coroutine_handle<promise_type> h) noexcept : handle_(h) {}
+
+    Task(std::coroutine_handle<promise_type> h, std::shared_ptr<detail::TaskState<void>> state) noexcept
+        : handle_(h), state_(std::move(state)) {}
 
     Task(Task&& other) noexcept : handle_(other.handle_), state_(std::move(other.state_)) {
         other.handle_ = nullptr;
@@ -306,11 +302,6 @@ public:
     void get() {
         if (!handle_) {
             throw std::runtime_error("Task is empty");
-        }
-
-        if (!state_) {
-            state_ = std::make_shared<detail::TaskState<void>>();
-            handle_.promise().setState(state_);
         }
 
         {
@@ -350,11 +341,6 @@ public:
             }
         };
 
-        if (!state_) {
-            state_ = std::make_shared<detail::TaskState<void>>();
-            handle_.promise().setState(state_);
-        }
-
         return Awaiter{handle_, state_};
     }
 
@@ -377,11 +363,15 @@ private:
 // Implement get_return_object
 template <typename T>
 Task<T> TaskPromise<T>::get_return_object() noexcept {
-    return Task<T>(std::coroutine_handle<TaskPromise>::from_promise(*this));
+    auto state = std::make_shared<detail::TaskState<T>>();
+    state_ = state;
+    return Task<T>(std::coroutine_handle<TaskPromise>::from_promise(*this), std::move(state));
 }
 
 inline Task<void> TaskPromise<void>::get_return_object() noexcept {
-    return Task<void>(std::coroutine_handle<TaskPromise>::from_promise(*this));
+    auto state = std::make_shared<detail::TaskState<void>>();
+    state_ = state;
+    return Task<void>(std::coroutine_handle<TaskPromise>::from_promise(*this), std::move(state));
 }
 
 } // namespace infra::util::coro

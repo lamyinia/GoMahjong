@@ -1,16 +1,10 @@
 go 1.24.10
 
-toolchain go1.24.10
-
 use (
-	common
+	auth
 	connector
-	core
 	game
 	gate
-	hall
 	march
-	runtime
 	test/webtest
-	user
 )

@@ -1,6 +1,6 @@
 package api
 
-import "common/http"
+import "gate/infrastructure/http"
 
 // GetProfileHandler 获取用户资料
 func GetProfileHandler(c *http.Context) error {

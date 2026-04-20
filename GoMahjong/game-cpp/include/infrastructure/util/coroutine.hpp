@@ -8,7 +8,7 @@
 
 namespace infra::util {
 
-// Re-export coroutine namespace for convenience
-namespace coro = coroutine;
+// Re-export coro namespace for convenience
+namespace coroutine = coro;
 
 } // namespace infra::util

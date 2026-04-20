@@ -7,8 +7,6 @@
 
 using namespace domain::game::event;
 
-// ==================== Tests ====================
-
 void test_basic_acquisition() {
     std::cout << "--- Test: Basic Acquisition ---\n";
 
@@ -217,8 +215,6 @@ void test_game_simulation() {
     
     std::cout << "Test passed!\n\n";
 }
-
-// ==================== Main ====================
 
 int main() {
     std::cout << "=== GameEventPool Tests ===\n\n";

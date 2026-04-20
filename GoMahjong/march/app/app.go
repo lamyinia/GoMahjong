@@ -1,12 +1,12 @@
 package app
 
 import (
-	"common/config"
-	"common/discovery"
-	"common/log"
 	"context"
-	"core/container"
 	"fmt"
+	"march/container"
+	"march/infrastructure/config"
+	"march/infrastructure/discovery"
+	"march/infrastructure/log"
 	"net"
 	"os"
 	"os/signal"
@@ -20,13 +20,12 @@ import (
 )
 
 func Run(ctx context.Context) error {
-	marchContainer := container.NewMarchContainer()
+	marchContainer := container.NewContainer()
 	if marchContainer == nil {
 		log.Fatal("march 容器初始化失败")
 		return nil
 	}
 
-	// 创建 grpc 注册依赖 -> 拿到监听端口 -> 注册 etcd -> 监听 grpc
 	grpcSrv := grpc.NewServer()
 	matchProvider := grpcserver.NewMatchProvider(marchContainer.MatchService)
 	pb.RegisterMatchServiceServer(grpcSrv, matchProvider)
@@ -37,7 +36,6 @@ func Run(ctx context.Context) error {
 		err      error
 	)
 
-	// gRPC 服务器实际监听的地址和 etcd 注册地址必须一致
 	lis, err = net.Listen("tcp", config.MarchNodeConfig.EtcdConf.Register.Addr)
 	if err != nil {
 		log.Fatal("监听 gRPC 地址失败: %v", err)

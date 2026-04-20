@@ -63,13 +63,6 @@ namespace infra::net::reliability {
          * @param channel 新建立的 Channel
          */
         void add_channel(std::shared_ptr<channel::IChannel> channel);
-
-        /**
-         * @brief 移除端点
-         * @param endpoint_id WildEndpoint ID
-         */
-        void remove_endpoint(const std::string& endpoint_id);
-
         /**
          * @brief 获取端点数量
          */

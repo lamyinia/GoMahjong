@@ -1,9 +1,9 @@
 package api
 
 import (
-	"common/config"
-	"common/http"
-	"common/rpc"
+	"gate/infrastructure/config"
+	"gate/infrastructure/http"
+	"gate/infrastructure/rpc"
 )
 
 // RegisterRoutes 注册所有路由，发现 rpc 服务

@@ -76,10 +76,7 @@ ITransport::Strand TcpTransport::strand() const { return strand_; }
 
         socket_.async_read_some(
                 boost::asio::buffer(read_buf_),
-                boost::asio::bind_executor(
-                        strand_,
-                        [self = shared_from_this(), this](const boost::system::error_code &ec,
-                                                          std::size_t n) {
+                boost::asio::bind_executor(strand_, [self = shared_from_this(), this](const boost::system::error_code &ec, std::size_t n) {
                             if (closed_) return;
 
                             if (ec) {

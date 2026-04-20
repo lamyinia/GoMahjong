@@ -4,13 +4,8 @@
 
 namespace infra::net::reliability {
 
-    WildEndpointManager::WildEndpointManager(
-        boost::asio::any_io_executor executor,
-        std::chrono::milliseconds auth_timeout
-    )
-        : executor_(std::move(executor))
-        , auth_timeout_(auth_timeout) {
-    }
+    WildEndpointManager::WildEndpointManager(boost::asio::any_io_executor executor,std::chrono::milliseconds auth_timeout)
+        : executor_(std::move(executor)), auth_timeout_(auth_timeout) {}
 
     WildEndpointManager::~WildEndpointManager() {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -45,26 +40,13 @@ namespace infra::net::reliability {
         endpoint->start_wait_auth();
     }
 
-    void WildEndpointManager::remove_endpoint(const std::string& endpoint_id) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto it = endpoints_.find(endpoint_id);
-        if (it != endpoints_.end()) {
-            LOG_DEBUG("remove endpoint, endpoint_id={}", endpoint_id);
-            endpoints_.erase(it);
-        }
-    }
-
     size_t WildEndpointManager::size() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return endpoints_.size();
     }
 
-    void WildEndpointManager::on_endpoint_authenticated(
-        const std::string& endpoint_id,
-        const std::string& player_id
-    ) {
-        LOG_DEBUG("endpoint authenticated, endpoint_id={}, player_id={}",
-                 endpoint_id, player_id);
+    void WildEndpointManager::on_endpoint_authenticated(const std::string& endpoint_id,const std::string& player_id) {
+        LOG_DEBUG("endpoint authenticated, endpoint_id={}, player_id={}", endpoint_id, player_id);
 
         std::shared_ptr<channel::IChannel> channel;
         {

@@ -2,7 +2,7 @@
   "server": {
     "node_id": "game-node-001",
     "host": "127.0.0.1",
-    "service_name": "game-service",
+    "service_name": "game-instance",
     "net": {
       "tcp": {
         "port": 8010,

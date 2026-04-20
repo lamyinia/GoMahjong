@@ -1,12 +1,12 @@
 package main
 
 import (
-	"common/config"
-	"common/log"
-	"common/metrics"
 	"context"
 	"fmt"
 	"gate/app"
+	"gate/infrastructure/config"
+	"gate/infrastructure/log"
+	"gate/infrastructure/metrics"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -22,12 +22,12 @@ var rootCmd = &cobra.Command{
 		if err := config.Load(configFile); err != nil {
 			log.Fatal("文件配置发生错误：%v", err)
 		}
-		log.InitLog(config.GameNodeConfig.ID, config.GameNodeConfig.LogConf.Level)
-		log.Info(fmt.Sprintf("配置文件: %+v", config.GameNodeConfig))
+		log.InitLog(config.GateNodeConfig.ID, config.GateNodeConfig.LogConf.Level)
+		log.Info(fmt.Sprintf("配置文件: %+v", config.GateNodeConfig))
 
 		go func() {
-			log.Info("启动监控..., URL: http://localhost:" + fmt.Sprintf("%d", config.GameNodeConfig.MetricPort) + "/debug/statsviz/")
-			err := metrics.Serve(fmt.Sprintf("0.0.0.0:%d", config.GameNodeConfig.MetricPort))
+			log.Info("启动监控..., URL: http://localhost:" + fmt.Sprintf("%d", config.GateNodeConfig.MetricPort) + "/debug/statsviz/")
+			err := metrics.Serve(fmt.Sprintf("0.0.0.0:%d", config.GateNodeConfig.MetricPort))
 			if err != nil {
 				panic(err)
 			}

@@ -105,7 +105,7 @@ namespace infra::discovery {
         }
 
         // 启动心跳续约
-        if (!impl_->client->start_keepalive(lease_id)) {
+        if (!impl_->client->start_keepalive(impl_->config.ttl_seconds, lease_id)) {
             impl_->client->revoke_lease(lease_id);
             return false;
         }
@@ -165,9 +165,7 @@ namespace infra::discovery {
         return endpoints;
     }
 
-    bool ServiceRegistry::update_metadata(
-            std::string_view service_name,
-            std::string_view node_id,
+    bool ServiceRegistry::update_metadata(std::string_view service_name, std::string_view node_id,
             const std::map<std::string, std::string> &metadata) {
         if (!impl_->client->is_connected()) {
             return false;
@@ -240,11 +238,11 @@ namespace infra::discovery {
     }
 
     std::string ServiceRegistry::build_key(std::string_view service_name, std::string_view node_id) {
-        return std::string("/service/") + std::string(service_name) + "/" + std::string(node_id);
+        return std::string(service_name) + "/" + std::string(node_id);
     }
 
     std::string ServiceRegistry::build_prefix(std::string_view service_name) {
-        return std::string("/service/") + std::string(service_name) + "/";
+        return std::string(service_name) + "/";
     }
 
     void ServiceRegistry::handle_watch_event(std::string_view service_name, const WatchEvent &event) {

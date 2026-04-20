@@ -1,10 +1,10 @@
 package grpc
 
 import (
-	"common/log"
 	"context"
-	"core/infrastructure/message/transfer"
-	"runtime/march/application/service"
+	"march/infrastructure/log"
+	"march/infrastructure/message/transfer"
+	"march/runtime/application/service"
 
 	"march/pb"
 )
