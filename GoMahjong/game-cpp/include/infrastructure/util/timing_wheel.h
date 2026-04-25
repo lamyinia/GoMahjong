@@ -7,6 +7,7 @@
 #include <mutex>
 #include <vector>
 #include <memory>
+#include <unordered_map>
 
 namespace infra::util {
 
@@ -28,15 +29,10 @@ namespace infra::util {
 
         ~TimingWheel() = default;
 
-        // 调度定时器，返回句柄
-        // delayMs: 延迟毫秒数
-        // callback: 到期时在 TimerThread 线程调用
         TimerHandle schedule(std::uint64_t delayMs, TimerCallback callback);
 
-        // 取消定时器
         void cancel(const TimerHandle& handle);
 
-        // 驱动时间轮前进一格（由 TimerThread 调用）
         void tick();
 
         [[nodiscard]] std::uint32_t tickDurationMs() const { return tickDurationMs_; }
@@ -60,6 +56,10 @@ namespace infra::util {
         std::vector<Slot> slots_;
         std::atomic<std::uint32_t> currentSlot_{0};
         std::atomic<uint64_t> nextTimerId_{1};
+
+        // O(1) cancel 查找表
+        std::unordered_map<uint64_t, std::shared_ptr<TimerEntry>> timerMap_;
+        std::mutex mapMutex_;
     };
 
 } // namespace infra::util

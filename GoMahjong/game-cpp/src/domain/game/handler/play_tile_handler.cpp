@@ -43,8 +43,7 @@ namespace domain::game::handler {
         }
     }
 
-    void handlePlayTile(channel::ChannelHandlerContext& ctx, 
-                        const channel::MessagePtr& msg) {
+    void handlePlayTile(channel::ChannelHandlerContext& ctx, const channel::MessagePtr& msg) {
         gomahjong::game::PlayTileRequest request;
         if (!request.ParseFromArray(msg->payload.data(), static_cast<int>(msg->payload.size()))) {
             LOG_ERROR("failed to parse PlayTileRequest from player {}, payload_size={}, hex={}",
@@ -73,7 +72,7 @@ namespace domain::game::handler {
         tile.type = static_cast<event::TileType>(protoTile.type());
         tile.id = static_cast<std::int8_t>(protoTile.id());
         auto gameEvent = event::GameEvent::playTile(ctx.player_id(), tile);
-        roomManager.submitEvent(*roomId, gameEvent);
+        roomManager.submit_event(*roomId, gameEvent);
     }
 
 } // namespace domain::game::handler

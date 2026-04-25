@@ -437,9 +437,9 @@ void test_room_and_game_event() {
 
     // 4. Submit a game event
     auto event = event::GameEvent::playTile("player_100",
-                                            event::Tile{event::TileType::Wan1, 0});
+                                            event::Tile{event::TileType::Man1, 0});
 
-    roomManager.submitEvent(roomId, event);
+    roomManager.submit_event(roomId, event);
 
     // 5. Wait for event processing
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -495,7 +495,7 @@ void test_room_lifecycle_with_sessions() {
 
     // 6. 发送游戏事件
     auto event = event::GameEvent::gameStart(roomId);
-    roomManager.submitEvent(roomId, event);
+    roomManager.submit_event(roomId, event);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
@@ -552,8 +552,8 @@ void test_concurrent_room_operations() {
     threads.clear();
     for (const auto &roomId: roomIds) {
         threads.emplace_back([&roomManager, roomId]() {
-            auto event = event::GameEvent::roundStart(1, "player_0");
-            roomManager.submitEvent(roomId, event);
+            auto event = event::GameEvent::roundStart();
+            roomManager.submit_event(roomId, event);
         });
     }
 
@@ -623,7 +623,7 @@ void test_actor_pool_stress() {
 
     for (int i = 0; i < numEvents; i++) {
         auto event = event::GameEvent::turnStart("s1", 30);
-        roomManager.submitEvent(roomId, event);
+        roomManager.submit_event(roomId, event);
     }
 
     auto end = std::chrono::high_resolution_clock::now();

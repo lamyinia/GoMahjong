@@ -1,6 +1,7 @@
 #include "domain/game/room/room.h"
 
 #include "domain/game/engine/engine.h"
+#include "domain/game/engine/mahjong/riichi_mahjong4p_engine.h"
 #include "infrastructure/log/logger.hpp"
 
 #include <algorithm>
@@ -32,22 +33,22 @@ namespace domain::game::room {
         return *this;
     }
 
-    void Room::addPlayer(const std::string& userId) {
-        players_.push_back(userId);
+    void Room::addPlayer(const std::string& playerId) {
+        players_.push_back(playerId);
     }
 
-    void Room::removePlayer(const std::string& userId) {
-        auto it = std::find(players_.begin(), players_.end(), userId);
+    void Room::removePlayer(const std::string& playerId) {
+        auto it = std::find(players_.begin(), players_.end(), playerId);
         if (it != players_.end()) {
             players_.erase(it);
         }
     }
 
-    bool Room::hasPlayer(const std::string& userId) const {
-        return std::find(players_.begin(), players_.end(), userId) != players_.end();
+    bool Room::hasPlayer(const std::string& playerId) const {
+        return std::find(players_.begin(), players_.end(), playerId) != players_.end();
     }
 
-    void Room::initGame() {
+    void Room::initGame(infra::util::TimingWheel* wheel) {
         // 创建 EngineContext
         engineContext_ = std::make_unique<engine::EngineContext>();
         engineContext_->setRoomId(id_);
@@ -62,8 +63,14 @@ namespace domain::game::room {
             return;
         }
 
-        // 注入 EngineContext
         engine_->setContext(engineContext_.get());
+
+        if (wheel) {
+            auto* riichiEngine = dynamic_cast<engine::RiichiMahjong4PEngine*>(engine_.get());
+            if (riichiEngine) {
+                riichiEngine->initTimerSystem(wheel);
+            }
+        }
 
         for (const auto& playId : players_) {
             engine_->onPlayerJoin(playId);

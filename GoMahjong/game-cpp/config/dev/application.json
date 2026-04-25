@@ -36,7 +36,17 @@
     "timer_wheel": {
       "tick_duration_ms": 50,
       "wheel_size": 512
+    },
+    "game": {
+      "riichi_mahjong_4p": {
+        "player_count": 4,
+        "initial_points": 25000,
+        "total_time": 300,
+        "compensation": 5,
+        "max_round_time": 30,
+        "react_compensation": 5,
+        "round_start_delay_ms": 10000
+      }
     }
   }
 }
-

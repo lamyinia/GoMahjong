@@ -3,19 +3,29 @@
 
 #include <algorithm>
 
-namespace domain::game::engine::mahjong::timer {
+namespace domain::game::mahjong::timer {
 
-    TurnManager::TurnManager(infra::util::TimingWheel* wheel, int totalTime)
-        : wheel_(wheel) {
-        for (int i = 0; i < TurnManager::PlayerCount; ++i) {
-            tickers_[i] = std::make_unique<PlayerTicker>(i, totalTime, wheel);
+    TurnManager::TurnManager(infra::util::TimingWheel* wheel,
+                             int playerCount,
+                             int totalTime,
+                             int compensation,
+                             int maxRoundTime,
+                             int reactCompensation)
+        : playerCount_(playerCount)
+        , compensation_(compensation)
+        , maxRoundTime_(maxRoundTime)
+        , reactCompensation_(reactCompensation)
+        , wheel_(wheel) {
+        tickers_.reserve(playerCount_);
+        for (int i = 0; i < playerCount_; ++i) {
+            tickers_.push_back(std::make_unique<PlayerTicker>(i, totalTime, wheel));
         }
     }
 
     TurnManager::~TurnManager() = default;
 
     void TurnManager::enterDrawPhase(int seatIndex) {
-        if (seatIndex < 0 || seatIndex >= TurnManager::PlayerCount) {
+        if (seatIndex < 0 || seatIndex >= playerCount_) {
             LOG_ERROR("invalid seat index: {}", seatIndex);
             return;
         }
@@ -28,7 +38,7 @@ namespace domain::game::engine::mahjong::timer {
     }
 
     bool TurnManager::enterMainActionPhase(int seatIndex, int roundCompensation) {
-        if (seatIndex < 0 || seatIndex >= TurnManager::PlayerCount) {
+        if (seatIndex < 0 || seatIndex >= playerCount_) {
             LOG_ERROR("invalid seat index: {}", seatIndex);
             return false;
         }
@@ -37,10 +47,10 @@ namespace domain::game::engine::mahjong::timer {
         turnPointer_ = seatIndex;
         phase_ = TurnPhase::MainAction;
 
-        // 分配时间 = 玩家剩余时间 + 补偿，上限 maxRoundTime
+        int comp = (roundCompensation > 0) ? roundCompensation : compensation_;
         auto* ticker = tickers_[seatIndex].get();
-        int allocatedTime = ticker->getAvailable() + roundCompensation;
-        allocatedTime = std::min(allocatedTime, DefaultMaxRoundTime);
+        int allocatedTime = ticker->getAvailable() + comp;
+        allocatedTime = std::min(allocatedTime, maxRoundTime_);
         ticker->setAvailable(allocatedTime);
 
         if (!ticker->start(allocatedTime, [this, seatIndex]() {
@@ -58,14 +68,14 @@ namespace domain::game::engine::mahjong::timer {
         stopAllTickers();
         phase_ = TurnPhase::WaitReaction;
 
-        // 给每个可反应玩家启动计时器
+        int limit = (timeLimitSec > 0) ? timeLimitSec : reactCompensation_;
         for (int seat : eligibleSeats) {
-            if (seat < 0 || seat >= TurnManager::PlayerCount) {
+            if (seat < 0 || seat >= playerCount_) {
                 LOG_WARN("invalid seat {} in eligibleSeats, skipping", seat);
                 continue;
             }
             auto* ticker = tickers_[seat].get();
-            if (!ticker->start(timeLimitSec, [this, seat]() {
+            if (!ticker->start(limit, [this, seat]() {
                     onTickerTimeout(seat);
                 })) {
                 LOG_WARN("failed to start ticker for seat {} in reaction phase", seat);
@@ -84,20 +94,20 @@ namespace domain::game::engine::mahjong::timer {
     }
 
     int TurnManager::nextTurn() {
-        turnPointer_ = (turnPointer_ + 1) % TurnManager::PlayerCount;
+        turnPointer_ = (turnPointer_ + 1) % playerCount_;
         return turnPointer_;
     }
 
     PlayerTicker* TurnManager::getPlayerTicker(int seatIndex) {
-        if (seatIndex < 0 || seatIndex >= TurnManager::PlayerCount) {
+        if (seatIndex < 0 || seatIndex >= playerCount_) {
             return nullptr;
         }
         return tickers_[seatIndex].get();
     }
 
-    std::array<TickerState, TurnManager::PlayerCount> TurnManager::getAllPlayerTimerStates() const {
-        std::array<TickerState, TurnManager::PlayerCount> states;
-        for (int i = 0; i < TurnManager::PlayerCount; ++i) {
+    std::vector<TickerState> TurnManager::getAllPlayerTimerStates() const {
+        std::vector<TickerState> states(playerCount_);
+        for (int i = 0; i < playerCount_; ++i) {
             states[i] = tickers_[i]->getState();
         }
         return states;
@@ -139,21 +149,21 @@ namespace domain::game::engine::mahjong::timer {
             timeoutEventCallback_(roomId_, event);
         }
 
-        LOG_DEBUG("[TurnManager] seat {} timer expired, submitted PlayerTimeout event for room {}", seatIndex, roomId_);
+        LOG_DEBUG("seat {} timer expired, submitted PlayerTimeout event for room {}", seatIndex, roomId_);
     }
 
     bool TurnManager::applyTimeout(int seatIndex) {
-        if (seatIndex < 0 || seatIndex >= TurnManager::PlayerCount) {
+        if (seatIndex < 0 || seatIndex >= playerCount_) {
             return false;
         }
         auto* ticker = tickers_[seatIndex].get();
         // 只有 Running 状态才应用超时（玩家可能已操作，ticker 已 Stopped）
         if (ticker->getState() != TickerState::Running) {
-            LOG_DEBUG("[TurnManager] seat {} ticker not Running, skip applyTimeout", seatIndex);
+            LOG_DEBUG("seat {} ticker not Running, skip applyTimeout", seatIndex);
             return false;
         }
         ticker->onTimerExpired();
-        LOG_DEBUG("[TurnManager] seat {} applied timeout", seatIndex);
+        LOG_DEBUG("seat {} applied timeout", seatIndex);
         return true;
     }
 

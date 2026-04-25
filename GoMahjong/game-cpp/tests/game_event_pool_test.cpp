@@ -14,13 +14,13 @@ void test_basic_acquisition() {
 
     // Test template-based acquisition
     {
-        auto event = pool.acquire<PlayTileEvent>("player1", Tile{TileType::Wan1, 0});
+        auto event = pool.acquire<PlayTileEvent>("player1", Tile{TileType::Man1, 0});
         assert(event);
         assert(event->type == EventType::PlayTile);
         
         auto& data = std::get<PlayTileEvent>(event->data);
         assert(data.playerId == "player1");
-        assert(data.tile.type == TileType::Wan1);
+        assert(data.tile.type == TileType::Man1);
     }
     
     assert(pool.used() == 0);  // Auto-released
@@ -35,25 +35,25 @@ void test_convenience_methods() {
 
     // Test all convenience methods
     {
-        auto e1 = pool.playTile("p1", Tile{TileType::Wan2, 1});
+        auto e1 = pool.playTile("p1", Tile{TileType::Man2, 1});
         assert(e1->type == EventType::PlayTile);
         
-        auto e2 = pool.drawTile("p2", Tile{TileType::Tiao3, 2});
+        auto e2 = pool.drawTile("p2", Tile{TileType::So3, 2});
         assert(e2->type == EventType::DrawTile);
         
-        auto e3 = pool.chi("p3", Tile{TileType::Tong4, 0}, TileType::Tong4);
+        auto e3 = pool.chi("p3", Tile{TileType::Pin4, 0}, TileType::Pin4);
         assert(e3->type == EventType::Chi);
         
-        auto e4 = pool.pon("p4", Tile{TileType::FengDong, 3});
+        auto e4 = pool.pon("p4", Tile{TileType::East, 3});
         assert(e4->type == EventType::Pon);
         
-        auto e5 = pool.kan("p5", Tile{TileType::SanYuanZhong, 0}, true, false);
+        auto e5 = pool.kan("p5", Tile{TileType::Red, 0}, true, false);
         assert(e5->type == EventType::Kan);
         
-        auto e6 = pool.ron("p6", Tile{TileType::Wan5, 2}, "p1");
+        auto e6 = pool.ron("p6", Tile{TileType::Man5, 2}, "p1");
         assert(e6->type == EventType::Ron);
         
-        auto e7 = pool.tsumo("p7", Tile{TileType::Tiao7, 1});
+        auto e7 = pool.tsumo("p7", Tile{TileType::So7, 1});
         assert(e7->type == EventType::Tsumo);
         
         auto e8 = pool.draw(true);
@@ -96,16 +96,16 @@ void test_pool_reuse() {
     
     // First acquisition
     {
-        auto e1 = pool.playTile("p1", Tile{TileType::Wan1, 0});
-        auto e2 = pool.drawTile("p2", Tile{TileType::Wan2, 1});
+        auto e1 = pool.playTile("p1", Tile{TileType::Man1, 0});
+        auto e2 = pool.drawTile("p2", Tile{TileType::Man2, 1});
         ptr1 = e1.get();
         ptr2 = e2.get();
     }
     
     // Re-acquire - should reuse memory
     {
-        auto e1 = pool.playTile("p3", Tile{TileType::Wan3, 2});
-        auto e2 = pool.drawTile("p4", Tile{TileType::Wan4, 3});
+        auto e1 = pool.playTile("p3", Tile{TileType::Man3, 2});
+        auto e2 = pool.drawTile("p4", Tile{TileType::Man4, 3});
         
         // Memory should be reused (same addresses)
         assert(e1.get() == ptr1 || e1.get() == ptr2);
@@ -128,7 +128,7 @@ void test_pool_expansion() {
     
     // Acquire more than initial capacity
     for (int i = 0; i < 20; ++i) {
-        auto e = pool.playTile("p" + std::to_string(i), Tile{TileType::Wan1, 0});
+        auto e = pool.playTile("p" + std::to_string(i), Tile{TileType::Man1, 0});
         assert(e);
         events.push_back(std::move(e));
     }
@@ -153,7 +153,7 @@ void test_performance() {
         auto start = std::chrono::high_resolution_clock::now();
         
         for (int i = 0; i < ITERATIONS; ++i) {
-            auto* event = new GameEvent(GameEvent::playTile("player", Tile{TileType::Wan1, 0}));
+            auto* event = new GameEvent(GameEvent::playTile("player", Tile{TileType::Man1, 0}));
             delete event;
         }
         
@@ -169,7 +169,7 @@ void test_performance() {
         auto start = std::chrono::high_resolution_clock::now();
         
         for (int i = 0; i < ITERATIONS; ++i) {
-            auto event = pool.playTile("player", Tile{TileType::Wan1, 0});
+            auto event = pool.playTile("player", Tile{TileType::Man1, 0});
             event.reset();
         }
         
@@ -195,10 +195,10 @@ void test_game_simulation() {
         auto turnStart = pool.turnStart("player1", 30);
         
         // Draw tile
-        auto draw = pool.drawTile("player1", Tile{TileType::Wan5, 2});
+        auto draw = pool.drawTile("player1", Tile{TileType::Man5, 2});
         
         // Play tile
-        auto play = pool.playTile("player1", Tile{TileType::Wan3, 1});
+        auto play = pool.playTile("player1", Tile{TileType::Man3, 1});
         
         // Turn end
         auto turnEnd = pool.turnEnd("player1");

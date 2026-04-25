@@ -1,7 +1,6 @@
 #include "infrastructure/util/time_util.hpp"
 
 #include <ctime>
-#include <iomanip>
 #include <sstream>
 
 namespace infra::util {
@@ -106,8 +105,6 @@ std::uint64_t TimeUtil::monthStart() {
     
     return static_cast<std::uint64_t>(std::mktime(tm)) * 1000;
 }
-
-// ==================== Timer ====================
 
 Timer::Timer() : start_(std::chrono::steady_clock::now()) {}
 

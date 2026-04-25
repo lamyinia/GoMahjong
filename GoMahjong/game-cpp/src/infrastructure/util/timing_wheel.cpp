@@ -2,6 +2,7 @@
 #include "infrastructure/log/logger.hpp"
 
 #include <algorithm>
+#include <unordered_map>
 
 namespace infra::util {
 
@@ -26,10 +27,14 @@ namespace infra::util {
         entry->remainingRounds = rounds;
         entry->callback = std::move(callback);
 
-        // 插入目标 slot
+        // 插入目标 slot + map
         {
             std::lock_guard lock(slots_[targetSlot].mutex);
             slots_[targetSlot].entries.push_front(entry);
+        }
+        {
+            std::lock_guard lock(mapMutex_);
+            timerMap_[id] = entry;
         }
 
         LOG_TRACE("scheduled timer {}, delay={}ms, slot={}, rounds={}",
@@ -39,17 +44,19 @@ namespace infra::util {
     }
 
     void TimingWheel::cancel(const TimerHandle& handle) {
-        // 标记取消（延迟删除，tick 时清理）
-        // 遍历所有 slot 查找并标记（cancel 不高频，可接受）
-        for (auto& slot : slots_) {
-            std::lock_guard lock(slot.mutex);
-            for (auto& entry : slot.entries) {
-                if (entry->id == handle.id) {
-                    entry->cancelled.store(true, std::memory_order_relaxed);
-                    LOG_TRACE("cancelled timer {}", handle.id);
-                    return;
-                }
+        // O(1) cancel：通过 map 直接查找 entry 指针
+        std::shared_ptr<TimerEntry> entry;
+        {
+            std::lock_guard lock(mapMutex_);
+            auto it = timerMap_.find(handle.id);
+            if (it != timerMap_.end()) {
+                entry = it->second;
+                timerMap_.erase(it);
             }
+        }
+        if (entry) {
+            entry->cancelled.store(true, std::memory_order_relaxed);
+            LOG_TRACE("cancelled timer {}", handle.id);
         }
     }
 
@@ -68,7 +75,13 @@ namespace infra::util {
 
                 // 已取消，删除
                 if (entry->cancelled.load(std::memory_order_relaxed)) {
+                    auto id = entry->id;  // 捕获 id，erase 后 entry 引用失效
                     it = slot.entries.erase_after(prev);
+                    // 从 map 中同步清理
+                    {
+                        std::lock_guard mapLock(mapMutex_);
+                        timerMap_.erase(id);
+                    }
                     continue;
                 }
 
@@ -78,8 +91,14 @@ namespace infra::util {
                     ++it;
                 } else {
                     // 到期
+                    auto id = entry->id;  // 捕获 id，erase 后 entry 引用失效
                     expired.push_back(entry);
                     it = slot.entries.erase_after(prev);
+                    // 从 map 中同步清理
+                    {
+                        std::lock_guard mapLock(mapMutex_);
+                        timerMap_.erase(id);
+                    }
                 }
             }
         }

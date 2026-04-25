@@ -56,6 +56,20 @@ struct DebugConfig {
     bool enabled{false};                 // 调试模式开关
 };
 
+struct RiichiMahjong4PConfig {
+    std::uint32_t player_count{4};           // 玩家数
+    std::int32_t initial_points{25000};      // 初始点数
+    std::int32_t total_time{300};            // 玩家总时间（秒）
+    std::int32_t compensation{5};            // 每回合补偿（秒）
+    std::int32_t max_round_time{30};         // 单回合最大时间（秒）
+    std::int32_t react_compensation{5};     // 反应补偿时间（秒）
+    std::int32_t round_start_delay_ms{10000}; // 局开始延迟（毫秒）
+};
+
+struct GameConfig {
+    RiichiMahjong4PConfig riichi_mahjong_4p;
+};
+
 struct ServerConfig {
     std::string node_id;           // Node unique identifier
     std::string host;               // External access host
@@ -68,6 +82,7 @@ struct ServerConfig {
     ActorConfig actor;
     TimerWheelConfig timer_wheel;
     DebugConfig debug;
+    GameConfig game;
 };
 
 class Config {

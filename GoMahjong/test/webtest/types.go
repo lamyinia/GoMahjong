@@ -66,6 +66,28 @@ var routeRegistry = map[string]func() proto.Message{
 	"heartbeat.pong":           func() proto.Message { return &bizpb.HeartbeatPong{} },
 	"game.state":               func() proto.Message { return &bizpb.GameStatePush{} },
 	"game.createRoom.response": func() proto.Message { return &bizpb.DebugCreateRoomResponse{} },
+
+	// Game push routes (C++ → frontend)
+	"game.round.start":  func() proto.Message { return &bizpb.RoundStartPush{} },
+	"game.draw.tile":    func() proto.Message { return &bizpb.DrawTilePush{} },
+	"game.discard.tile": func() proto.Message { return &bizpb.DiscardTilePush{} },
+	"game.riichi.push":  func() proto.Message { return &bizpb.RiichiPush{} },
+	"game.meld.action":  func() proto.Message { return &bizpb.MeldActionPush{} },
+	"game.ankan.push":   func() proto.Message { return &bizpb.AnkanPush{} },
+	"game.kakan.push":   func() proto.Message { return &bizpb.KakanPush{} },
+	"game.ron":          func() proto.Message { return &bizpb.RonPush{} },
+	"game.tsumo":        func() proto.Message { return &bizpb.TsumoPush{} },
+	"game.round.end":    func() proto.Message { return &bizpb.RoundEndPush{} },
+	"game.end":          func() proto.Message { return &bizpb.GameEndPush{} },
+	"game.operations":   func() proto.Message { return &bizpb.OperationsPush{} },
+
+	// Game request routes (frontend → C++)
+	"game.meld":     func() proto.Message { return &bizpb.MeldRequest{} },
+	"game.ankan":    func() proto.Message { return &bizpb.AnkanRequest{} },
+	"game.kakan":    func() proto.Message { return &bizpb.KakanRequest{} },
+	"game.riichi":   func() proto.Message { return &bizpb.RiichiRequest{} },
+	"game.skip":     func() proto.Message { return &bizpb.SkipRequest{} },
+	"game.snapshot": func() proto.Message { return &bizpb.SnapShootRequest{} },
 }
 
 // protojsonMarshaler uses camelCase JSON names matching proto json tags

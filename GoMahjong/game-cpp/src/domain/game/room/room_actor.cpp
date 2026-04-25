@@ -7,8 +7,6 @@
 
 namespace domain::game::room {
 
-    // === RoomActor 实现 ===
-
     RoomActor::RoomActor(std::uint32_t queueCapacity)
             : queueCapacity_(queueCapacity) {
     }
@@ -49,7 +47,7 @@ namespace domain::game::room {
             LOG_WARN("queue full, dropping event for room {}", roomId);
             return false;
         }
-        eventQueue_.push(GameEventData{roomId, event});
+        eventQueue_.emplace(GameEventData{roomId, event});
         queueCv_.notify_one();
         return true;
     }
@@ -65,7 +63,7 @@ namespace domain::game::room {
             LOG_WARN("queue full, dropping addRoom for room {}", roomId);
             return false;
         }
-        eventQueue_.push(AddRoomData{std::move(roomId), std::move(room)});
+        eventQueue_.emplace(AddRoomData{std::move(roomId), std::move(room)});
         queueCv_.notify_one();
         return true;
     }
@@ -80,7 +78,7 @@ namespace domain::game::room {
             LOG_WARN("[RoomActor] queue full, dropping removeRoom for room {}", roomId);
             return false;
         }
-        eventQueue_.push(RemoveRoomData{roomId});
+        eventQueue_.emplace(RemoveRoomData{roomId});
         queueCv_.notify_one();
         return true;
     }
@@ -115,7 +113,6 @@ namespace domain::game::room {
                 if (!running_ && eventQueue_.empty()) {
                     break;
                 }
-
                 if (eventQueue_.empty()) {
                     continue;
                 }
@@ -171,16 +168,14 @@ namespace domain::game::room {
         auto roomId = data.roomId;
         auto *roomPtr = data.room.get();
 
-        roomPtr->initGame();
+        roomPtr->initGame(timingWheel_);
 
         rooms_[std::move(data.roomId)] = std::move(data.room);
 
-        // 配置 EngineContext 回调：Engine 通知游戏结束时，触发清理链
         auto it = rooms_.find(roomId);
         if (it != rooms_.end()) {
             auto* ctx = it->second->getEngineContext();
             if (ctx) {
-                // 注入 OutDispatcher
                 if (outDispatcher_) {
                     ctx->setOutDispatcher(outDispatcher_);
                 }
@@ -192,16 +187,6 @@ namespace domain::game::room {
                 ctx->setSubmitEventCallback([this](const std::string& rid, const event::GameEvent& evt) {
                     submitEvent(rid, evt);
                 });
-            }
-
-            // 初始化计时系统：Engine 持有 TurnManager，配置超时回调
-            auto* engine = it->second->getEngine();
-            if (engine && timingWheel_) {
-                // 通过 Engine 基类接口无法调用 initTimerSystem，需要 dynamic_cast
-                auto* riichiEngine = dynamic_cast<engine::RiichiMahjong4PEngine*>(engine);
-                if (riichiEngine) {
-                    riichiEngine->initTimerSystem(timingWheel_);
-                }
             }
         }
 
@@ -217,8 +202,6 @@ namespace domain::game::room {
             LOG_DEBUG("[RoomActor] removed room {}, total: {}", data.roomId, rooms_.size());
         }
     }
-
-    // === RoomActorPool 实现 ===
 
     RoomActorPool::RoomActorPool(std::uint32_t actorCount, std::uint32_t queueCapacity) {
         actors_.reserve(actorCount);
@@ -245,7 +228,7 @@ namespace domain::game::room {
         LOG_INFO("[RoomActorPool] stopped");
     }
 
-    bool RoomActorPool::submitEvent(const std::string &roomId, const event::GameEvent &event) {
+    bool RoomActorPool::submitEvent(const std::string &roomId, const event::GameEvent &event) const {
         auto *actor = getActorForRoom(roomId);
         if (!actor) {
             LOG_WARN("[RoomActorPool] room {} not assigned to any actor", roomId);

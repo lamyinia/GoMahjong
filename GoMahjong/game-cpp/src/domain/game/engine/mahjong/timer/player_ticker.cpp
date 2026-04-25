@@ -3,10 +3,9 @@
 
 #include <algorithm>
 
-namespace domain::game::engine::mahjong::timer {
+namespace domain::game::mahjong::timer {
 
-    PlayerTicker::PlayerTicker(int seatIndex, int totalAvailableTime,
-                               infra::util::TimingWheel* wheel)
+    PlayerTicker::PlayerTicker(int seatIndex, int totalAvailableTime, infra::util::TimingWheel* wheel)
         : seatIndex_(seatIndex),
           available_(totalAvailableTime),
           state_(TickerState::Idle),

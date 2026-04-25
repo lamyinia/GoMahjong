@@ -3,6 +3,8 @@
 #include "domain/game/engine/engine.h"
 #include "domain/game/engine/engine_context.h"
 
+#include "infrastructure/util/timing_wheel.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -30,12 +32,12 @@ namespace domain::game::room {
         [[nodiscard]] engine::Engine* getEngine() const { return engine_.get(); }
         [[nodiscard]] engine::EngineContext* getEngineContext() const { return engineContext_.get(); }
 
-        void addPlayer(const std::string& userId);
-        void removePlayer(const std::string& userId);
-        [[nodiscard]] bool hasPlayer(const std::string& userId) const;
+        void addPlayer(const std::string& playerId);
+        void removePlayer(const std::string& playerId);
+        [[nodiscard]] bool hasPlayer(const std::string& playerId) const;
         [[nodiscard]] std::size_t playerCount() const { return players_.size(); }
 
-        void initGame();
+        void initGame(infra::util::TimingWheel* wheel = nullptr);
 
         void handleEvent(const event::GameEvent& event);
 

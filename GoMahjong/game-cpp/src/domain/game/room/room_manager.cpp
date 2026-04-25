@@ -51,7 +51,7 @@ namespace domain::game::room {
         }
     }
 
-    void RoomManager::submitEvent(const std::string& roomId, const event::GameEvent& event) {
+    void RoomManager::submit_event(const std::string& roomId, const event::GameEvent& event) {
         if (actorPool_) {
             actorPool_->submitEvent(roomId, event);
         }
@@ -70,10 +70,9 @@ namespace domain::game::room {
         auto roomId = generate_room_id();
 
         auto room = std::make_unique<Room>(roomId, engineType);
-        for (const auto &userId: players) {
-            room->addPlayer(userId);
+        for (const auto &playId: players) {
+            room->addPlayer(playId);
         }
-
         for (const auto &playId: players) {
             playerRoom_[playId] = roomId;
         }
@@ -84,8 +83,8 @@ namespace domain::game::room {
             bool ok = actorPool_->assignRoom(std::move(room));
             if (!ok) {
                 // 回滚路由
-                for (const auto &userId: players) {
-                    playerRoom_.erase(userId);
+                for (const auto &playerId: players) {
+                    playerRoom_.erase(playerId);
                 }
                 roomPlayers_.erase(roomId);
                 LOG_ERROR("failed to assign room {} to actor", roomId);

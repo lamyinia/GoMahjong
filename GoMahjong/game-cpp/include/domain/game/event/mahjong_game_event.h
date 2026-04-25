@@ -1,32 +1,14 @@
 #pragma once
 
+#include "domain/game/engine/mahjong/material.h"
 #include <cstdint>
 #include <string>
 #include <variant>
 
 namespace domain::game::event {
+    using TileType = mahjong::TileType;
+    using Tile = mahjong::Tile;
 
-    // === 牌的定义 ===
-    enum class TileType : std::int8_t {
-        Invalid = 0,
-        // 万子
-        Wan1 = 1, Wan2, Wan3, Wan4, Wan5, Wan6, Wan7, Wan8, Wan9,
-        // 条子
-        Tiao1 = 11, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
-        // 筒子
-        Tong1 = 21, Tong2, Tong3, Tong4, Tong5, Tong6, Tong7, Tong8, Tong9,
-        // 风牌
-        FengDong = 31, FengNan, FengXi, FengBei,
-        // 三元牌
-        SanYuanBai = 41, SanYuanFa, SanYuanZhong
-    };
-
-    struct Tile {
-        TileType type = TileType::Invalid;
-        std::int8_t id = 0;  // 同类型牌的编号 (0-3)
-    };
-
-    // === 事件类型 ===
     enum class EventType {
         // 出牌相关
         PlayTile,       // 出牌
@@ -125,15 +107,10 @@ namespace domain::game::event {
     };
 
     // 一局开始事件
-    struct RoundStartEvent {
-        std::int32_t roundNumber = 1;
-        std::string oyaPlayerId;  // 庄家
-    };
+    struct RoundStartEvent {};
 
     // 一局结束事件
-    struct RoundEndEvent {
-        std::int32_t roundNumber = 1;
-    };
+    struct RoundEndEvent {};
 
     // 游戏开始事件
     struct GameStartEvent {
@@ -145,7 +122,6 @@ namespace domain::game::event {
         std::string roomId;
     };
 
-    // === GameEvent（事件包装器）===
     struct GameEvent {
         EventType type;
         
@@ -168,7 +144,6 @@ namespace domain::game::event {
             GameEndEvent
         > data;
 
-        // === 便捷构造函数 ===
         static GameEvent playTile(const std::string& playerId, const Tile& tile) {
             GameEvent e;
             e.type = EventType::PlayTile;
@@ -246,17 +221,17 @@ namespace domain::game::event {
             return e;
         }
 
-        static GameEvent roundStart(std::int32_t roundNumber, const std::string& oyaPlayerId) {
+        static GameEvent roundStart() {
             GameEvent e;
             e.type = EventType::RoundStart;
-            e.data = RoundStartEvent{roundNumber, oyaPlayerId};
+            e.data = RoundStartEvent{};
             return e;
         }
 
-        static GameEvent roundEnd(std::int32_t roundNumber) {
+        static GameEvent roundEnd() {
             GameEvent e;
             e.type = EventType::RoundEnd;
-            e.data = RoundEndEvent{roundNumber};
+            e.data = RoundEndEvent{};
             return e;
         }
 

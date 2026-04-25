@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace domain::game::engine::mahjong::timer {
+namespace domain::game::mahjong::timer {
 
     enum class TurnPhase {
         Idle,              // 等待游戏开始
@@ -26,25 +26,30 @@ namespace domain::game::engine::mahjong::timer {
     public:
         using TimeoutEventCallback = std::function<void(const std::string& roomId, const event::GameEvent& event)>;
 
-        static constexpr int PlayerCount = 4;
+        static constexpr int DefaultPlayerCount = 4;
         static constexpr int DefaultTotalTime = 300;    // 玩家总时间（秒）
         static constexpr int DefaultCompensation = 5;   // 每回合补偿（秒）
         static constexpr int DefaultMaxRoundTime = 30;  // 单回合最大时间（秒）
+        static constexpr int DefaultReactCompensation = 5; // 反应补偿时间（秒）
 
         explicit TurnManager(infra::util::TimingWheel* wheel = nullptr,
-                             int totalTime = DefaultTotalTime);
+                             int playerCount = DefaultPlayerCount,
+                             int totalTime = DefaultTotalTime,
+                             int compensation = DefaultCompensation,
+                             int maxRoundTime = DefaultMaxRoundTime,
+                             int reactCompensation = DefaultReactCompensation);
         ~TurnManager();
 
         // 进入摸牌阶段（自动，无需计时）
         void enterDrawPhase(int seatIndex);
 
         // 进入出牌/立直/杠/自摸 选择阶段（当前玩家计时）
-        bool enterMainActionPhase(int seatIndex, int roundCompensation = DefaultCompensation);
+        bool enterMainActionPhase(int seatIndex, int roundCompensation = 0);
 
         // 进入等待反应阶段（多个可反应玩家各自计时）
         // eligibleSeats: 可反应的座位列表
         // timeLimitSec: 每个玩家的反应时间（秒）
-        bool enterReactionPhase(const std::vector<int>& eligibleSeats, int timeLimitSec = 5);
+        bool enterReactionPhase(const std::vector<int>& eligibleSeats, int timeLimitSec = 0);
 
         // 进入裁决阶段（自动，无需计时）
         void enterResolvePhase();
@@ -57,9 +62,10 @@ namespace domain::game::engine::mahjong::timer {
 
         PlayerTicker* getPlayerTicker(int seatIndex);
 
-        std::array<TickerState, PlayerCount> getAllPlayerTimerStates() const;
+        [[nodiscard]] std::vector<TickerState> getAllPlayerTimerStates() const;
 
         void setTimingWheel(infra::util::TimingWheel* wheel);
+        [[nodiscard]] infra::util::TimingWheel* getTimingWheel() const { return wheel_; }
         void setRoomId(const std::string& roomId);
         void setPlayerIds(const std::vector<std::string>& playerIds);
         void setTimeoutEventCallback(TimeoutEventCallback cb);
@@ -72,9 +78,14 @@ namespace domain::game::engine::mahjong::timer {
         void stopAllTickers();
         void onTickerTimeout(int seatIndex);  // 定时器到期回调（TimerThread 线程）
 
+        int playerCount_;
+        int compensation_;
+        int maxRoundTime_;
+        int reactCompensation_;
+
         int turnPointer_{0};
         TurnPhase phase_{TurnPhase::Idle};
-        std::array<std::unique_ptr<PlayerTicker>, PlayerCount> tickers_;
+        std::vector<std::unique_ptr<PlayerTicker>> tickers_;
         infra::util::TimingWheel* wheel_;
 
         std::string roomId_;

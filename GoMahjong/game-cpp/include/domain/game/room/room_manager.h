@@ -27,7 +27,7 @@ namespace domain::game::room {
         void start();
         void stop();
 
-        void submitEvent(const std::string& roomId, const event::GameEvent& event);
+        void submit_event(const std::string& roomId, const event::GameEvent& event);
 
         std::string create_room(const std::vector<std::string> &players, std::int32_t engineType);
 

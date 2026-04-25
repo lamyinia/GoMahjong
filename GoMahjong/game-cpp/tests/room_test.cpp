@@ -122,16 +122,16 @@ bool test_submit_event() {
     TEST_ASSERT(*playerRoomId == roomId, "Player1's room should be the created room");
 
     // 提交出牌事件
-    event::Tile tile{event::TileType::Wan1, 0};
+    event::Tile tile{event::TileType::Man1, 0};
     auto gameEvent = event::GameEvent::playTile("player1", tile);
-    manager.submitEvent(roomId, gameEvent);
+    manager.submit_event(roomId, gameEvent);
 
     // 等待事件处理
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     // 提交流局事件
     auto drawEvent = event::GameEvent::draw(false);
-    manager.submitEvent(roomId, drawEvent);
+    manager.submit_event(roomId, drawEvent);
 
     // 等待事件处理
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -168,12 +168,12 @@ bool test_multiple_rooms() {
     for (int i = 0; i < 10; ++i) {
         threads.emplace_back([&manager, &roomIds, &eventCount, i]() {
             for (int j = 0; j < 10; ++j) {
-                event::Tile tile{event::TileType::Wan1, static_cast<std::int8_t>(j % 4)};
+                event::Tile tile{event::TileType::Man1, static_cast<std::int8_t>(j % 4)};
                 auto gameEvent = event::GameEvent::playTile(
                     "room" + std::to_string(i) + "_p" + std::to_string(j % 4 + 1), 
                     tile
                 );
-                manager.submitEvent(roomIds[i], gameEvent);
+                manager.submit_event(roomIds[i], gameEvent);
                 eventCount++;
             }
         });

@@ -21,7 +21,6 @@
 namespace domain::game::room {
     class Room;
 
-    // === 生命周期通知接口 ===
     class RoomLifecycleNotifier {
     public:
         virtual ~RoomLifecycleNotifier() = default;
@@ -106,9 +105,8 @@ namespace domain::game::room {
         void start();
         void stop();
 
-        bool submitEvent(const std::string& roomId, const event::GameEvent& event);
+        bool submitEvent(const std::string& roomId, const event::GameEvent& event) const;
 
-        // === 房间管理（通过队列，无锁） ===
         bool assignRoom(std::unique_ptr<Room> room);
         bool removeRoom(const std::string& roomId);
         [[nodiscard]] RoomActor* getActorForRoom(const std::string& roomId) const;

@@ -31,13 +31,11 @@ namespace domain::game::engine {
     public:
         virtual ~Engine() = default;
 
-        // === 核心事件处理 ===
         // 统一入口，所有游戏事件都通过此方法处理
         virtual void handleEvent(const event::GameEvent& event) = 0;
 
         virtual void onPlayerJoin(const std::string& userId) = 0;
         virtual void onPlayerLeave(const std::string& userId) = 0;
-        virtual bool hasPlayer(const std::string& userId) const = 0;
         virtual std::size_t playerCount() const = 0;
 
         [[nodiscard]] virtual GamePhase getPhase() const = 0;

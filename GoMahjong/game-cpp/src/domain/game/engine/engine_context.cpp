@@ -16,7 +16,7 @@ namespace domain::game::engine {
         if (submitEvent_) {
             submitEvent_(roomId, event);
         } else {
-            LOG_WARN("[EngineContext] submitEvent callback not set, dropping event for room {}", roomId);
+            LOG_WARN("[EngineContext] submit_event callback not set, dropping event for room {}", roomId);
         }
     }
 

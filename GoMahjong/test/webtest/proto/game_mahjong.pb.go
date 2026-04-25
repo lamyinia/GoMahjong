@@ -24,8 +24,8 @@ const (
 // 牌
 type Tile struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          int32                  `protobuf:"varint,1,opt,name=type,proto3" json:"type,omitempty"` // 牌的类型 (万、条、筒、风、箭等)
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`     // 牌的 ID (1-9 等)
+	Type          int32                  `protobuf:"varint,1,opt,name=type,proto3" json:"type,omitempty"` // TileType 连续编码 (0-33)
+	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`     // 同类型编号 (0-3)，数牌5的id=0为赤宝牌
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -74,17 +74,545 @@ func (x *Tile) GetId() int32 {
 	return 0
 }
 
+// 场况
+type Situation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DealerIndex   int32                  `protobuf:"varint,1,opt,name=dealer_index,json=dealerIndex,proto3" json:"dealer_index,omitempty"`    // 庄家座位 (0-3)
+	RoundWind     string                 `protobuf:"bytes,2,opt,name=round_wind,json=roundWind,proto3" json:"round_wind,omitempty"`           // 场风: "East","South","West","North"
+	RoundNumber   int32                  `protobuf:"varint,3,opt,name=round_number,json=roundNumber,proto3" json:"round_number,omitempty"`    // 局数 (1-4)
+	Honba         int32                  `protobuf:"varint,4,opt,name=honba,proto3" json:"honba,omitempty"`                                   // 本场数
+	RiichiSticks  int32                  `protobuf:"varint,5,opt,name=riichi_sticks,json=riichiSticks,proto3" json:"riichi_sticks,omitempty"` // 供托（立直棒）
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Situation) Reset() {
+	*x = Situation{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Situation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Situation) ProtoMessage() {}
+
+func (x *Situation) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Situation.ProtoReflect.Descriptor instead.
+func (*Situation) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Situation) GetDealerIndex() int32 {
+	if x != nil {
+		return x.DealerIndex
+	}
+	return 0
+}
+
+func (x *Situation) GetRoundWind() string {
+	if x != nil {
+		return x.RoundWind
+	}
+	return ""
+}
+
+func (x *Situation) GetRoundNumber() int32 {
+	if x != nil {
+		return x.RoundNumber
+	}
+	return 0
+}
+
+func (x *Situation) GetHonba() int32 {
+	if x != nil {
+		return x.Honba
+	}
+	return 0
+}
+
+func (x *Situation) GetRiichiSticks() int32 {
+	if x != nil {
+		return x.RiichiSticks
+	}
+	return 0
+}
+
+// 副露（鸣牌）
+type Meld struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ActionType    string                 `protobuf:"bytes,1,opt,name=action_type,json=actionType,proto3" json:"action_type,omitempty"` // "CHI","PENG","GANG","ANKAN","KAKAN"
+	SeatIndex     int32                  `protobuf:"varint,2,opt,name=seat_index,json=seatIndex,proto3" json:"seat_index,omitempty"`   // 鸣牌玩家座位
+	FromSeat      int32                  `protobuf:"varint,3,opt,name=from_seat,json=fromSeat,proto3" json:"from_seat,omitempty"`      // 来源玩家座位（暗杠=-1）
+	Tiles         []*Tile                `protobuf:"bytes,4,rep,name=tiles,proto3" json:"tiles,omitempty"`                             // 副露的牌
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Meld) Reset() {
+	*x = Meld{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Meld) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Meld) ProtoMessage() {}
+
+func (x *Meld) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Meld.ProtoReflect.Descriptor instead.
+func (*Meld) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Meld) GetActionType() string {
+	if x != nil {
+		return x.ActionType
+	}
+	return ""
+}
+
+func (x *Meld) GetSeatIndex() int32 {
+	if x != nil {
+		return x.SeatIndex
+	}
+	return 0
+}
+
+func (x *Meld) GetFromSeat() int32 {
+	if x != nil {
+		return x.FromSeat
+	}
+	return 0
+}
+
+func (x *Meld) GetTiles() []*Tile {
+	if x != nil {
+		return x.Tiles
+	}
+	return nil
+}
+
+// 和牌信息
+type HuClaim struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WinnerSeat    int32                  `protobuf:"varint,1,opt,name=winner_seat,json=winnerSeat,proto3" json:"winner_seat,omitempty"` // 和牌玩家座位
+	LoserSeat     int32                  `protobuf:"varint,2,opt,name=loser_seat,json=loserSeat,proto3" json:"loser_seat,omitempty"`    // 放铳玩家座位（自摸时=-1）
+	WinTile       *Tile                  `protobuf:"bytes,3,opt,name=win_tile,json=winTile,proto3" json:"win_tile,omitempty"`           // 和牌
+	Han           int32                  `protobuf:"varint,4,opt,name=han,proto3" json:"han,omitempty"`                                 // 番数
+	Fu            int32                  `protobuf:"varint,5,opt,name=fu,proto3" json:"fu,omitempty"`                                   // 符数
+	Yaku          []int32                `protobuf:"varint,6,rep,packed,name=yaku,proto3" json:"yaku,omitempty"`                        // 役列表
+	Points        int32                  `protobuf:"varint,7,opt,name=points,proto3" json:"points,omitempty"`                           // 点数
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HuClaim) Reset() {
+	*x = HuClaim{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HuClaim) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HuClaim) ProtoMessage() {}
+
+func (x *HuClaim) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HuClaim.ProtoReflect.Descriptor instead.
+func (*HuClaim) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *HuClaim) GetWinnerSeat() int32 {
+	if x != nil {
+		return x.WinnerSeat
+	}
+	return 0
+}
+
+func (x *HuClaim) GetLoserSeat() int32 {
+	if x != nil {
+		return x.LoserSeat
+	}
+	return 0
+}
+
+func (x *HuClaim) GetWinTile() *Tile {
+	if x != nil {
+		return x.WinTile
+	}
+	return nil
+}
+
+func (x *HuClaim) GetHan() int32 {
+	if x != nil {
+		return x.Han
+	}
+	return 0
+}
+
+func (x *HuClaim) GetFu() int32 {
+	if x != nil {
+		return x.Fu
+	}
+	return 0
+}
+
+func (x *HuClaim) GetYaku() []int32 {
+	if x != nil {
+		return x.Yaku
+	}
+	return nil
+}
+
+func (x *HuClaim) GetPoints() int32 {
+	if x != nil {
+		return x.Points
+	}
+	return 0
+}
+
+// 玩家排名
+type PlayerRanking struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeatIndex     int32                  `protobuf:"varint,1,opt,name=seat_index,json=seatIndex,proto3" json:"seat_index,omitempty"`
+	PlayerId      string                 `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	Points        int32                  `protobuf:"varint,3,opt,name=points,proto3" json:"points,omitempty"`
+	Rank          int32                  `protobuf:"varint,4,opt,name=rank,proto3" json:"rank,omitempty"` // 排名 (1-4)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlayerRanking) Reset() {
+	*x = PlayerRanking{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlayerRanking) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlayerRanking) ProtoMessage() {}
+
+func (x *PlayerRanking) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlayerRanking.ProtoReflect.Descriptor instead.
+func (*PlayerRanking) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *PlayerRanking) GetSeatIndex() int32 {
+	if x != nil {
+		return x.SeatIndex
+	}
+	return 0
+}
+
+func (x *PlayerRanking) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+func (x *PlayerRanking) GetPoints() int32 {
+	if x != nil {
+		return x.Points
+	}
+	return 0
+}
+
+func (x *PlayerRanking) GetRank() int32 {
+	if x != nil {
+		return x.Rank
+	}
+	return 0
+}
+
+// 玩家座位映射
+type PlayerSeat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeatIndex     int32                  `protobuf:"varint,1,opt,name=seat_index,json=seatIndex,proto3" json:"seat_index,omitempty"`
+	PlayerId      string                 `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlayerSeat) Reset() {
+	*x = PlayerSeat{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlayerSeat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlayerSeat) ProtoMessage() {}
+
+func (x *PlayerSeat) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlayerSeat.ProtoReflect.Descriptor instead.
+func (*PlayerSeat) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *PlayerSeat) GetSeatIndex() int32 {
+	if x != nil {
+		return x.SeatIndex
+	}
+	return 0
+}
+
+func (x *PlayerSeat) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+// 可选操作
+type PlayerOperation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`   // "HU","GANG","PENG","CHI"
+	Tiles         []*Tile                `protobuf:"bytes,2,rep,name=tiles,proto3" json:"tiles,omitempty"` // 操作涉及的牌
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlayerOperation) Reset() {
+	*x = PlayerOperation{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlayerOperation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlayerOperation) ProtoMessage() {}
+
+func (x *PlayerOperation) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlayerOperation.ProtoReflect.Descriptor instead.
+func (*PlayerOperation) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *PlayerOperation) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *PlayerOperation) GetTiles() []*Tile {
+	if x != nil {
+		return x.Tiles
+	}
+	return nil
+}
+
+// 单个玩家的公开信息（重连快照用）
+type PlayerPublicState struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeatIndex     int32                  `protobuf:"varint,1,opt,name=seat_index,json=seatIndex,proto3" json:"seat_index,omitempty"`
+	DiscardTiles  []*Tile                `protobuf:"bytes,2,rep,name=discard_tiles,json=discardTiles,proto3" json:"discard_tiles,omitempty"` // 弃牌区
+	Melds         []*Meld                `protobuf:"bytes,3,rep,name=melds,proto3" json:"melds,omitempty"`                                   // 副露
+	Riichi        bool                   `protobuf:"varint,4,opt,name=riichi,proto3" json:"riichi,omitempty"`                                // 是否立直
+	Points        int32                  `protobuf:"varint,5,opt,name=points,proto3" json:"points,omitempty"`                                // 当前点数
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlayerPublicState) Reset() {
+	*x = PlayerPublicState{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlayerPublicState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlayerPublicState) ProtoMessage() {}
+
+func (x *PlayerPublicState) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlayerPublicState.ProtoReflect.Descriptor instead.
+func (*PlayerPublicState) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *PlayerPublicState) GetSeatIndex() int32 {
+	if x != nil {
+		return x.SeatIndex
+	}
+	return 0
+}
+
+func (x *PlayerPublicState) GetDiscardTiles() []*Tile {
+	if x != nil {
+		return x.DiscardTiles
+	}
+	return nil
+}
+
+func (x *PlayerPublicState) GetMelds() []*Meld {
+	if x != nil {
+		return x.Melds
+	}
+	return nil
+}
+
+func (x *PlayerPublicState) GetRiichi() bool {
+	if x != nil {
+		return x.Riichi
+	}
+	return false
+}
+
+func (x *PlayerPublicState) GetPoints() int32 {
+	if x != nil {
+		return x.Points
+	}
+	return 0
+}
+
+// 获取快照，用于重连
+type SnapShootRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SnapShootRequest) Reset() {
+	*x = SnapShootRequest{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SnapShootRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SnapShootRequest) ProtoMessage() {}
+
+func (x *SnapShootRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SnapShootRequest.ProtoReflect.Descriptor instead.
+func (*SnapShootRequest) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{8}
+}
+
 // 出牌请求
 type PlayTileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tile          *Tile                  `protobuf:"bytes,1,opt,name=tile,proto3" json:"tile,omitempty"` // 打出的牌
+	Tile          *Tile                  `protobuf:"bytes,1,opt,name=tile,proto3" json:"tile,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PlayTileRequest) Reset() {
 	*x = PlayTileRequest{}
-	mi := &file_proto_game_mahjong_proto_msgTypes[1]
+	mi := &file_proto_game_mahjong_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -96,7 +624,7 @@ func (x *PlayTileRequest) String() string {
 func (*PlayTileRequest) ProtoMessage() {}
 
 func (x *PlayTileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_game_mahjong_proto_msgTypes[1]
+	mi := &file_proto_game_mahjong_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -109,7 +637,7 @@ func (x *PlayTileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlayTileRequest.ProtoReflect.Descriptor instead.
 func (*PlayTileRequest) Descriptor() ([]byte, []int) {
-	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{1}
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PlayTileRequest) GetTile() *Tile {
@@ -119,32 +647,30 @@ func (x *PlayTileRequest) GetTile() *Tile {
 	return nil
 }
 
-// 游戏状态推送
-type GameStatePush struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	RoomId         uint64                 `protobuf:"varint,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
-	HandTiles      []*Tile                `protobuf:"bytes,2,rep,name=hand_tiles,json=handTiles,proto3" json:"hand_tiles,omitempty"`                 // 手牌
-	DiscardTiles   []*Tile                `protobuf:"bytes,3,rep,name=discard_tiles,json=discardTiles,proto3" json:"discard_tiles,omitempty"`        // 弃牌区
-	RemainingTiles int32                  `protobuf:"varint,5,opt,name=remaining_tiles,json=remainingTiles,proto3" json:"remaining_tiles,omitempty"` // 剩余牌数
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+// 鸣牌请求（吃/碰/明杠）
+type MeldRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ActionType    string                 `protobuf:"bytes,1,opt,name=action_type,json=actionType,proto3" json:"action_type,omitempty"` // "CHI","PENG","GANG"
+	Tiles         []*Tile                `protobuf:"bytes,2,rep,name=tiles,proto3" json:"tiles,omitempty"`                             // 选择的牌
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GameStatePush) Reset() {
-	*x = GameStatePush{}
-	mi := &file_proto_game_mahjong_proto_msgTypes[2]
+func (x *MeldRequest) Reset() {
+	*x = MeldRequest{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GameStatePush) String() string {
+func (x *MeldRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GameStatePush) ProtoMessage() {}
+func (*MeldRequest) ProtoMessage() {}
 
-func (x *GameStatePush) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_game_mahjong_proto_msgTypes[2]
+func (x *MeldRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -155,51 +681,209 @@ func (x *GameStatePush) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GameStatePush.ProtoReflect.Descriptor instead.
-func (*GameStatePush) Descriptor() ([]byte, []int) {
-	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{2}
+// Deprecated: Use MeldRequest.ProtoReflect.Descriptor instead.
+func (*MeldRequest) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *GameStatePush) GetRoomId() uint64 {
+func (x *MeldRequest) GetActionType() string {
 	if x != nil {
-		return x.RoomId
+		return x.ActionType
 	}
-	return 0
+	return ""
 }
 
-func (x *GameStatePush) GetHandTiles() []*Tile {
+func (x *MeldRequest) GetTiles() []*Tile {
 	if x != nil {
-		return x.HandTiles
-	}
-	return nil
-}
-
-func (x *GameStatePush) GetDiscardTiles() []*Tile {
-	if x != nil {
-		return x.DiscardTiles
+		return x.Tiles
 	}
 	return nil
 }
 
-func (x *GameStatePush) GetRemainingTiles() int32 {
-	if x != nil {
-		return x.RemainingTiles
-	}
-	return 0
+// 暗杠请求
+type AnkanRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tiles         []*Tile                `protobuf:"bytes,1,rep,name=tiles,proto3" json:"tiles,omitempty"` // 暗杠的牌
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-// Debug: 创建房间请求（跳过 march 匹配）
+func (x *AnkanRequest) Reset() {
+	*x = AnkanRequest{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AnkanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AnkanRequest) ProtoMessage() {}
+
+func (x *AnkanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AnkanRequest.ProtoReflect.Descriptor instead.
+func (*AnkanRequest) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *AnkanRequest) GetTiles() []*Tile {
+	if x != nil {
+		return x.Tiles
+	}
+	return nil
+}
+
+// 加杠请求
+type KakanRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tile          *Tile                  `protobuf:"bytes,1,opt,name=tile,proto3" json:"tile,omitempty"` // 加杠的牌
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KakanRequest) Reset() {
+	*x = KakanRequest{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KakanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KakanRequest) ProtoMessage() {}
+
+func (x *KakanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KakanRequest.ProtoReflect.Descriptor instead.
+func (*KakanRequest) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *KakanRequest) GetTile() *Tile {
+	if x != nil {
+		return x.Tile
+	}
+	return nil
+}
+
+// 立直请求
+type RiichiRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tile          *Tile                  `protobuf:"bytes,1,opt,name=tile,proto3" json:"tile,omitempty"` // 立直时打出的牌
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RiichiRequest) Reset() {
+	*x = RiichiRequest{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RiichiRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RiichiRequest) ProtoMessage() {}
+
+func (x *RiichiRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RiichiRequest.ProtoReflect.Descriptor instead.
+func (*RiichiRequest) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RiichiRequest) GetTile() *Tile {
+	if x != nil {
+		return x.Tile
+	}
+	return nil
+}
+
+// 跳过操作（不吃不碰不和）
+type SkipRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SkipRequest) Reset() {
+	*x = SkipRequest{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SkipRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SkipRequest) ProtoMessage() {}
+
+func (x *SkipRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SkipRequest.ProtoReflect.Descriptor instead.
+func (*SkipRequest) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{14}
+}
+
+// Debug: 创建房间请求
 type DebugCreateRoomRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	EngineType    int32                  `protobuf:"varint,1,opt,name=engine_type,json=engineType,proto3" json:"engine_type,omitempty"` // 1: RiichiMahjong4P
-	PlayerIds     []string               `protobuf:"bytes,2,rep,name=player_ids,json=playerIds,proto3" json:"player_ids,omitempty"`     // 玩家 ID 列表
+	EngineType    int32                  `protobuf:"varint,1,opt,name=engine_type,json=engineType,proto3" json:"engine_type,omitempty"`
+	PlayerIds     []string               `protobuf:"bytes,2,rep,name=player_ids,json=playerIds,proto3" json:"player_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DebugCreateRoomRequest) Reset() {
 	*x = DebugCreateRoomRequest{}
-	mi := &file_proto_game_mahjong_proto_msgTypes[3]
+	mi := &file_proto_game_mahjong_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -211,7 +895,7 @@ func (x *DebugCreateRoomRequest) String() string {
 func (*DebugCreateRoomRequest) ProtoMessage() {}
 
 func (x *DebugCreateRoomRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_game_mahjong_proto_msgTypes[3]
+	mi := &file_proto_game_mahjong_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -224,7 +908,7 @@ func (x *DebugCreateRoomRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DebugCreateRoomRequest.ProtoReflect.Descriptor instead.
 func (*DebugCreateRoomRequest) Descriptor() ([]byte, []int) {
-	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{3}
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *DebugCreateRoomRequest) GetEngineType() int32 {
@@ -244,14 +928,14 @@ func (x *DebugCreateRoomRequest) GetPlayerIds() []string {
 // Debug: 创建房间响应
 type DebugCreateRoomResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"` // 创建成功的房间 ID
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DebugCreateRoomResponse) Reset() {
 	*x = DebugCreateRoomResponse{}
-	mi := &file_proto_game_mahjong_proto_msgTypes[4]
+	mi := &file_proto_game_mahjong_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -263,7 +947,7 @@ func (x *DebugCreateRoomResponse) String() string {
 func (*DebugCreateRoomResponse) ProtoMessage() {}
 
 func (x *DebugCreateRoomResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_game_mahjong_proto_msgTypes[4]
+	mi := &file_proto_game_mahjong_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -276,7 +960,7 @@ func (x *DebugCreateRoomResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DebugCreateRoomResponse.ProtoReflect.Descriptor instead.
 func (*DebugCreateRoomResponse) Descriptor() ([]byte, []int) {
-	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{4}
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *DebugCreateRoomResponse) GetRoomId() string {
@@ -286,29 +970,1101 @@ func (x *DebugCreateRoomResponse) GetRoomId() string {
 	return ""
 }
 
+// 回合开始（每人收到不同手牌）
+type RoundStartPush struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Seats          []*PlayerSeat          `protobuf:"bytes,1,rep,name=seats,proto3" json:"seats,omitempty"`                                         // 座位映射
+	DoraIndicators []*Tile                `protobuf:"bytes,2,rep,name=dora_indicators,json=doraIndicators,proto3" json:"dora_indicators,omitempty"` // 已翻开的宝牌指示牌
+	Situation      *Situation             `protobuf:"bytes,3,opt,name=situation,proto3" json:"situation,omitempty"`                                 // 场况
+	HandTiles      []*Tile                `protobuf:"bytes,4,rep,name=hand_tiles,json=handTiles,proto3" json:"hand_tiles,omitempty"`                // 自己的手牌（仅自己可见）
+	CurrentTurn    int32                  `protobuf:"varint,5,opt,name=current_turn,json=currentTurn,proto3" json:"current_turn,omitempty"`         // 当前出牌玩家座位
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RoundStartPush) Reset() {
+	*x = RoundStartPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoundStartPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoundStartPush) ProtoMessage() {}
+
+func (x *RoundStartPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoundStartPush.ProtoReflect.Descriptor instead.
+func (*RoundStartPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RoundStartPush) GetSeats() []*PlayerSeat {
+	if x != nil {
+		return x.Seats
+	}
+	return nil
+}
+
+func (x *RoundStartPush) GetDoraIndicators() []*Tile {
+	if x != nil {
+		return x.DoraIndicators
+	}
+	return nil
+}
+
+func (x *RoundStartPush) GetSituation() *Situation {
+	if x != nil {
+		return x.Situation
+	}
+	return nil
+}
+
+func (x *RoundStartPush) GetHandTiles() []*Tile {
+	if x != nil {
+		return x.HandTiles
+	}
+	return nil
+}
+
+func (x *RoundStartPush) GetCurrentTurn() int32 {
+	if x != nil {
+		return x.CurrentTurn
+	}
+	return 0
+}
+
+// 摸牌推送（仅自己可见）
+type DrawTilePush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tile          *Tile                  `protobuf:"bytes,1,opt,name=tile,proto3" json:"tile,omitempty"`
+	IsKanDraw     bool                   `protobuf:"varint,2,opt,name=is_kan_draw,json=isKanDraw,proto3" json:"is_kan_draw,omitempty"` // 是否为岭上摸牌（杠后摸牌）
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DrawTilePush) Reset() {
+	*x = DrawTilePush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DrawTilePush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DrawTilePush) ProtoMessage() {}
+
+func (x *DrawTilePush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DrawTilePush.ProtoReflect.Descriptor instead.
+func (*DrawTilePush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *DrawTilePush) GetTile() *Tile {
+	if x != nil {
+		return x.Tile
+	}
+	return nil
+}
+
+func (x *DrawTilePush) GetIsKanDraw() bool {
+	if x != nil {
+		return x.IsKanDraw
+	}
+	return false
+}
+
+// 出牌广播
+type DiscardTilePush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeatIndex     int32                  `protobuf:"varint,1,opt,name=seat_index,json=seatIndex,proto3" json:"seat_index,omitempty"`
+	Tile          *Tile                  `protobuf:"bytes,2,opt,name=tile,proto3" json:"tile,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscardTilePush) Reset() {
+	*x = DiscardTilePush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscardTilePush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscardTilePush) ProtoMessage() {}
+
+func (x *DiscardTilePush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscardTilePush.ProtoReflect.Descriptor instead.
+func (*DiscardTilePush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *DiscardTilePush) GetSeatIndex() int32 {
+	if x != nil {
+		return x.SeatIndex
+	}
+	return 0
+}
+
+func (x *DiscardTilePush) GetTile() *Tile {
+	if x != nil {
+		return x.Tile
+	}
+	return nil
+}
+
+// 立直广播
+type RiichiPush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeatIndex     int32                  `protobuf:"varint,1,opt,name=seat_index,json=seatIndex,proto3" json:"seat_index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RiichiPush) Reset() {
+	*x = RiichiPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RiichiPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RiichiPush) ProtoMessage() {}
+
+func (x *RiichiPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RiichiPush.ProtoReflect.Descriptor instead.
+func (*RiichiPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *RiichiPush) GetSeatIndex() int32 {
+	if x != nil {
+		return x.SeatIndex
+	}
+	return 0
+}
+
+// 鸣牌广播（吃/碰/明杠）
+type MeldActionPush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ActionType    string                 `protobuf:"bytes,1,opt,name=action_type,json=actionType,proto3" json:"action_type,omitempty"` // "CHI","PENG","GANG"
+	SeatIndex     int32                  `protobuf:"varint,2,opt,name=seat_index,json=seatIndex,proto3" json:"seat_index,omitempty"`
+	FromSeat      int32                  `protobuf:"varint,3,opt,name=from_seat,json=fromSeat,proto3" json:"from_seat,omitempty"`
+	Tiles         []*Tile                `protobuf:"bytes,4,rep,name=tiles,proto3" json:"tiles,omitempty"`
+	DoraIndicator *Tile                  `protobuf:"bytes,5,opt,name=dora_indicator,json=doraIndicator,proto3" json:"dora_indicator,omitempty"` // 杠后新翻的宝牌指示牌（仅GANG时有值）
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MeldActionPush) Reset() {
+	*x = MeldActionPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MeldActionPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeldActionPush) ProtoMessage() {}
+
+func (x *MeldActionPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeldActionPush.ProtoReflect.Descriptor instead.
+func (*MeldActionPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *MeldActionPush) GetActionType() string {
+	if x != nil {
+		return x.ActionType
+	}
+	return ""
+}
+
+func (x *MeldActionPush) GetSeatIndex() int32 {
+	if x != nil {
+		return x.SeatIndex
+	}
+	return 0
+}
+
+func (x *MeldActionPush) GetFromSeat() int32 {
+	if x != nil {
+		return x.FromSeat
+	}
+	return 0
+}
+
+func (x *MeldActionPush) GetTiles() []*Tile {
+	if x != nil {
+		return x.Tiles
+	}
+	return nil
+}
+
+func (x *MeldActionPush) GetDoraIndicator() *Tile {
+	if x != nil {
+		return x.DoraIndicator
+	}
+	return nil
+}
+
+// 暗杠广播
+type AnkanPush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeatIndex     int32                  `protobuf:"varint,1,opt,name=seat_index,json=seatIndex,proto3" json:"seat_index,omitempty"`
+	Tiles         []*Tile                `protobuf:"bytes,2,rep,name=tiles,proto3" json:"tiles,omitempty"`
+	DoraIndicator *Tile                  `protobuf:"bytes,3,opt,name=dora_indicator,json=doraIndicator,proto3" json:"dora_indicator,omitempty"` // 杠后新翻的宝牌指示牌
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AnkanPush) Reset() {
+	*x = AnkanPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AnkanPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AnkanPush) ProtoMessage() {}
+
+func (x *AnkanPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AnkanPush.ProtoReflect.Descriptor instead.
+func (*AnkanPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *AnkanPush) GetSeatIndex() int32 {
+	if x != nil {
+		return x.SeatIndex
+	}
+	return 0
+}
+
+func (x *AnkanPush) GetTiles() []*Tile {
+	if x != nil {
+		return x.Tiles
+	}
+	return nil
+}
+
+func (x *AnkanPush) GetDoraIndicator() *Tile {
+	if x != nil {
+		return x.DoraIndicator
+	}
+	return nil
+}
+
+// 加杠广播
+type KakanPush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeatIndex     int32                  `protobuf:"varint,1,opt,name=seat_index,json=seatIndex,proto3" json:"seat_index,omitempty"`
+	FromSeat      int32                  `protobuf:"varint,2,opt,name=from_seat,json=fromSeat,proto3" json:"from_seat,omitempty"` // 原碰来源
+	Tiles         []*Tile                `protobuf:"bytes,3,rep,name=tiles,proto3" json:"tiles,omitempty"`
+	DoraIndicator *Tile                  `protobuf:"bytes,4,opt,name=dora_indicator,json=doraIndicator,proto3" json:"dora_indicator,omitempty"` // 杠后新翻的宝牌指示牌
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KakanPush) Reset() {
+	*x = KakanPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KakanPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KakanPush) ProtoMessage() {}
+
+func (x *KakanPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KakanPush.ProtoReflect.Descriptor instead.
+func (*KakanPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *KakanPush) GetSeatIndex() int32 {
+	if x != nil {
+		return x.SeatIndex
+	}
+	return 0
+}
+
+func (x *KakanPush) GetFromSeat() int32 {
+	if x != nil {
+		return x.FromSeat
+	}
+	return 0
+}
+
+func (x *KakanPush) GetTiles() []*Tile {
+	if x != nil {
+		return x.Tiles
+	}
+	return nil
+}
+
+func (x *KakanPush) GetDoraIndicator() *Tile {
+	if x != nil {
+		return x.DoraIndicator
+	}
+	return nil
+}
+
+// 荣和广播（支持双响/三响：多人同时荣和发多条 RonPush）
+type RonPush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WinnerSeat    int32                  `protobuf:"varint,1,opt,name=winner_seat,json=winnerSeat,proto3" json:"winner_seat,omitempty"`
+	LoserSeat     int32                  `protobuf:"varint,2,opt,name=loser_seat,json=loserSeat,proto3" json:"loser_seat,omitempty"`
+	WinTile       *Tile                  `protobuf:"bytes,3,opt,name=win_tile,json=winTile,proto3" json:"win_tile,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RonPush) Reset() {
+	*x = RonPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RonPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RonPush) ProtoMessage() {}
+
+func (x *RonPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RonPush.ProtoReflect.Descriptor instead.
+func (*RonPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RonPush) GetWinnerSeat() int32 {
+	if x != nil {
+		return x.WinnerSeat
+	}
+	return 0
+}
+
+func (x *RonPush) GetLoserSeat() int32 {
+	if x != nil {
+		return x.LoserSeat
+	}
+	return 0
+}
+
+func (x *RonPush) GetWinTile() *Tile {
+	if x != nil {
+		return x.WinTile
+	}
+	return nil
+}
+
+// 自摸广播
+type TsumoPush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WinnerSeat    int32                  `protobuf:"varint,1,opt,name=winner_seat,json=winnerSeat,proto3" json:"winner_seat,omitempty"`
+	WinTile       *Tile                  `protobuf:"bytes,2,opt,name=win_tile,json=winTile,proto3" json:"win_tile,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TsumoPush) Reset() {
+	*x = TsumoPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TsumoPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TsumoPush) ProtoMessage() {}
+
+func (x *TsumoPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TsumoPush.ProtoReflect.Descriptor instead.
+func (*TsumoPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *TsumoPush) GetWinnerSeat() int32 {
+	if x != nil {
+		return x.WinnerSeat
+	}
+	return 0
+}
+
+func (x *TsumoPush) GetWinTile() *Tile {
+	if x != nil {
+		return x.WinTile
+	}
+	return nil
+}
+
+// 回合结束广播
+type RoundEndPush struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	EndType           string                 `protobuf:"bytes,1,opt,name=end_type,json=endType,proto3" json:"end_type,omitempty"` // "RON","TSUMO","DRAW_EXHAUSTIVE","DRAW_3RON","DRAW_4KAN"
+	Claims            []*HuClaim             `protobuf:"bytes,2,rep,name=claims,proto3" json:"claims,omitempty"`
+	UraDoraIndicators []*Tile                `protobuf:"bytes,3,rep,name=ura_dora_indicators,json=uraDoraIndicators,proto3" json:"ura_dora_indicators,omitempty"` // 里宝牌指示牌（立直和牌时翻开）
+	Delta             []int32                `protobuf:"varint,4,rep,packed,name=delta,proto3" json:"delta,omitempty"`                                            // 点数变化 [4]
+	Points            []int32                `protobuf:"varint,5,rep,packed,name=points,proto3" json:"points,omitempty"`                                          // 当前点数 [4]
+	Reason            string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`                                                  // 流局原因
+	NextDealer        int32                  `protobuf:"varint,7,opt,name=next_dealer,json=nextDealer,proto3" json:"next_dealer,omitempty"`                       // 下局庄家座位（-1=游戏结束）
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *RoundEndPush) Reset() {
+	*x = RoundEndPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoundEndPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoundEndPush) ProtoMessage() {}
+
+func (x *RoundEndPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoundEndPush.ProtoReflect.Descriptor instead.
+func (*RoundEndPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *RoundEndPush) GetEndType() string {
+	if x != nil {
+		return x.EndType
+	}
+	return ""
+}
+
+func (x *RoundEndPush) GetClaims() []*HuClaim {
+	if x != nil {
+		return x.Claims
+	}
+	return nil
+}
+
+func (x *RoundEndPush) GetUraDoraIndicators() []*Tile {
+	if x != nil {
+		return x.UraDoraIndicators
+	}
+	return nil
+}
+
+func (x *RoundEndPush) GetDelta() []int32 {
+	if x != nil {
+		return x.Delta
+	}
+	return nil
+}
+
+func (x *RoundEndPush) GetPoints() []int32 {
+	if x != nil {
+		return x.Points
+	}
+	return nil
+}
+
+func (x *RoundEndPush) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *RoundEndPush) GetNextDealer() int32 {
+	if x != nil {
+		return x.NextDealer
+	}
+	return 0
+}
+
+// 游戏结束广播
+type GameEndPush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rankings      []*PlayerRanking       `protobuf:"bytes,1,rep,name=rankings,proto3" json:"rankings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GameEndPush) Reset() {
+	*x = GameEndPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GameEndPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GameEndPush) ProtoMessage() {}
+
+func (x *GameEndPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GameEndPush.ProtoReflect.Descriptor instead.
+func (*GameEndPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *GameEndPush) GetRankings() []*PlayerRanking {
+	if x != nil {
+		return x.Rankings
+	}
+	return nil
+}
+
+// 玩家断线通知
+type PlayerDisconnectPush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeatIndex     int32                  `protobuf:"varint,1,opt,name=seat_index,json=seatIndex,proto3" json:"seat_index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlayerDisconnectPush) Reset() {
+	*x = PlayerDisconnectPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlayerDisconnectPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlayerDisconnectPush) ProtoMessage() {}
+
+func (x *PlayerDisconnectPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlayerDisconnectPush.ProtoReflect.Descriptor instead.
+func (*PlayerDisconnectPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *PlayerDisconnectPush) GetSeatIndex() int32 {
+	if x != nil {
+		return x.SeatIndex
+	}
+	return 0
+}
+
+// 玩家重连通知
+type PlayerReconnectPush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeatIndex     int32                  `protobuf:"varint,1,opt,name=seat_index,json=seatIndex,proto3" json:"seat_index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlayerReconnectPush) Reset() {
+	*x = PlayerReconnectPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlayerReconnectPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlayerReconnectPush) ProtoMessage() {}
+
+func (x *PlayerReconnectPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlayerReconnectPush.ProtoReflect.Descriptor instead.
+func (*PlayerReconnectPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *PlayerReconnectPush) GetSeatIndex() int32 {
+	if x != nil {
+		return x.SeatIndex
+	}
+	return 0
+}
+
+// 可选操作推送（每人不同）
+type OperationsPush struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Operations    []*PlayerOperation     `protobuf:"bytes,1,rep,name=operations,proto3" json:"operations,omitempty"`
+	AvailableSecs int32                  `protobuf:"varint,2,opt,name=available_secs,json=availableSecs,proto3" json:"available_secs,omitempty"` // 操作限时秒数
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OperationsPush) Reset() {
+	*x = OperationsPush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OperationsPush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OperationsPush) ProtoMessage() {}
+
+func (x *OperationsPush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OperationsPush.ProtoReflect.Descriptor instead.
+func (*OperationsPush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *OperationsPush) GetOperations() []*PlayerOperation {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
+func (x *OperationsPush) GetAvailableSecs() int32 {
+	if x != nil {
+		return x.AvailableSecs
+	}
+	return 0
+}
+
+// 游戏状态推送（重连快照）
+type GameStatePush struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Seats          []*PlayerSeat          `protobuf:"bytes,1,rep,name=seats,proto3" json:"seats,omitempty"`                                          // 座位映射
+	Situation      *Situation             `protobuf:"bytes,2,opt,name=situation,proto3" json:"situation,omitempty"`                                  // 场况
+	DoraIndicators []*Tile                `protobuf:"bytes,3,rep,name=dora_indicators,json=doraIndicators,proto3" json:"dora_indicators,omitempty"`  // 宝牌指示牌
+	HandTiles      []*Tile                `protobuf:"bytes,4,rep,name=hand_tiles,json=handTiles,proto3" json:"hand_tiles,omitempty"`                 // 自己的手牌（仅自己可见）
+	Players        []*PlayerPublicState   `protobuf:"bytes,5,rep,name=players,proto3" json:"players,omitempty"`                                      // 各玩家公开信息
+	CurrentTurn    int32                  `protobuf:"varint,6,opt,name=current_turn,json=currentTurn,proto3" json:"current_turn,omitempty"`          // 当前出牌玩家座位
+	RemainingTiles int32                  `protobuf:"varint,7,opt,name=remaining_tiles,json=remainingTiles,proto3" json:"remaining_tiles,omitempty"` // 剩余牌数
+	Operations     []*PlayerOperation     `protobuf:"bytes,8,rep,name=operations,proto3" json:"operations,omitempty"`                                // 当前可选操作
+	AvailableSecs  int32                  `protobuf:"varint,9,opt,name=available_secs,json=availableSecs,proto3" json:"available_secs,omitempty"`    // 操作限时秒数
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GameStatePush) Reset() {
+	*x = GameStatePush{}
+	mi := &file_proto_game_mahjong_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GameStatePush) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GameStatePush) ProtoMessage() {}
+
+func (x *GameStatePush) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_game_mahjong_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GameStatePush.ProtoReflect.Descriptor instead.
+func (*GameStatePush) Descriptor() ([]byte, []int) {
+	return file_proto_game_mahjong_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *GameStatePush) GetSeats() []*PlayerSeat {
+	if x != nil {
+		return x.Seats
+	}
+	return nil
+}
+
+func (x *GameStatePush) GetSituation() *Situation {
+	if x != nil {
+		return x.Situation
+	}
+	return nil
+}
+
+func (x *GameStatePush) GetDoraIndicators() []*Tile {
+	if x != nil {
+		return x.DoraIndicators
+	}
+	return nil
+}
+
+func (x *GameStatePush) GetHandTiles() []*Tile {
+	if x != nil {
+		return x.HandTiles
+	}
+	return nil
+}
+
+func (x *GameStatePush) GetPlayers() []*PlayerPublicState {
+	if x != nil {
+		return x.Players
+	}
+	return nil
+}
+
+func (x *GameStatePush) GetCurrentTurn() int32 {
+	if x != nil {
+		return x.CurrentTurn
+	}
+	return 0
+}
+
+func (x *GameStatePush) GetRemainingTiles() int32 {
+	if x != nil {
+		return x.RemainingTiles
+	}
+	return 0
+}
+
+func (x *GameStatePush) GetOperations() []*PlayerOperation {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
+func (x *GameStatePush) GetAvailableSecs() int32 {
+	if x != nil {
+		return x.AvailableSecs
+	}
+	return 0
+}
+
 var File_proto_game_mahjong_proto protoreflect.FileDescriptor
 
 const file_proto_game_mahjong_proto_rawDesc = "" +
 	"\n" +
-	"\x18proto/game_mahjong.proto\x12\x0egomahjong.game\"*\n" +
+	"\x18proto/game_mahjong.proto\x12\rgomahjong.net\"*\n" +
 	"\x04Tile\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\x05R\x04type\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\";\n" +
-	"\x0fPlayTileRequest\x12(\n" +
-	"\x04tile\x18\x01 \x01(\v2\x14.gomahjong.game.TileR\x04tile\"\xc1\x01\n" +
-	"\rGameStatePush\x12\x17\n" +
-	"\aroom_id\x18\x01 \x01(\x04R\x06roomId\x123\n" +
+	"\x02id\x18\x02 \x01(\x05R\x02id\"\xab\x01\n" +
+	"\tSituation\x12!\n" +
+	"\fdealer_index\x18\x01 \x01(\x05R\vdealerIndex\x12\x1d\n" +
 	"\n" +
-	"hand_tiles\x18\x02 \x03(\v2\x14.gomahjong.game.TileR\thandTiles\x129\n" +
-	"\rdiscard_tiles\x18\x03 \x03(\v2\x14.gomahjong.game.TileR\fdiscardTiles\x12'\n" +
-	"\x0fremaining_tiles\x18\x05 \x01(\x05R\x0eremainingTiles\"X\n" +
+	"round_wind\x18\x02 \x01(\tR\troundWind\x12!\n" +
+	"\fround_number\x18\x03 \x01(\x05R\vroundNumber\x12\x14\n" +
+	"\x05honba\x18\x04 \x01(\x05R\x05honba\x12#\n" +
+	"\rriichi_sticks\x18\x05 \x01(\x05R\friichiSticks\"\x8e\x01\n" +
+	"\x04Meld\x12\x1f\n" +
+	"\vaction_type\x18\x01 \x01(\tR\n" +
+	"actionType\x12\x1d\n" +
+	"\n" +
+	"seat_index\x18\x02 \x01(\x05R\tseatIndex\x12\x1b\n" +
+	"\tfrom_seat\x18\x03 \x01(\x05R\bfromSeat\x12)\n" +
+	"\x05tiles\x18\x04 \x03(\v2\x13.gomahjong.net.TileR\x05tiles\"\xc7\x01\n" +
+	"\aHuClaim\x12\x1f\n" +
+	"\vwinner_seat\x18\x01 \x01(\x05R\n" +
+	"winnerSeat\x12\x1d\n" +
+	"\n" +
+	"loser_seat\x18\x02 \x01(\x05R\tloserSeat\x12.\n" +
+	"\bwin_tile\x18\x03 \x01(\v2\x13.gomahjong.net.TileR\awinTile\x12\x10\n" +
+	"\x03han\x18\x04 \x01(\x05R\x03han\x12\x0e\n" +
+	"\x02fu\x18\x05 \x01(\x05R\x02fu\x12\x12\n" +
+	"\x04yaku\x18\x06 \x03(\x05R\x04yaku\x12\x16\n" +
+	"\x06points\x18\a \x01(\x05R\x06points\"w\n" +
+	"\rPlayerRanking\x12\x1d\n" +
+	"\n" +
+	"seat_index\x18\x01 \x01(\x05R\tseatIndex\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\tR\bplayerId\x12\x16\n" +
+	"\x06points\x18\x03 \x01(\x05R\x06points\x12\x12\n" +
+	"\x04rank\x18\x04 \x01(\x05R\x04rank\"H\n" +
+	"\n" +
+	"PlayerSeat\x12\x1d\n" +
+	"\n" +
+	"seat_index\x18\x01 \x01(\x05R\tseatIndex\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\tR\bplayerId\"P\n" +
+	"\x0fPlayerOperation\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12)\n" +
+	"\x05tiles\x18\x02 \x03(\v2\x13.gomahjong.net.TileR\x05tiles\"\xc7\x01\n" +
+	"\x11PlayerPublicState\x12\x1d\n" +
+	"\n" +
+	"seat_index\x18\x01 \x01(\x05R\tseatIndex\x128\n" +
+	"\rdiscard_tiles\x18\x02 \x03(\v2\x13.gomahjong.net.TileR\fdiscardTiles\x12)\n" +
+	"\x05melds\x18\x03 \x03(\v2\x13.gomahjong.net.MeldR\x05melds\x12\x16\n" +
+	"\x06riichi\x18\x04 \x01(\bR\x06riichi\x12\x16\n" +
+	"\x06points\x18\x05 \x01(\x05R\x06points\"\x12\n" +
+	"\x10SnapShootRequest\":\n" +
+	"\x0fPlayTileRequest\x12'\n" +
+	"\x04tile\x18\x01 \x01(\v2\x13.gomahjong.net.TileR\x04tile\"Y\n" +
+	"\vMeldRequest\x12\x1f\n" +
+	"\vaction_type\x18\x01 \x01(\tR\n" +
+	"actionType\x12)\n" +
+	"\x05tiles\x18\x02 \x03(\v2\x13.gomahjong.net.TileR\x05tiles\"9\n" +
+	"\fAnkanRequest\x12)\n" +
+	"\x05tiles\x18\x01 \x03(\v2\x13.gomahjong.net.TileR\x05tiles\"7\n" +
+	"\fKakanRequest\x12'\n" +
+	"\x04tile\x18\x01 \x01(\v2\x13.gomahjong.net.TileR\x04tile\"8\n" +
+	"\rRiichiRequest\x12'\n" +
+	"\x04tile\x18\x01 \x01(\v2\x13.gomahjong.net.TileR\x04tile\"\r\n" +
+	"\vSkipRequest\"X\n" +
 	"\x16DebugCreateRoomRequest\x12\x1f\n" +
 	"\vengine_type\x18\x01 \x01(\x05R\n" +
 	"engineType\x12\x1d\n" +
 	"\n" +
 	"player_ids\x18\x02 \x03(\tR\tplayerIds\"2\n" +
 	"\x17DebugCreateRoomResponse\x12\x17\n" +
-	"\aroom_id\x18\x01 \x01(\tR\x06roomIdB\x0fZ\rwebtest/protob\x06proto3"
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\"\x8e\x02\n" +
+	"\x0eRoundStartPush\x12/\n" +
+	"\x05seats\x18\x01 \x03(\v2\x19.gomahjong.net.PlayerSeatR\x05seats\x12<\n" +
+	"\x0fdora_indicators\x18\x02 \x03(\v2\x13.gomahjong.net.TileR\x0edoraIndicators\x126\n" +
+	"\tsituation\x18\x03 \x01(\v2\x18.gomahjong.net.SituationR\tsituation\x122\n" +
+	"\n" +
+	"hand_tiles\x18\x04 \x03(\v2\x13.gomahjong.net.TileR\thandTiles\x12!\n" +
+	"\fcurrent_turn\x18\x05 \x01(\x05R\vcurrentTurn\"W\n" +
+	"\fDrawTilePush\x12'\n" +
+	"\x04tile\x18\x01 \x01(\v2\x13.gomahjong.net.TileR\x04tile\x12\x1e\n" +
+	"\vis_kan_draw\x18\x02 \x01(\bR\tisKanDraw\"Y\n" +
+	"\x0fDiscardTilePush\x12\x1d\n" +
+	"\n" +
+	"seat_index\x18\x01 \x01(\x05R\tseatIndex\x12'\n" +
+	"\x04tile\x18\x02 \x01(\v2\x13.gomahjong.net.TileR\x04tile\"+\n" +
+	"\n" +
+	"RiichiPush\x12\x1d\n" +
+	"\n" +
+	"seat_index\x18\x01 \x01(\x05R\tseatIndex\"\xd4\x01\n" +
+	"\x0eMeldActionPush\x12\x1f\n" +
+	"\vaction_type\x18\x01 \x01(\tR\n" +
+	"actionType\x12\x1d\n" +
+	"\n" +
+	"seat_index\x18\x02 \x01(\x05R\tseatIndex\x12\x1b\n" +
+	"\tfrom_seat\x18\x03 \x01(\x05R\bfromSeat\x12)\n" +
+	"\x05tiles\x18\x04 \x03(\v2\x13.gomahjong.net.TileR\x05tiles\x12:\n" +
+	"\x0edora_indicator\x18\x05 \x01(\v2\x13.gomahjong.net.TileR\rdoraIndicator\"\x91\x01\n" +
+	"\tAnkanPush\x12\x1d\n" +
+	"\n" +
+	"seat_index\x18\x01 \x01(\x05R\tseatIndex\x12)\n" +
+	"\x05tiles\x18\x02 \x03(\v2\x13.gomahjong.net.TileR\x05tiles\x12:\n" +
+	"\x0edora_indicator\x18\x03 \x01(\v2\x13.gomahjong.net.TileR\rdoraIndicator\"\xae\x01\n" +
+	"\tKakanPush\x12\x1d\n" +
+	"\n" +
+	"seat_index\x18\x01 \x01(\x05R\tseatIndex\x12\x1b\n" +
+	"\tfrom_seat\x18\x02 \x01(\x05R\bfromSeat\x12)\n" +
+	"\x05tiles\x18\x03 \x03(\v2\x13.gomahjong.net.TileR\x05tiles\x12:\n" +
+	"\x0edora_indicator\x18\x04 \x01(\v2\x13.gomahjong.net.TileR\rdoraIndicator\"y\n" +
+	"\aRonPush\x12\x1f\n" +
+	"\vwinner_seat\x18\x01 \x01(\x05R\n" +
+	"winnerSeat\x12\x1d\n" +
+	"\n" +
+	"loser_seat\x18\x02 \x01(\x05R\tloserSeat\x12.\n" +
+	"\bwin_tile\x18\x03 \x01(\v2\x13.gomahjong.net.TileR\awinTile\"\\\n" +
+	"\tTsumoPush\x12\x1f\n" +
+	"\vwinner_seat\x18\x01 \x01(\x05R\n" +
+	"winnerSeat\x12.\n" +
+	"\bwin_tile\x18\x02 \x01(\v2\x13.gomahjong.net.TileR\awinTile\"\x85\x02\n" +
+	"\fRoundEndPush\x12\x19\n" +
+	"\bend_type\x18\x01 \x01(\tR\aendType\x12.\n" +
+	"\x06claims\x18\x02 \x03(\v2\x16.gomahjong.net.HuClaimR\x06claims\x12C\n" +
+	"\x13ura_dora_indicators\x18\x03 \x03(\v2\x13.gomahjong.net.TileR\x11uraDoraIndicators\x12\x14\n" +
+	"\x05delta\x18\x04 \x03(\x05R\x05delta\x12\x16\n" +
+	"\x06points\x18\x05 \x03(\x05R\x06points\x12\x16\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\x12\x1f\n" +
+	"\vnext_dealer\x18\a \x01(\x05R\n" +
+	"nextDealer\"G\n" +
+	"\vGameEndPush\x128\n" +
+	"\brankings\x18\x01 \x03(\v2\x1c.gomahjong.net.PlayerRankingR\brankings\"5\n" +
+	"\x14PlayerDisconnectPush\x12\x1d\n" +
+	"\n" +
+	"seat_index\x18\x01 \x01(\x05R\tseatIndex\"4\n" +
+	"\x13PlayerReconnectPush\x12\x1d\n" +
+	"\n" +
+	"seat_index\x18\x01 \x01(\x05R\tseatIndex\"w\n" +
+	"\x0eOperationsPush\x12>\n" +
+	"\n" +
+	"operations\x18\x01 \x03(\v2\x1e.gomahjong.net.PlayerOperationR\n" +
+	"operations\x12%\n" +
+	"\x0eavailable_secs\x18\x02 \x01(\x05R\ravailableSecs\"\xd9\x03\n" +
+	"\rGameStatePush\x12/\n" +
+	"\x05seats\x18\x01 \x03(\v2\x19.gomahjong.net.PlayerSeatR\x05seats\x126\n" +
+	"\tsituation\x18\x02 \x01(\v2\x18.gomahjong.net.SituationR\tsituation\x12<\n" +
+	"\x0fdora_indicators\x18\x03 \x03(\v2\x13.gomahjong.net.TileR\x0edoraIndicators\x122\n" +
+	"\n" +
+	"hand_tiles\x18\x04 \x03(\v2\x13.gomahjong.net.TileR\thandTiles\x12:\n" +
+	"\aplayers\x18\x05 \x03(\v2 .gomahjong.net.PlayerPublicStateR\aplayers\x12!\n" +
+	"\fcurrent_turn\x18\x06 \x01(\x05R\vcurrentTurn\x12'\n" +
+	"\x0fremaining_tiles\x18\a \x01(\x05R\x0eremainingTiles\x12>\n" +
+	"\n" +
+	"operations\x18\b \x03(\v2\x1e.gomahjong.net.PlayerOperationR\n" +
+	"operations\x12%\n" +
+	"\x0eavailable_secs\x18\t \x01(\x05R\ravailableSecsB\x0fZ\rwebtest/protob\x06proto3"
 
 var (
 	file_proto_game_mahjong_proto_rawDescOnce sync.Once
@@ -322,23 +2078,81 @@ func file_proto_game_mahjong_proto_rawDescGZIP() []byte {
 	return file_proto_game_mahjong_proto_rawDescData
 }
 
-var file_proto_game_mahjong_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_proto_game_mahjong_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_proto_game_mahjong_proto_goTypes = []any{
-	(*Tile)(nil),                    // 0: gomahjong.game.Tile
-	(*PlayTileRequest)(nil),         // 1: gomahjong.game.PlayTileRequest
-	(*GameStatePush)(nil),           // 2: gomahjong.game.GameStatePush
-	(*DebugCreateRoomRequest)(nil),  // 3: gomahjong.game.DebugCreateRoomRequest
-	(*DebugCreateRoomResponse)(nil), // 4: gomahjong.game.DebugCreateRoomResponse
+	(*Tile)(nil),                    // 0: gomahjong.net.Tile
+	(*Situation)(nil),               // 1: gomahjong.net.Situation
+	(*Meld)(nil),                    // 2: gomahjong.net.Meld
+	(*HuClaim)(nil),                 // 3: gomahjong.net.HuClaim
+	(*PlayerRanking)(nil),           // 4: gomahjong.net.PlayerRanking
+	(*PlayerSeat)(nil),              // 5: gomahjong.net.PlayerSeat
+	(*PlayerOperation)(nil),         // 6: gomahjong.net.PlayerOperation
+	(*PlayerPublicState)(nil),       // 7: gomahjong.net.PlayerPublicState
+	(*SnapShootRequest)(nil),        // 8: gomahjong.net.SnapShootRequest
+	(*PlayTileRequest)(nil),         // 9: gomahjong.net.PlayTileRequest
+	(*MeldRequest)(nil),             // 10: gomahjong.net.MeldRequest
+	(*AnkanRequest)(nil),            // 11: gomahjong.net.AnkanRequest
+	(*KakanRequest)(nil),            // 12: gomahjong.net.KakanRequest
+	(*RiichiRequest)(nil),           // 13: gomahjong.net.RiichiRequest
+	(*SkipRequest)(nil),             // 14: gomahjong.net.SkipRequest
+	(*DebugCreateRoomRequest)(nil),  // 15: gomahjong.net.DebugCreateRoomRequest
+	(*DebugCreateRoomResponse)(nil), // 16: gomahjong.net.DebugCreateRoomResponse
+	(*RoundStartPush)(nil),          // 17: gomahjong.net.RoundStartPush
+	(*DrawTilePush)(nil),            // 18: gomahjong.net.DrawTilePush
+	(*DiscardTilePush)(nil),         // 19: gomahjong.net.DiscardTilePush
+	(*RiichiPush)(nil),              // 20: gomahjong.net.RiichiPush
+	(*MeldActionPush)(nil),          // 21: gomahjong.net.MeldActionPush
+	(*AnkanPush)(nil),               // 22: gomahjong.net.AnkanPush
+	(*KakanPush)(nil),               // 23: gomahjong.net.KakanPush
+	(*RonPush)(nil),                 // 24: gomahjong.net.RonPush
+	(*TsumoPush)(nil),               // 25: gomahjong.net.TsumoPush
+	(*RoundEndPush)(nil),            // 26: gomahjong.net.RoundEndPush
+	(*GameEndPush)(nil),             // 27: gomahjong.net.GameEndPush
+	(*PlayerDisconnectPush)(nil),    // 28: gomahjong.net.PlayerDisconnectPush
+	(*PlayerReconnectPush)(nil),     // 29: gomahjong.net.PlayerReconnectPush
+	(*OperationsPush)(nil),          // 30: gomahjong.net.OperationsPush
+	(*GameStatePush)(nil),           // 31: gomahjong.net.GameStatePush
 }
 var file_proto_game_mahjong_proto_depIdxs = []int32{
-	0, // 0: gomahjong.game.PlayTileRequest.tile:type_name -> gomahjong.game.Tile
-	0, // 1: gomahjong.game.GameStatePush.hand_tiles:type_name -> gomahjong.game.Tile
-	0, // 2: gomahjong.game.GameStatePush.discard_tiles:type_name -> gomahjong.game.Tile
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	0,  // 0: gomahjong.net.Meld.tiles:type_name -> gomahjong.net.Tile
+	0,  // 1: gomahjong.net.HuClaim.win_tile:type_name -> gomahjong.net.Tile
+	0,  // 2: gomahjong.net.PlayerOperation.tiles:type_name -> gomahjong.net.Tile
+	0,  // 3: gomahjong.net.PlayerPublicState.discard_tiles:type_name -> gomahjong.net.Tile
+	2,  // 4: gomahjong.net.PlayerPublicState.melds:type_name -> gomahjong.net.Meld
+	0,  // 5: gomahjong.net.PlayTileRequest.tile:type_name -> gomahjong.net.Tile
+	0,  // 6: gomahjong.net.MeldRequest.tiles:type_name -> gomahjong.net.Tile
+	0,  // 7: gomahjong.net.AnkanRequest.tiles:type_name -> gomahjong.net.Tile
+	0,  // 8: gomahjong.net.KakanRequest.tile:type_name -> gomahjong.net.Tile
+	0,  // 9: gomahjong.net.RiichiRequest.tile:type_name -> gomahjong.net.Tile
+	5,  // 10: gomahjong.net.RoundStartPush.seats:type_name -> gomahjong.net.PlayerSeat
+	0,  // 11: gomahjong.net.RoundStartPush.dora_indicators:type_name -> gomahjong.net.Tile
+	1,  // 12: gomahjong.net.RoundStartPush.situation:type_name -> gomahjong.net.Situation
+	0,  // 13: gomahjong.net.RoundStartPush.hand_tiles:type_name -> gomahjong.net.Tile
+	0,  // 14: gomahjong.net.DrawTilePush.tile:type_name -> gomahjong.net.Tile
+	0,  // 15: gomahjong.net.DiscardTilePush.tile:type_name -> gomahjong.net.Tile
+	0,  // 16: gomahjong.net.MeldActionPush.tiles:type_name -> gomahjong.net.Tile
+	0,  // 17: gomahjong.net.MeldActionPush.dora_indicator:type_name -> gomahjong.net.Tile
+	0,  // 18: gomahjong.net.AnkanPush.tiles:type_name -> gomahjong.net.Tile
+	0,  // 19: gomahjong.net.AnkanPush.dora_indicator:type_name -> gomahjong.net.Tile
+	0,  // 20: gomahjong.net.KakanPush.tiles:type_name -> gomahjong.net.Tile
+	0,  // 21: gomahjong.net.KakanPush.dora_indicator:type_name -> gomahjong.net.Tile
+	0,  // 22: gomahjong.net.RonPush.win_tile:type_name -> gomahjong.net.Tile
+	0,  // 23: gomahjong.net.TsumoPush.win_tile:type_name -> gomahjong.net.Tile
+	3,  // 24: gomahjong.net.RoundEndPush.claims:type_name -> gomahjong.net.HuClaim
+	0,  // 25: gomahjong.net.RoundEndPush.ura_dora_indicators:type_name -> gomahjong.net.Tile
+	4,  // 26: gomahjong.net.GameEndPush.rankings:type_name -> gomahjong.net.PlayerRanking
+	6,  // 27: gomahjong.net.OperationsPush.operations:type_name -> gomahjong.net.PlayerOperation
+	5,  // 28: gomahjong.net.GameStatePush.seats:type_name -> gomahjong.net.PlayerSeat
+	1,  // 29: gomahjong.net.GameStatePush.situation:type_name -> gomahjong.net.Situation
+	0,  // 30: gomahjong.net.GameStatePush.dora_indicators:type_name -> gomahjong.net.Tile
+	0,  // 31: gomahjong.net.GameStatePush.hand_tiles:type_name -> gomahjong.net.Tile
+	7,  // 32: gomahjong.net.GameStatePush.players:type_name -> gomahjong.net.PlayerPublicState
+	6,  // 33: gomahjong.net.GameStatePush.operations:type_name -> gomahjong.net.PlayerOperation
+	34, // [34:34] is the sub-list for method output_type
+	34, // [34:34] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_proto_game_mahjong_proto_init() }
@@ -352,7 +2166,7 @@ func file_proto_game_mahjong_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_game_mahjong_proto_rawDesc), len(file_proto_game_mahjong_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

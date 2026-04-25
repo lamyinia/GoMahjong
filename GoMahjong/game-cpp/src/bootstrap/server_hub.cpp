@@ -185,7 +185,6 @@ namespace gomahjong::bootstrap {
 
     // 额外的注入逻辑（回调设置、服务注册、负载上报）
     void ServerHub::write_back() {
-        // 1. 设置认证回调
         if (wild_endpoint_manager_ && session_manager_) {
             auto session_mgr = session_manager_;
             wild_endpoint_manager_->set_on_authenticated(
@@ -198,7 +197,6 @@ namespace gomahjong::bootstrap {
             LOG_DEBUG("wild endpoint 回调完成");
         }
 
-        // 2. 注册服务到 etcd
         if (service_registry_ && service_registry_->is_connected()) {
             infra::discovery::ServiceEndpoint endpoint;
             endpoint.node_id = cfg_.server().node_id;
@@ -211,7 +209,6 @@ namespace gomahjong::bootstrap {
                 LOG_WARN("failed to register service to etcd");
             }
 
-            // 3. 启动负载上报线程
             start_load_reporter();
         }
     }

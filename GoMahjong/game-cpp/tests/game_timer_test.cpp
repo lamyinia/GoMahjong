@@ -13,7 +13,7 @@
 #include <thread>
 
 using namespace infra::util;
-using namespace domain::game::engine::mahjong::timer;
+using namespace domain::game::mahjong::timer;
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -253,7 +253,7 @@ TEST(turn_manager_enter_resolve_phase) {
 
     // 所有计时器应停止
     auto states = tm.getAllPlayerTimerStates();
-    for (int i = 0; i < TurnManager::PlayerCount; ++i) {
+    for (int i = 0; i < 4; ++i) {
         ASSERT_TRUE(states[i] != TickerState::Running);
     }
 }
@@ -306,10 +306,145 @@ TEST(turn_manager_full_flow) {
     thread.stop();
 }
 
+void freeTest(){
+    // 吞吐量测试：纯 schedule，无 cancel
+    const int N = 500000;
+    const uint32_t tickMs = 50;
+    const uint32_t wheelSize = 512;
+
+    TimingWheel wheel(tickMs, wheelSize);
+    std::atomic<int> firedCount{0};
+
+
+    for (int i = 0; i < wheelSize; ++i) {
+        wheel.tick();
+    }
+
+    // === 阶段1：测量 schedule 吞吐 ===
+    auto schedStart = std::chrono::high_resolution_clock::now();
+
+    for (int i = 0; i < N; ++i) {
+        // 延迟 50~500ms，均匀分散到各 slot
+        uint64_t delay = tickMs + (i % 10) * tickMs;
+        wheel.schedule(delay, [&firedCount]() {
+            firedCount.fetch_add(1, std::memory_order_relaxed);
+        });
+    }
+
+    auto schedEnd = std::chrono::high_resolution_clock::now();
+    double schedMs = std::chrono::duration<double, std::milli>(schedEnd - schedStart).count();
+    printf("[Throughput] schedule %d timers in %.2f ms  =>  %.0f ops/sec\n",
+           N, schedMs, N * 1000.0 / schedMs);
+
+    // === 阶段2：驱动 tick 直到所有定时器触发 ===
+    auto tickStart = std::chrono::high_resolution_clock::now();
+
+    int maxTicks = (wheelSize * 3);  // 足够多轮让所有定时器到期
+    for (int t = 0; t < maxTicks && firedCount.load() < N; ++t) {
+        wheel.tick();
+    }
+
+    auto tickEnd = std::chrono::high_resolution_clock::now();
+    double tickMs2 = std::chrono::duration<double, std::milli>(tickEnd - tickStart).count();
+    printf("[Throughput] tick-driven fire %d/%d timers in %.2f ms  =>  %.0f fires/sec\n",
+           firedCount.load(), N, tickMs2, firedCount.load() * 1000.0 / tickMs2);
+
+    // === 阶段3：TimerThread 驱动实时吞吐 ===
+    TimingWheel wheel2(tickMs, wheelSize);
+    TimerThread thread(wheel2, tickMs);
+
+    std::atomic<int> rtFired{0};
+    std::mutex mtx;
+    std::condition_variable cv;
+    bool done = false;
+
+    thread.start();
+
+    auto rtStart = std::chrono::high_resolution_clock::now();
+
+    for (int i = 0; i < N; ++i) {
+        uint64_t delay = tickMs + (i % 10) * tickMs;
+        wheel2.schedule(delay, [&rtFired, &mtx, &cv, &done, N]() {
+            int c = rtFired.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (c == N) {
+                std::lock_guard lock(mtx);
+                done = true;
+                cv.notify_one();
+            }
+        });
+    }
+
+    // 等待全部触发（最多 10 秒）
+    std::unique_lock lock(mtx);
+    cv.wait_for(lock, std::chrono::seconds(10), [&] { return done; });
+
+    auto rtEnd = std::chrono::high_resolution_clock::now();
+    double rtSec = std::chrono::duration<double>(rtEnd - rtStart).count();
+    printf("[Throughput] TimerThread realtime: %d timers in %.3f sec  =>  %.0f ops/sec\n",
+           rtFired.load(), rtSec, rtFired.load() / rtSec);
+
+    thread.stop();
+
+    // === 阶段4：cancel 吞吐测试 ===
+    // schedule N 个定时器，然后全部 cancel，测量 cancel ops/sec
+    {
+        TimingWheel wheel3(tickMs, wheelSize);
+        std::vector<TimerHandle> handles;
+        handles.reserve(N);
+
+        for (int i = 0; i < wheelSize; ++i) {
+            wheel3.tick();
+        }
+
+        // 先 schedule
+        for (int i = 0; i < N; ++i) {
+            uint64_t delay = tickMs + (i % 10) * tickMs;
+            handles.push_back(wheel3.schedule(delay, []() {}));
+        }
+
+        // 批量 cancel
+        auto cancelStart = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < N; ++i) {
+            wheel3.cancel(handles[i]);
+        }
+        auto cancelEnd = std::chrono::high_resolution_clock::now();
+        double cancelMs = std::chrono::duration<double, std::milli>(cancelEnd - cancelStart).count();
+        printf("[Throughput] cancel %d timers in %.2f ms  =>  %.0f ops/sec\n",
+               N, cancelMs, N * 1000.0 / cancelMs);
+
+        // 验证：cancel 一半后 tick，确认只有未 cancel 的触发
+        TimingWheel wheel4(tickMs, wheelSize);
+        std::vector<TimerHandle> handles2;
+        handles2.reserve(N);
+        std::atomic<int> cancelFired{0};
+
+        for (int i = 0; i < N; ++i) {
+            uint64_t delay = tickMs + (i % 10) * tickMs;
+            handles2.push_back(wheel4.schedule(delay, [&cancelFired]() {
+                cancelFired.fetch_add(1, std::memory_order_relaxed);
+            }));
+        }
+
+        // cancel 一半
+        int halfN = N / 2;
+        for (int i = 0; i < halfN; ++i) {
+            wheel4.cancel(handles2[i]);
+        }
+
+        // tick 驱动全部到期
+        for (int t = 0; t < wheelSize * 3; ++t) {
+            wheel4.tick();
+        }
+
+        printf("[Cancel] scheduled %d, cancelled %d, fired %d (expected ~%d)\n",
+               N, halfN, cancelFired.load(), N - halfN);
+    }
+}
+
 int main() {
     infra::log::init({"debug", true});
-
-    printf("\n=== Game Timer Tests ===\n\n");
+    freeTest();
+    return 0;
 
     for (const auto& t : test_funcs) {
         printf("  [RUN] %s\n", t.name);

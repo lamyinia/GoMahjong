@@ -7,7 +7,7 @@
 #include <functional>
 #include <string>
 
-namespace domain::game::engine::mahjong::timer {
+namespace domain::game::mahjong::timer {
 
     enum class TickerState {
         Idle,       // 空闲
@@ -24,8 +24,7 @@ namespace domain::game::engine::mahjong::timer {
         using StateChangeCallback = std::function<void(TickerState oldState, TickerState newState)>;
         using StopCallback = std::function<void()>;
 
-        explicit PlayerTicker(int seatIndex, int totalAvailableTime,
-                               infra::util::TimingWheel* wheel = nullptr);
+        explicit PlayerTicker(int seatIndex, int totalAvailableTime, infra::util::TimingWheel* wheel = nullptr);
 
         // 启动计时，duration: 本次分配时间（秒），onTimeout: 定时器到期回调（在 TimerThread 调用）
         bool start(int duration, TimeoutCallback onTimeout);

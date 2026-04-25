@@ -132,6 +132,35 @@ Config Config::load_from_file(const std::string& path) {
                 cfg.server_.debug.enabled = debug.at("enabled").get<bool>();
             }
         }
+
+        // Parse game
+        if (server.contains("game")) {
+            const auto& game = server["game"];
+            if (game.contains("riichi_mahjong_4p")) {
+                const auto& rm4p = game["riichi_mahjong_4p"];
+                if (rm4p.contains("player_count")) {
+                    cfg.server_.game.riichi_mahjong_4p.player_count = rm4p.at("player_count").get<std::uint32_t>();
+                }
+                if (rm4p.contains("initial_points")) {
+                    cfg.server_.game.riichi_mahjong_4p.initial_points = rm4p.at("initial_points").get<std::int32_t>();
+                }
+                if (rm4p.contains("total_time")) {
+                    cfg.server_.game.riichi_mahjong_4p.total_time = rm4p.at("total_time").get<std::int32_t>();
+                }
+                if (rm4p.contains("compensation")) {
+                    cfg.server_.game.riichi_mahjong_4p.compensation = rm4p.at("compensation").get<std::int32_t>();
+                }
+                if (rm4p.contains("max_round_time")) {
+                    cfg.server_.game.riichi_mahjong_4p.max_round_time = rm4p.at("max_round_time").get<std::int32_t>();
+                }
+                if (rm4p.contains("react_compensation")) {
+                    cfg.server_.game.riichi_mahjong_4p.react_compensation = rm4p.at("react_compensation").get<std::int32_t>();
+                }
+                if (rm4p.contains("round_start_delay_ms")) {
+                    cfg.server_.game.riichi_mahjong_4p.round_start_delay_ms = rm4p.at("round_start_delay_ms").get<std::int32_t>();
+                }
+            }
+        }
     }
 
     return cfg;
