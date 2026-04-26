@@ -3,7 +3,8 @@
 import { wsClient } from './ws';
 import { gameBoard } from './ui/board';
 import { tileToName } from './ui/tile';
-import type { WSMessage, LogMessage, PlayerInfo, Tile, GameState } from './types';
+import type { WSMessage, LogMessage, PlayerInfo, Tile, GameStatePush, RoundStartPush, DrawTilePush } from './types';
+import { Route } from './types';
 
 // State
 let currentPlayerId: string | null = null;
@@ -22,7 +23,6 @@ const showPayloadCheckbox = document.getElementById('showPayload') as HTMLInputE
 
 // Action buttons
 const actionButtons = {
-  draw: document.getElementById('actionDraw') as HTMLButtonElement,
   chi: document.getElementById('actionChi') as HTMLButtonElement,
   pon: document.getElementById('actionPon') as HTMLButtonElement,
   kan: document.getElementById('actionKan') as HTMLButtonElement,
@@ -65,14 +65,13 @@ function bindEvents() {
   disconnectBtn.addEventListener('click', disconnect);
   
   // Actions
-  actionButtons.draw.addEventListener('click', () => sendAction('game.draw'));
-  actionButtons.chi.addEventListener('click', () => sendAction('game.chi'));
-  actionButtons.pon.addEventListener('click', () => sendAction('game.pon'));
-  actionButtons.kan.addEventListener('click', () => sendAction('game.kan'));
-  actionButtons.ron.addEventListener('click', () => sendAction('game.ron'));
-  actionButtons.tsumo.addEventListener('click', () => sendAction('game.tsumo'));
-  actionButtons.riichi.addEventListener('click', () => sendAction('game.riichi'));
-  actionButtons.pass.addEventListener('click', () => sendAction('game.pass'));
+  actionButtons.chi.addEventListener('click', () => sendMeldAction('CHI'));
+  actionButtons.pon.addEventListener('click', () => sendMeldAction('PENG'));
+  actionButtons.kan.addEventListener('click', () => sendMeldAction('GANG'));
+  actionButtons.ron.addEventListener('click', () => sendMeldAction('HU'));
+  actionButtons.tsumo.addEventListener('click', () => sendMeldAction('HU'));
+  actionButtons.riichi.addEventListener('click', () => sendRiichi());
+  actionButtons.pass.addEventListener('click', () => sendAction(Route.SKIP));
   
   // Custom action
   sendCustomBtn.addEventListener('click', sendCustomAction);
@@ -166,11 +165,34 @@ function handleMessage(msg: WSMessage) {
   
   // Handle specific routes
   switch (msg.route) {
-    case 'game.state':
-      const state = msg.payload as GameState;
+    case Route.ROUND_START: {
+      const push = msg.payload as RoundStartPush;
+      gameBoard.update({
+        handTiles: push.handTiles,
+        doraIndicators: push.doraIndicators,
+        currentTurn: push.currentTurn,
+        situation: push.situation,
+        seats: push.seats,
+        players: [],
+        remainingTiles: 0,
+        operations: [],
+        availableSecs: 0,
+      });
+      addLog('INFO', `Round start: ${push.situation.roundWind}${push.situation.roundNumber} honba=${push.situation.honba}`);
+      break;
+    }
+
+    case Route.DRAW_TILE: {
+      const push = msg.payload as DrawTilePush;
+      addLog('INFO', `Draw: ${tileToName(push.tile)}${push.isKanDraw ? ' (kan)' : ''}`);
+      break;
+    }
+
+    case Route.GAME_STATE:
+      const state = msg.payload as GameStatePush;
       gameBoard.update(state);
       break;
-      
+
     case 'auth.login.response':
       const authResp = msg.payload as { success: boolean; pid?: number; message?: string };
       if (authResp.success) {
@@ -228,6 +250,38 @@ function clearLog() {
   logContainerEl.innerHTML = '';
 }
 
+function sendMeldAction(actionType: string) {
+  if (!wsClient.isConnected()) {
+    addLog('ERROR', 'Not connected');
+    return;
+  }
+  if (!selectedTile) {
+    addLog('ERROR', 'Select a tile first');
+    return;
+  }
+  const payload = { actionType, tiles: [selectedTile] };
+  if (wsClient.send(Route.MELD, payload)) {
+    addLog('SEND', Route.MELD, payload);
+  }
+}
+
+function sendRiichi() {
+  if (!wsClient.isConnected()) {
+    addLog('ERROR', 'Not connected');
+    return;
+  }
+  if (!selectedTile) {
+    addLog('ERROR', 'Select a tile to discard for riichi');
+    return;
+  }
+  const payload = { tile: selectedTile };
+  if (wsClient.send(Route.RIICHI, payload)) {
+    addLog('SEND', Route.RIICHI, payload);
+    gameBoard.clearSelection();
+    selectedTile = null;
+  }
+}
+
 function sendAction(route: string, extraPayload?: Record<string, unknown>) {
   if (!wsClient.isConnected()) {
     addLog('ERROR', 'Not connected');
@@ -237,7 +291,7 @@ function sendAction(route: string, extraPayload?: Record<string, unknown>) {
   let payload: Record<string, unknown> = extraPayload || {};
   
   // Add selected tile for play action
-  if (route === 'game.playTile' && selectedTile) {
+  if (route === Route.PLAY_TILE && selectedTile) {
     payload.tile = selectedTile;
     gameBoard.clearSelection();
     selectedTile = null;

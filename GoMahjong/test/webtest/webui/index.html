@@ -3,36 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mahjong Test Client</title>
+    <title>日麻客户端</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <div id="app">
         <!-- Header -->
         <header class="header">
-            <h1>Mahjong Test Client</h1>
-            <div class="status" id="status">Not connected</div>
+            <h1>日麻客户端</h1>
+            <div class="status" id="status">未连接</div>
         </header>
 
         <!-- Connection Panel -->
         <section class="panel connect-panel">
-            <h2>Connection</h2>
+            <h2>连接</h2>
             <div class="form-row">
-                <input type="text" id="playerId" placeholder="Player ID" value="player_001">
-                <input type="text" id="token" placeholder="Token (optional)">
-                <button id="connectBtn">Connect</button>
-                <button id="disconnectBtn" disabled>Disconnect</button>
+                <input type="text" id="playerId" placeholder="玩家ID" value="player_001">
+                <input type="text" id="token" placeholder="Token (可选)">
+                <button id="connectBtn">连接</button>
+                <button id="disconnectBtn" disabled>断开连接</button>
             </div>
         </section>
 
-        <!-- Game Board -->
         <section class="panel board-panel">
-            <h2>Game Board</h2>
+            <h2>游戏面板</h2>
             <div class="board" id="board">
                 <!-- Player 2 (Top) -->
                 <div class="player-area player-top">
                     <div class="player-info">
-                        <span class="player-name">Player 2</span>
+                        <span class="player-name">玩家 2</span>
                         <span class="player-points">25000</span>
                     </div>
                     <div class="discard-area" id="discard-2"></div>
@@ -41,7 +40,7 @@
                 <!-- Player 3 (Right) -->
                 <div class="player-area player-right">
                     <div class="player-info">
-                        <span class="player-name">Player 3</span>
+                        <span class="player-name">玩家 3</span>
                         <span class="player-points">25000</span>
                     </div>
                     <div class="discard-area" id="discard-3"></div>
@@ -50,7 +49,7 @@
                 <!-- Player 4 (Bottom - Self) -->
                 <div class="player-area player-bottom self">
                     <div class="player-info">
-                        <span class="player-name">Player 4 (You)</span>
+                        <span class="player-name">玩家 4 (You)</span>
                         <span class="player-points">25000</span>
                     </div>
                     <div class="hand-area" id="hand"></div>
@@ -60,7 +59,7 @@
                 <!-- Player 1 (Left) -->
                 <div class="player-area player-left">
                     <div class="player-info">
-                        <span class="player-name">Player 1</span>
+                        <span class="player-name">玩家 1</span>
                         <span class="player-points">25000</span>
                     </div>
                     <div class="discard-area" id="discard-1"></div>
@@ -84,18 +83,17 @@
             </div>
         </section>
 
-        <!-- Action Panel -->
         <section class="panel action-panel">
-            <h2>Actions</h2>
+            <h2>操作，需要选择手牌</h2>
             <div class="action-buttons">
-                <button id="actionDraw" disabled>Draw (DrawTile)</button>
-                <button id="actionChi" disabled>Chi (Chi)</button>
-                <button id="actionPon" disabled>Pon (Pon)</button>
-                <button id="actionKan" disabled>Kan (Kan)</button>
-                <button id="actionRon" disabled>Ron (Ron)</button>
-                <button id="actionTsumo" disabled>Tsumo (Tsumo)</button>
-                <button id="actionRiichi" disabled>Riichi</button>
-                <button id="actionPass" disabled>Pass</button>
+                <button id="actionDraw" disabled>打牌</button>
+                <button id="actionChi" disabled>吃</button>
+                <button id="actionPon" disabled>碰</button>
+                <button id="actionKan" disabled>杠</button>
+                <button id="actionRon" disabled>和</button>
+                <button id="actionTsumo" disabled>自摸</button>
+                <button id="actionRiichi" disabled>立直</button>
+                <button id="actionPass" disabled>跳过</button>
             </div>
             <div class="custom-action">
                 <input type="text" id="customRoute" placeholder="Route (e.g., game.play)">
@@ -106,12 +104,12 @@
 
         <!-- Players Panel -->
         <section class="panel players-panel">
-            <h2>Connected Players</h2>
+            <h2>连接的玩家</h2>
             <div class="players-list" id="playersList">
-                <p>No players connected</p>
+                <p>没有玩家连接</p>
             </div>
             <div class="add-player">
-                <input type="text" id="newPlayerId" placeholder="New Player ID">
+                <input type="text" id="newPlayerId" placeholder="新玩家ID">
                 <input type="text" id="newPlayerToken" placeholder="Token">
                 <button id="addPlayerBtn">Add Player</button>
             </div>
@@ -119,10 +117,10 @@
 
         <!-- Log Panel -->
         <section class="panel log-panel">
-            <h2>Message Log</h2>
+            <h2>消息日志</h2>
             <div class="log-controls">
-                <button id="clearLogBtn">Clear</button>
-                <label><input type="checkbox" id="showPayload" checked> Show Payload</label>
+                <button id="clearLogBtn">清空</button>
+                <label><input type="checkbox" id="showPayload" checked> 显示Payload</label>
             </div>
             <div class="log-container" id="logContainer"></div>
         </section>

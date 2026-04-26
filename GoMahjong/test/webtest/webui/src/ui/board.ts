@@ -1,6 +1,6 @@
 // Game board rendering
 
-import type { GameState, Tile } from '../types';
+import type { GameStatePush, Tile } from '../types';
 import { renderTilesTo, createTileElement } from './tile';
 
 export class GameBoard {
@@ -30,7 +30,7 @@ export class GameBoard {
     this.onTileSelect = callback;
   }
 
-  update(state: GameState) {
+  update(state: GameStatePush) {
     // Update hand tiles
     this.renderHand(state.handTiles);
     

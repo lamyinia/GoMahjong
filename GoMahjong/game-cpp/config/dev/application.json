@@ -41,9 +41,9 @@
       "riichi_mahjong_4p": {
         "player_count": 4,
         "initial_points": 25000,
-        "total_time": 300,
+        "total_time": 30000,
         "compensation": 5,
-        "max_round_time": 30,
+        "max_round_time": 30000,
         "react_compensation": 5,
         "round_start_delay_ms": 10000
       }

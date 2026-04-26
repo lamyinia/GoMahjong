@@ -38,7 +38,6 @@ func (s *WebServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Attach WebSocket to session
 	session.WSConnMu.Lock()
 	session.WSConn = conn
 	session.WSConnMu.Unlock()
@@ -46,7 +45,6 @@ func (s *WebServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	log.Info("WebSocket connected", "playerId", initMsg.PlayerID)
 	s.sendLog(session, "INFO", "WebSocket connected")
 
-	// Start log forwarder
 	logDone := make(chan struct{})
 	go s.forwardLogs(session, conn, logDone)
 

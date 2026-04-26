@@ -23,7 +23,7 @@ namespace domain::game::engine {
     RiichiMahjong4PEngine::RiichiMahjong4PEngine() = default;
 
     void RiichiMahjong4PEngine::handleEvent(const event::GameEvent &event) {
-        LOG_DEBUG(" handle event type: {}", static_cast<int>(event.type));
+        LOG_DEBUG("handle event type: {}", static_cast<int>(event.type));
 
         switch (event.type) {
             // 局流程
@@ -48,7 +48,7 @@ namespace domain::game::engine {
             HANDLE_EVENT(PlayerTimeout, event::PlayerTimeoutEvent, handlePlayerTimeout);
 
             default:
-                LOG_WARN(" unhandled event type: {}", static_cast<int>(event.type));
+                LOG_WARN("unhandled event type: {}", static_cast<int>(event.type));
                 break;
         }
     }
@@ -70,10 +70,7 @@ namespace domain::game::engine {
         deck_manager_.initRound();
         deck_manager_.revealDoraIndicator();
 
-        // 发牌
         distributeCards();
-
-        // 推送 RoundStart（每人手牌不同）
         broadcastRoundStart();
 
         // 庄家摸第14张牌并推送
@@ -197,14 +194,14 @@ namespace domain::game::engine {
         // TODO: 实现超时逻辑（自动出牌/跳过操作）
     }
 
-    void RiichiMahjong4PEngine::onPlayerJoin(const std::string &userId) {
-        players_.insert(userId);
-        LOG_INFO("player {} joined, total: {}", userId, players_.size());
+    void RiichiMahjong4PEngine::onPlayerJoin(const std::string &playerId) {
+        players_.insert(playerId);
+        LOG_INFO("player {} joined, total: {}", playerId, players_.size());
     }
 
-    void RiichiMahjong4PEngine::onPlayerLeave(const std::string &userId) {
-        players_.erase(userId);
-        LOG_INFO("player {} left, total: {}", userId, players_.size());
+    void RiichiMahjong4PEngine::onPlayerLeave(const std::string &playerId) {
+        players_.erase(playerId);
+        LOG_INFO("player {} left, total: {}", playerId, players_.size());
     }
 
     std::size_t RiichiMahjong4PEngine::playerCount() const {
@@ -228,8 +225,8 @@ namespace domain::game::engine {
         return {};
     }
 
-    std::string RiichiMahjong4PEngine::getPlayerState(const std::string &userId) const {
-        (void)userId;
+    std::string RiichiMahjong4PEngine::getPlayerState(const std::string &playerId) const {
+        (void)playerId;
         return {};
     }
 
