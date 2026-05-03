@@ -10,6 +10,7 @@
 
 namespace domain::game::engine {
     using EventType = event::EventType;
+    using TickerState = mj::timer::TickerState;
 
 #define HANDLE_EVENT(type, eventType, handler) \
     case EventType::type: \
@@ -32,7 +33,7 @@ namespace domain::game::engine {
 
             // 出牌相关
             HANDLE_EVENT(PlayTile, event::PlayTileEvent, handlePlayTile);
-            HANDLE_EVENT(DrawTile, event::DrawTileEvent, handleDrawTile);
+            HANDLE_EVENT(Riichi, event::RiichiEvent, handleRiichi);
 
             // 副露
             HANDLE_EVENT(Chi, event::ChiEvent, handleChi);
@@ -42,7 +43,11 @@ namespace domain::game::engine {
             // 胡牌
             HANDLE_EVENT(Ron, event::RonEvent, handleRon);
             HANDLE_EVENT(Tsumo, event::TsumoEvent, handleTsumo);
-            HANDLE_EVENT(Draw, event::DrawEvent, handleDraw);
+
+            // 反应
+            HANDLE_EVENT(Skip, event::SkipEvent, handleSkip);
+            HANDLE_EVENT(KyuushuKyuukai, event::KyuushuKyuukaiEvent, handleKyuushuKyuukai);
+            HANDLE_EVENT(Snapshoot, event::SnapshootEvent, handleSnapshoot);
 
             // 超时
             HANDLE_EVENT(PlayerTimeout, event::PlayerTimeoutEvent, handlePlayerTimeout);
@@ -63,7 +68,7 @@ namespace domain::game::engine {
     }
 
     void RiichiMahjong4PEngine::startRound() {
-        LOG_INFO("round start: wind={}, round={}, dealer={}, honba={}, sticks={}",
+        LOG_DEBUG("round start: wind={}, round={}, dealer={}, honba={}, sticks={}",
                  static_cast<int>(situation_.round_wind), situation_.round_number,
                  situation_.dealer_index, situation_.honba, situation_.riichi_sticks);
 
@@ -131,16 +136,46 @@ namespace domain::game::engine {
         if (turnManager_) {
             turnManager_->enterMainActionPhase(seatIndex);
         }
+        // 计算可选操作并推送
+        computeMainActions(seatIndex);
+        pushOperations(seatIndex);
     }
 
     void RiichiMahjong4PEngine::handlePlayTile(const event::PlayTileEvent& e) {
-        (void)e;
-        // TODO: 实现出牌逻辑
+        int seat = getSeatIndex(e.playerId);
+        if (seat < 0) {
+            LOG_WARN("playTile: unknown player {}", e.playerId);
+            return;
+        }
+
+        auto* p = getPlayer(seat);
+        if (!p) return;
+        if (turnManager_) {
+            turnManager_->stopTickerForSeat(seat);
+        }
+
+        // 出牌：从手牌移到弃牌堆
+        if (!p->discardTile(e.tile)) {
+            LOG_WARN("playTile: player {} cannot discard tile type={} id={}",
+                     e.playerId, static_cast<int>(e.tile.type), e.tile.id);
+            return;
+        }
+
+        // 记录最后出牌
+        last_discard_.seat = seat;
+        last_discard_.tile = e.tile;
+        last_discard_.valid = true;
+
+        // 广播出牌
+        broadcastDiscardTile(seat, e.tile);
+
+        // 进入反应阶段
+        enterReactionPhase();
     }
 
-    void RiichiMahjong4PEngine::handleDrawTile(const event::DrawTileEvent& e) {
+    void RiichiMahjong4PEngine::handleRiichi(const event::RiichiEvent& e) {
         (void)e;
-        // TODO: 实现摸牌逻辑
+        // TODO: 实现立直逻辑
     }
 
     void RiichiMahjong4PEngine::handleChi(const event::ChiEvent& e) {
@@ -172,11 +207,59 @@ namespace domain::game::engine {
         if (context_) context_->notifyGameOver();
     }
 
-    void RiichiMahjong4PEngine::handleDraw(const event::DrawEvent& e) {
-        (void)e;
-        // TODO: 实现流局逻辑
+    void RiichiMahjong4PEngine::handleSkip(const event::SkipEvent& e) {
+        LOG_DEBUG("player {} skip", e.playerId);
 
-        if (context_) context_->notifyGameOver();
+        int seat = getSeatIndex(e.playerId);
+        if (seat < 0) {
+            LOG_WARN("skip: unknown player {}", e.playerId);
+            return;
+        }
+
+        // 停止该玩家的 ticker
+        if (turnManager_) {
+            turnManager_->stopTickerForSeat(seat);
+        }
+
+        // 记录跳过反应
+        mj::PlayerOperation skipOp;
+        skipOp.type = "SKIP";
+        recordReaction(seat, skipOp);
+
+        // 检查反应是否全部收集完毕
+        if (isReactionComplete()) {
+            if (turnManager_) {
+                turnManager_->enterResolvePhase();
+            }
+            resolveReactions();
+        }
+    }
+
+    void RiichiMahjong4PEngine::handleKyuushuKyuukai(const event::KyuushuKyuukaiEvent& e) {
+        LOG_DEBUG("player {} declares kyuushu kyuukai", e.playerId);
+
+        int seat = getSeatIndex(e.playerId);
+        if (seat < 0) {
+            LOG_WARN("kyuushu kyuukai: unknown player {}", e.playerId);
+            return;
+        }
+
+        // TODO: 验证该玩家手牌是否满足九种九牌条件，满足则触发流局
+    }
+
+    void RiichiMahjong4PEngine::handleSnapshoot(const event::SnapshootEvent& e) {
+        LOG_DEBUG("player {} snapshoot", e.playerId);
+
+        int seat = getSeatIndex(e.playerId);
+        if (seat < 0) {
+            LOG_WARN("snapshoot: unknown player {}", e.playerId);
+            return;
+        }
+
+        // TODO: 构建 GameStatePush protobuf 并通过 context_->send 推送给该玩家
+        // gomahjong::game::GameStatePush push;
+        // ... 填充快照数据 ...
+        // context_->send(e.playerId, handler::route::kGameState, push);
     }
 
     void RiichiMahjong4PEngine::handlePlayerTimeout(const event::PlayerTimeoutEvent& e) {
@@ -196,12 +279,12 @@ namespace domain::game::engine {
 
     void RiichiMahjong4PEngine::onPlayerJoin(const std::string &playerId) {
         players_.insert(playerId);
-        LOG_INFO("player {} joined, total: {}", playerId, players_.size());
+        LOG_DEBUG("player {} joined, total: {}", playerId, players_.size());
     }
 
     void RiichiMahjong4PEngine::onPlayerLeave(const std::string &playerId) {
         players_.erase(playerId);
-        LOG_INFO("player {} left, total: {}", playerId, players_.size());
+        LOG_DEBUG("player {} left, total: {}", playerId, players_.size());
     }
 
     std::size_t RiichiMahjong4PEngine::playerCount() const {
@@ -309,7 +392,7 @@ namespace domain::game::engine {
             );
         }
 
-        LOG_INFO("timer system initialized for room {}",context_ ? context_->roomId() : "unknown");
+        LOG_DEBUG("timer system initialized for room {}",context_ ? context_->roomId() : "unknown");
     }
 
     int RiichiMahjong4PEngine::getSeatIndex(const std::string& playerId) const {

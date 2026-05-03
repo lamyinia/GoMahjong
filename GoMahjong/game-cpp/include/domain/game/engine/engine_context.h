@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace google::protobuf {
@@ -41,9 +42,18 @@ namespace domain::game::engine {
                        const google::protobuf::Message& dto,
                        outbound::ProtocolPreference preference = outbound::ProtocolPreference::PreferTcp);
 
+        void broadcast(std::string_view route,
+                       const google::protobuf::Message& dto,
+                       outbound::ProtocolPreference preference = outbound::ProtocolPreference::PreferTcp);
+
         // Engine 调用：向指定玩家推送
         void send(const std::string& playerId,
                   const std::string& route,
+                  const google::protobuf::Message& dto,
+                  outbound::ProtocolPreference preference = outbound::ProtocolPreference::PreferTcp);
+
+        void send(const std::string& playerId,
+                  std::string_view route,
                   const google::protobuf::Message& dto,
                   outbound::ProtocolPreference preference = outbound::ProtocolPreference::PreferTcp);
 

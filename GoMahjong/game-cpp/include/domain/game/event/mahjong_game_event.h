@@ -12,8 +12,8 @@ namespace domain::game::event {
     enum class EventType {
         // 出牌相关
         PlayTile,       // 出牌
-        DrawTile,       // 摸牌
-        
+        Riichi,         // 立直
+
         // 副露
         Chi,            // 吃
         Pon,            // 碰
@@ -24,6 +24,11 @@ namespace domain::game::event {
         Tsumo,          // 自摸
         Draw,           // 流局
         
+        // 反应
+        Skip,           // 跳过（不吃不碰不和）
+        KyuushuKyuukai, // 九种九牌流局宣告
+        Snapshoot,      // 请求快照（重连）
+
         // 超时
         PlayerTimeout,  // 玩家超时
 
@@ -44,10 +49,10 @@ namespace domain::game::event {
         Tile tile;
     };
 
-    // 摸牌事件
-    struct DrawTileEvent {
+    // 立直事件
+    struct RiichiEvent {
         std::string playerId;
-        Tile tile;
+        Tile tile;           // 立直时打出的牌
     };
 
     // 吃事件
@@ -89,6 +94,21 @@ namespace domain::game::event {
         bool isKyuushuKyuukai = false;  // 是否九种九牌流局
     };
 
+    // 跳过事件（反应阶段放弃操作）
+    struct SkipEvent {
+        std::string playerId;
+    };
+
+    // 九种九牌流局宣告事件
+    struct KyuushuKyuukaiEvent {
+        std::string playerId;
+    };
+
+    // 快照请求事件（重连用）
+    struct SnapshootEvent {
+        std::string playerId;
+    };
+
     // 玩家超时事件
     struct PlayerTimeoutEvent {
         std::string playerId;
@@ -128,13 +148,16 @@ namespace domain::game::event {
         // 使用 variant 存储不同类型的事件数据
         std::variant<
             PlayTileEvent,
-            DrawTileEvent,
+            RiichiEvent,
             ChiEvent,
             PonEvent,
             KanEvent,
             RonEvent,
             TsumoEvent,
             DrawEvent,
+            SkipEvent,
+            KyuushuKyuukaiEvent,
+            SnapshootEvent,
             PlayerTimeoutEvent,
             TurnStartEvent,
             TurnEndEvent,
@@ -151,10 +174,10 @@ namespace domain::game::event {
             return e;
         }
 
-        static GameEvent drawTile(const std::string& playerId, const Tile& tile) {
+        static GameEvent riichi(const std::string& playerId, const Tile& tile) {
             GameEvent e;
-            e.type = EventType::DrawTile;
-            e.data = DrawTileEvent{playerId, tile};
+            e.type = EventType::Riichi;
+            e.data = RiichiEvent{playerId, tile};
             return e;
         }
 
@@ -197,6 +220,27 @@ namespace domain::game::event {
             GameEvent e;
             e.type = EventType::Draw;
             e.data = DrawEvent{isKyuushuKyuukai};
+            return e;
+        }
+
+        static GameEvent skip(const std::string& playerId) {
+            GameEvent e;
+            e.type = EventType::Skip;
+            e.data = SkipEvent{playerId};
+            return e;
+        }
+
+        static GameEvent kyuushuKyuukai(const std::string& playerId) {
+            GameEvent e;
+            e.type = EventType::KyuushuKyuukai;
+            e.data = KyuushuKyuukaiEvent{playerId};
+            return e;
+        }
+
+        static GameEvent snapshoot(const std::string& playerId) {
+            GameEvent e;
+            e.type = EventType::Snapshoot;
+            e.data = SnapshootEvent{playerId};
             return e;
         }
 

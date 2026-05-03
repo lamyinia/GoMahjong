@@ -78,21 +78,33 @@ namespace domain::game::engine {
         void distributeCards();
         void dropTurn(int seatIndex, bool needDraw);
 
+        // ---- 操作计算与反应收集（定义在 riichi_mahjong4p_opt_selector.cpp）----
+        void computeMainActions(int seatIndex);
+        void computeReactions(int seatIndex);
+        void enterReactionPhase();
+        void recordReaction(int seat, const mj::PlayerOperation& chosenOp);
+        [[nodiscard]] bool isReactionComplete() const;
+        void resolveReactions();
+
         // ---- 推送方法（定义在 riichi_mahjong4p_push.cpp）----
         void broadcastRoundStart();
+        void broadcastDiscardTile(int seatIndex, const mj::Tile& tile);
         void pushDrawTile(int seatIndex, const mj::Tile& tile, bool isKanDraw = false);
+        void pushOperations(int seatIndex);
 
         // ---- 事件处理 ----
         void handleRoundStart(const event::RoundStartEvent& e);
         void handleRoundEnd(const event::RoundEndEvent& e);
         void handlePlayTile(const event::PlayTileEvent& e);
-        void handleDrawTile(const event::DrawTileEvent& e);
+        void handleRiichi(const event::RiichiEvent& e);
         void handleChi(const event::ChiEvent& e);
         void handlePon(const event::PonEvent& e);
         void handleKan(const event::KanEvent& e);
         void handleRon(const event::RonEvent& e);
         void handleTsumo(const event::TsumoEvent& e);
-        void handleDraw(const event::DrawEvent& e);
+        void handleSkip(const event::SkipEvent& e);
+        void handleKyuushuKyuukai(const event::KyuushuKyuukaiEvent& e);
+        void handleSnapshoot(const event::SnapshootEvent& e);
         void handlePlayerTimeout(const event::PlayerTimeoutEvent& e);
     };
 

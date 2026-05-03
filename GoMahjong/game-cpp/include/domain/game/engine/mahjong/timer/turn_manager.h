@@ -74,6 +74,9 @@ namespace domain::game::mahjong::timer {
         // 返回 true 表示成功应用（ticker 仍为 Running），false 表示已非 Running（玩家已操作）
         bool applyTimeout(int seatIndex);
 
+        // 停止指定座位的 ticker（玩家已操作）
+        void stopTickerForSeat(int seatIndex);
+
     private:
         void stopAllTickers();
         void onTickerTimeout(int seatIndex);  // 定时器到期回调（TimerThread 线程）

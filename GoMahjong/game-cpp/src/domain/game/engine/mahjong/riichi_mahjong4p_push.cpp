@@ -1,4 +1,5 @@
 #include "domain/game/engine/mahjong/riichi_mahjong4p_engine.h"
+#include "domain/game/handler/mahjong_event_handler.h"
 
 #include "infrastructure/log/logger.hpp"
 #include "generated/game_mahjong.pb.h"
@@ -66,10 +67,10 @@ namespace domain::game::engine {
 
             push.set_current_turn(currentTurn);
 
-            context_->send(p->playerId(), "game.round.start", push);
+            context_->send(p->playerId(), handler::route::kRoundStart, push);
         }
 
-        LOG_INFO("broadcastRoundStart done, dora count={}", doraIndicators.size());
+        LOG_DEBUG("broadcastRoundStart done, dora count={}", doraIndicators.size());
     }
 
     void RiichiMahjong4PEngine::pushDrawTile(int seatIndex, const mj::Tile& tile, bool isKanDraw) {
@@ -84,7 +85,59 @@ namespace domain::game::engine {
         t->set_id(tile.id);
         push.set_is_kan_draw(isKanDraw);
 
-        context_->send(p->playerId(), "game.draw.tile", push);
+        context_->send(p->playerId(), handler::route::kDrawTile, push);
+    }
+
+    void RiichiMahjong4PEngine::broadcastDiscardTile(int seatIndex, const mj::Tile& tile) {
+        if (!context_) return;
+
+        gomahjong::game::DiscardTilePush push;
+        push.set_seat_index(seatIndex);
+        auto* t = push.mutable_tile();
+        t->set_type(static_cast<int>(tile.type));
+        t->set_id(tile.id);
+
+        // 广播给所有玩家
+        for (int i = 0; i < 4; ++i) {
+            auto* p = getPlayer(i);
+            if (p) {
+                context_->send(p->playerId(), handler::route::kDiscardTile, push);
+            }
+        }
+    }
+
+    void RiichiMahjong4PEngine::pushOperations(int seatIndex) {
+        if (!context_) return;
+
+        auto* p = getPlayer(seatIndex);
+        if (!p) return;
+
+        auto it = reactions_.find(seatIndex);
+        if (it == reactions_.end() || it->second.operations.empty()) return;
+
+        gomahjong::game::OperationsPush push;
+
+        for (const auto& op : it->second.operations) {
+            auto* protoOp = push.add_operations();
+            protoOp->set_type(op.type);
+            for (const auto& tile : op.tiles) {
+                auto* t = protoOp->add_tiles();
+                t->set_type(static_cast<int>(tile.type));
+                t->set_id(tile.id);
+            }
+        }
+
+        // 获取可用时间
+        int availableSecs = 0;
+        if (turnManager_) {
+            auto* ticker = turnManager_->getPlayerTicker(seatIndex);
+            if (ticker) {
+                availableSecs = ticker->getAvailable();
+            }
+        }
+        push.set_available_secs(availableSecs);
+
+        context_->send(p->playerId(), handler::route::kOperations, push);
     }
 
 } // namespace domain::game::engine

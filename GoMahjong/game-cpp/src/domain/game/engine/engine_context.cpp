@@ -3,6 +3,8 @@
 
 #include <google/protobuf/message.h>
 
+#include <string>
+
 namespace domain::game::engine {
 
     void EngineContext::notifyGameOver() {
@@ -30,6 +32,12 @@ namespace domain::game::engine {
         outDispatcher_->broadcast(playerIds_, route, dto, preference);
     }
 
+    void EngineContext::broadcast(std::string_view route,
+                                  const google::protobuf::Message& dto,
+                                  outbound::ProtocolPreference preference) {
+        broadcast(std::string(route), dto, preference);
+    }
+
     void EngineContext::send(const std::string& playerId,
                              const std::string& route,
                              const google::protobuf::Message& dto,
@@ -39,6 +47,13 @@ namespace domain::game::engine {
             return;
         }
         outDispatcher_->send(playerId, route, dto, preference);
+    }
+
+    void EngineContext::send(const std::string& playerId,
+                             std::string_view route,
+                             const google::protobuf::Message& dto,
+                             outbound::ProtocolPreference preference) {
+        send(playerId, std::string(route), dto, preference);
     }
 
 } // namespace domain::game::engine

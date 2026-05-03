@@ -16,8 +16,6 @@ namespace infra::net::dispatcher {
     public:
         static Dispatcher& instance();
 
-        // === Handler 注册 ===
-
         template<typename Func>
         void register_handler(const std::string& route, Func&& handler) {
             ensure_dispatcher();
@@ -47,9 +45,5 @@ namespace infra::net::dispatcher {
 
         std::shared_ptr<DispatcherHandler> dispatcher_;
     };
-
-    // 便捷宏：注册 Handler
-    #define REGISTER_HANDLER(route, handler) \
-        infra::net::dispatcher::Dispatcher::instance().register_handler(route, handler)
 
 } // namespace infra::net::dispatcher

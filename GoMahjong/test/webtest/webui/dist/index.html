@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日麻客户端</title>
+  <script type="module" crossorigin src="/assets/main-D5ZLSsY0.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/main-BRwsYH1s.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>日麻客户端</h1>
+            <div class="status" id="status">未连接</div>
+        </header>
+
+        <!-- Connection Panel -->
+        <section class="panel connect-panel">
+            <h2>连接</h2>
+            <div class="form-row">
+                <input type="text" id="playerId" placeholder="玩家ID" value="player_001">
+                <input type="text" id="token" placeholder="Token (可选)">
+                <button id="connectBtn">连接</button>
+                <button id="disconnectBtn" disabled>断开连接</button>
+            </div>
+        </section>
+
+        <section class="panel board-panel">
+            <h2>游戏面板</h2>
+            <div class="board" id="board">
+                <!-- Player 2 (Top) -->
+                <div class="player-area player-top">
+                    <div class="player-info">
+                        <span class="player-name">玩家 2</span>
+                        <span class="player-points">25000</span>
+                    </div>
+                    <div class="meld-area" id="meld-2"></div>
+                    <div class="discard-area" id="discard-2"></div>
+                </div>
+
+                <!-- Player 3 (Right) -->
+                <div class="player-area player-right">
+                    <div class="player-info">
+                        <span class="player-name">玩家 3</span>
+                        <span class="player-points">25000</span>
+                    </div>
+                    <div class="meld-area" id="meld-3"></div>
+                    <div class="discard-area" id="discard-3"></div>
+                </div>
+
+                <!-- Player 4 (Bottom - Self) -->
+                <div class="player-area player-bottom self">
+                    <div class="player-info">
+                        <span class="player-name">玩家 4 (You)</span>
+                        <span class="player-points">25000</span>
+                    </div>
+                    <div class="meld-area" id="meld-4"></div>
+                    <div class="hand-area" id="hand"></div>
+                    <div class="discard-area" id="discard-4"></div>
+                </div>
+
+                <!-- Player 1 (Left) -->
+                <div class="player-area player-left">
+                    <div class="player-info">
+                        <span class="player-name">玩家 1</span>
+                        <span class="player-points">25000</span>
+                    </div>
+                    <div class="meld-area" id="meld-1"></div>
+                    <div class="discard-area" id="discard-1"></div>
+                </div>
+
+                <!-- Center Area -->
+                <div class="center-area">
+                    <div class="dora-indicator">
+                        <span>Dora:</span>
+                        <span id="dora" class="dora-tiles"></span>
+                    </div>
+                    <div class="remaining-tiles">
+                        <span>Remaining:</span>
+                        <span id="remaining">70</span>
+                    </div>
+                    <div class="current-turn">
+                        <span>Turn:</span>
+                        <span id="turn">-</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel action-panel">
+            <h2>操作，需要选择手牌</h2>
+            <div class="action-buttons">
+                <button id="actionDraw" disabled>打牌</button>
+                <button id="actionChi" disabled>吃</button>
+                <button id="actionPon" disabled>碰</button>
+                <button id="actionKan" disabled>杠</button>
+                <button id="actionRon" disabled>和</button>
+                <button id="actionTsumo" disabled>自摸</button>
+                <button id="actionRiichi" disabled>立直</button>
+                <button id="actionPass" disabled>跳过</button>
+            </div>
+            <div class="custom-action">
+                <input type="text" id="customRoute" placeholder="Route (e.g., game.play)">
+                <textarea id="customPayload" placeholder='Payload JSON'>{"tile": {"type": 1, "id": 0}}</textarea>
+                <button id="sendCustomBtn" disabled>Send</button>
+            </div>
+        </section>
+
+        <!-- Log Panel -->
+        <section class="panel log-panel">
+            <h2>消息日志</h2>
+            <div class="log-controls">
+                <button id="clearLogBtn">清空</button>
+                <label><input type="checkbox" id="showPayload" checked> 显示Payload</label>
+            </div>
+            <div class="log-container" id="logContainer"></div>
+        </section>
+    </div>
+
+</body>
+</html>

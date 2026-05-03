@@ -38,7 +38,7 @@ namespace infra::net::dispatcher {
 
         /**
          * @brief 注册业务 Handler
-         * @param route 路由字符串（如 "game.playTile"）
+         * @param route 路由字符串（如 "rmj4p.playTile"）
          * @param handler 处理函数
          */
         void register_handler(const std::string& route, BusinessHandler handler);

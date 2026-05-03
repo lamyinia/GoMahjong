@@ -53,41 +53,51 @@ type WSMessage struct {
 	Payload interface{} `json:"payload"`
 }
 
-// routeRegistry maps routes to proto message constructors for JSON↔Protobuf conversion
-var routeRegistry = map[string]func() proto.Message{
-	// Request routes (frontend → C++)
-	"auth.login":      func() proto.Message { return &bizpb.AuthRequest{} },
-	"heartbeat.ping":  func() proto.Message { return &bizpb.HeartbeatPing{} },
-	"game.playTile":   func() proto.Message { return &bizpb.PlayTileRequest{} },
-	"game.createRoom": func() proto.Message { return &bizpb.DebugCreateRoomRequest{} },
+// requestRouteRegistry maps frontend→C++ routes to proto message constructors for JSON→Protobuf conversion.
+// Note: Some routes are reused for both request and push (e.g. rmj4p.riichi/ankan/kakan),
+// so request/push must use different registries.
+var requestRouteRegistry = map[string]func() proto.Message{
+	// Auth/Heartbeat (frontend → C++)
+	"auth.login":     func() proto.Message { return &bizpb.AuthRequest{} },
+	"heartbeat.ping": func() proto.Message { return &bizpb.HeartbeatPing{} },
 
-	// Response/Push routes (C++ → frontend)
-	"auth.login.response":      func() proto.Message { return &bizpb.AuthResponse{} },
-	"heartbeat.pong":           func() proto.Message { return &bizpb.HeartbeatPong{} },
-	"game.state":               func() proto.Message { return &bizpb.GameStatePush{} },
-	"game.createRoom.response": func() proto.Message { return &bizpb.DebugCreateRoomResponse{} },
+	// rmj4p C→S 请求
+	"rmj4p.snapshoot":          func() proto.Message { return &bizpb.SnapShootRequest{} },
+	"rmj4p.playTile":           func() proto.Message { return &bizpb.PlayTileRequest{} },
+	"rmj4p.meld":               func() proto.Message { return &bizpb.MeldRequest{} },
+	"rmj4p.ankan":              func() proto.Message { return &bizpb.AnkanRequest{} },
+	"rmj4p.kakan":              func() proto.Message { return &bizpb.KakanRequest{} },
+	"rmj4p.riichi":             func() proto.Message { return &bizpb.RiichiRequest{} },
+	"rmj4p.skip":               func() proto.Message { return &bizpb.SkipRequest{} },
+	"rmj4p.kyuushuKyuukai":     func() proto.Message { return &bizpb.KyuushuKyuukaiRequest{} },
+	"rmj4p.debug.createRoom":   func() proto.Message { return &bizpb.DebugCreateRoomRequest{} },
+}
 
-	// Game push routes (C++ → frontend)
-	"game.round.start":  func() proto.Message { return &bizpb.RoundStartPush{} },
-	"game.draw.tile":    func() proto.Message { return &bizpb.DrawTilePush{} },
-	"game.discard.tile": func() proto.Message { return &bizpb.DiscardTilePush{} },
-	"game.riichi.push":  func() proto.Message { return &bizpb.RiichiPush{} },
-	"game.meld.action":  func() proto.Message { return &bizpb.MeldActionPush{} },
-	"game.ankan.push":   func() proto.Message { return &bizpb.AnkanPush{} },
-	"game.kakan.push":   func() proto.Message { return &bizpb.KakanPush{} },
-	"game.ron":          func() proto.Message { return &bizpb.RonPush{} },
-	"game.tsumo":        func() proto.Message { return &bizpb.TsumoPush{} },
-	"game.round.end":    func() proto.Message { return &bizpb.RoundEndPush{} },
-	"game.end":          func() proto.Message { return &bizpb.GameEndPush{} },
-	"game.operations":   func() proto.Message { return &bizpb.OperationsPush{} },
+// pushRouteRegistry maps C++→frontend routes to proto message constructors for Protobuf→JSON conversion.
+var pushRouteRegistry = map[string]func() proto.Message{
+	// Auth/Heartbeat (C++ → frontend)
+	"auth.login.response": func() proto.Message { return &bizpb.AuthResponse{} },
+	"heartbeat.pong":      func() proto.Message { return &bizpb.HeartbeatPong{} },
 
-	// Game request routes (frontend → C++)
-	"game.meld":     func() proto.Message { return &bizpb.MeldRequest{} },
-	"game.ankan":    func() proto.Message { return &bizpb.AnkanRequest{} },
-	"game.kakan":    func() proto.Message { return &bizpb.KakanRequest{} },
-	"game.riichi":   func() proto.Message { return &bizpb.RiichiRequest{} },
-	"game.skip":     func() proto.Message { return &bizpb.SkipRequest{} },
-	"game.snapshot": func() proto.Message { return &bizpb.SnapShootRequest{} },
+	// rmj4p 推送
+	"rmj4p.roundStart":       func() proto.Message { return &bizpb.RoundStartPush{} },
+	"rmj4p.drawTile":         func() proto.Message { return &bizpb.DrawTilePush{} },
+	"rmj4p.discardTile":      func() proto.Message { return &bizpb.DiscardTilePush{} },
+	"rmj4p.riichi":           func() proto.Message { return &bizpb.RiichiPush{} },
+	"rmj4p.meldAction":       func() proto.Message { return &bizpb.MeldActionPush{} },
+	"rmj4p.ankan":            func() proto.Message { return &bizpb.AnkanPush{} },
+	"rmj4p.kakan":            func() proto.Message { return &bizpb.KakanPush{} },
+	"rmj4p.ron":              func() proto.Message { return &bizpb.RonPush{} },
+	"rmj4p.tsumo":            func() proto.Message { return &bizpb.TsumoPush{} },
+	"rmj4p.roundEnd":         func() proto.Message { return &bizpb.RoundEndPush{} },
+	"rmj4p.gameEnd":          func() proto.Message { return &bizpb.GameEndPush{} },
+	"rmj4p.playerDisconnect": func() proto.Message { return &bizpb.PlayerDisconnectPush{} },
+	"rmj4p.playerReconnect":  func() proto.Message { return &bizpb.PlayerReconnectPush{} },
+	"rmj4p.operations":       func() proto.Message { return &bizpb.OperationsPush{} },
+	"rmj4p.gameState":        func() proto.Message { return &bizpb.GameStatePush{} },
+
+	// Debug response
+	"rmj4p.debug.createRoom.response": func() proto.Message { return &bizpb.DebugCreateRoomResponse{} },
 }
 
 // protojsonMarshaler uses camelCase JSON names matching proto json tags

@@ -4,7 +4,6 @@
 
 namespace domain::game::mahjong {
 
-    // === 构造函数：生成136张牌（只做一次）===
     DeckManager::DeckManager(std::uint32_t seed): rng_(seed == 0 ? std::mt19937(std::random_device{}()) : std::mt19937(seed)){
         int idx = 0;
 

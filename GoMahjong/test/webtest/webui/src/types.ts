@@ -113,6 +113,8 @@ export interface RiichiRequest {
 
 export interface SkipRequest {}
 
+export interface KyuushuKyuukaiRequest {}
+
 // ==================== 服务端推送 (S→C) ====================
 
 export interface RoundStartPush {
@@ -212,28 +214,34 @@ export interface GameStatePush {
 
 export const Route = {
   // 请求 (C→S)
-  PLAY_TILE: 'game.playTile',
-  MELD: 'game.meld',
-  ANKAN: 'game.ankan',
-  KAKAN: 'game.kakan',
-  RIICHI: 'game.riichi',
-  SKIP: 'game.skip',
-  SNAPSHOT: 'game.snapshot',
+  SNAPSHOOT: 'rmj4p.snapshoot',
+  PLAY_TILE: 'rmj4p.playTile',
+  MELD: 'rmj4p.meld',
+  ANKAN: 'rmj4p.ankan',
+  KAKAN: 'rmj4p.kakan',
+  RIICHI: 'rmj4p.riichi',
+  SKIP: 'rmj4p.skip',
+  KYUUSHU_KYUUKAI: 'rmj4p.kyuushuKyuukai',
 
   // 推送 (S→C)
-  ROUND_START: 'game.round.start',
-  DRAW_TILE: 'game.draw.tile',
-  DISCARD_TILE: 'game.discard.tile',
-  RIICHI_PUSH: 'game.riichi.push',
-  MELD_ACTION: 'game.meld.action',
-  ANKAN_PUSH: 'game.ankan.push',
-  KAKAN_PUSH: 'game.kakan.push',
-  RON: 'game.ron',
-  TSUMO: 'game.tsumo',
-  ROUND_END: 'game.round.end',
-  GAME_END: 'game.end',
-  OPERATIONS: 'game.operations',
-  GAME_STATE: 'game.state',
+  ROUND_START: 'rmj4p.roundStart',
+  DRAW_TILE: 'rmj4p.drawTile',
+  DISCARD_TILE: 'rmj4p.discardTile',
+  RIICHI_PUSH: 'rmj4p.riichi',
+  MELD_ACTION: 'rmj4p.meldAction',
+  ANKAN_PUSH: 'rmj4p.ankan',
+  KAKAN_PUSH: 'rmj4p.kakan',
+  RON: 'rmj4p.ron',
+  TSUMO: 'rmj4p.tsumo',
+  ROUND_END: 'rmj4p.roundEnd',
+  GAME_END: 'rmj4p.gameEnd',
+  OPERATIONS: 'rmj4p.operations',
+  GAME_STATE: 'rmj4p.gameState',
+  PLAYER_DISCONNECT: 'rmj4p.playerDisconnect',
+  PLAYER_RECONNECT: 'rmj4p.playerReconnect',
+
+  // Debug
+  DEBUG_CREATE_ROOM: 'rmj4p.debug.createRoom',
 } as const;
 
 // ==================== UI 状态 ====================

@@ -195,7 +195,7 @@ button.secondary:hover:not(:disabled) {
 .board {
     position: relative;
     width: 100%;
-    height: 400px;
+    height: 600px; /* 增加高度 */
     background: linear-gradient(135deg, rgba(200, 169, 126, 0.18), rgba(255, 255, 255, 0.35));
     border-radius: 12px;
     border: 1px solid rgba(43, 43, 43, 0.10);
@@ -206,7 +206,7 @@ button.secondary:hover:not(:disabled) {
         "left center right"
         ". bottom .";
     grid-template-columns: 1fr 2fr 1fr;
-    grid-template-rows: 1fr 2fr 1fr;
+    grid-template-rows: 150px 1fr 180px; /* 固定顶部和底部高度 */
     gap: 10px;
     padding: 10px;
 }
@@ -219,7 +219,12 @@ button.secondary:hover:not(:disabled) {
 
 .player-top { grid-area: top; }
 .player-right { grid-area: right; }
-.player-bottom { grid-area: bottom; }
+.player-bottom { 
+    grid-area: bottom; 
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
 .player-left { grid-area: left; }
 
 .player-info {
@@ -267,22 +272,51 @@ button.secondary:hover:not(:disabled) {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    min-height: 50px;
-    padding: 8px;
+    min-height: 52px;
+    padding: 6px;
     background: rgba(255, 255, 255, 0.6);
     border-radius: 6px;
     border: 1px solid rgba(43, 43, 43, 0.10);
+    margin: 4px 0;
+}
+
+.hand-spacer {
+    display: inline-block;
+    width: 16px;
 }
 
 .discard-area {
     display: flex;
     flex-wrap: wrap;
     gap: 2px;
-    min-height: 30px;
+    min-height: 80px;
     padding: 4px;
     background: rgba(255, 255, 255, 0.45);
     border-radius: 6px;
     border: 1px solid rgba(43, 43, 43, 0.08);
+}
+
+.meld-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 30px;
+    padding: 4px;
+    margin-bottom: 4px;
+}
+
+.meld-group {
+    display: inline-flex;
+    gap: 1px;
+    padding: 2px 4px;
+    background: rgba(255, 255, 255, 0.55);
+    border-radius: 4px;
+    border: 1px solid rgba(43, 43, 43, 0.12);
+}
+
+.dora-tiles {
+    display: inline-flex;
+    gap: 2px;
 }
 
 /* Tiles */
@@ -290,11 +324,12 @@ button.secondary:hover:not(:disabled) {
     display: inline-flex;
     justify-content: center;
     align-items: center;
-    width: 28px;
-    height: 38px;
+    width: 32px;
+    height: 42px;
     background: linear-gradient(145deg, #ffffff, #e8e8e8);
     color: #000;
-    font-size: 1.2rem;
+    font-size: 0.85rem;
+    font-weight: bold;
     border-radius: 5px;
     border: 1px solid rgba(255,255,255,0.15);
     cursor: pointer;
@@ -315,9 +350,9 @@ button.secondary:hover:not(:disabled) {
     border-color: rgba(43, 182, 115, 0.35);
 }
 
-.tile.wan { color: #dc2626; text-shadow: 0 1px 2px rgba(220, 38, 38, 0.2); }
-.tile.tiao { color: #16a34a; text-shadow: 0 1px 2px rgba(22, 163, 74, 0.2); }
-.tile.tong { color: #2563eb; text-shadow: 0 1px 2px rgba(37, 99, 235, 0.2); }
+.tile.man { color: #dc2626; text-shadow: 0 1px 2px rgba(220, 38, 38, 0.2); }
+.tile.so { color: #16a34a; text-shadow: 0 1px 2px rgba(22, 163, 74, 0.2); }
+.tile.pin { color: #2563eb; text-shadow: 0 1px 2px rgba(37, 99, 235, 0.2); }
 .tile.feng { color: #1e40af; text-shadow: 0 1px 2px rgba(30, 64, 175, 0.2); }
 .tile.dragon { color: #7c3aed; text-shadow: 0 1px 2px rgba(124, 58, 237, 0.2); }
 
@@ -346,47 +381,6 @@ button.secondary:hover:not(:disabled) {
 .custom-action textarea {
     min-height: 60px;
     resize: vertical;
-}
-
-/* Players Panel */
-.players-list {
-    margin-bottom: 10px;
-}
-
-.players-list p {
-    color: rgba(43, 43, 43, 0.65);
-    font-size: 0.85rem;
-}
-
-.player-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.60);
-    border-radius: 6px;
-    margin-bottom: 5px;
-    border: 1px solid rgba(43, 43, 43, 0.10);
-    transition: background 0.2s;
-}
-
-.player-item:hover {
-    background: rgba(255, 255, 255, 0.82);
-}
-
-.player-item .player-id {
-    font-weight: bold;
-}
-
-.player-item .player-status {
-    font-size: 0.8rem;
-    color: rgba(43, 43, 43, 0.65);
-}
-
-.add-player {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
 }
 
 /* Log Panel */

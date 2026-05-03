@@ -69,37 +69,40 @@ message PlayerPublicState {
 
 // ==================== 客户端请求 (C→S) ====================
 
-// 获取快照，用于重连
+// route: rmj4p.snapshoot 获取快照，用于重连
 message SnapShootRequest {}
 
-// 出牌请求
+// route: rmj4p.playTile 出牌请求
 message PlayTileRequest {
   Tile tile = 1;
 }
 
-// 鸣牌请求（吃/碰/明杠）
+// route: rmj4p.meld 鸣牌请求（吃/碰/明杠）
 message MeldRequest {
   string action_type = 1;  // "CHI","PENG","GANG"
   repeated Tile tiles = 2; // 选择的牌
 }
 
-// 暗杠请求
+// route: rmj4p.ankan 暗杠请求
 message AnkanRequest {
   repeated Tile tiles = 1; // 暗杠的牌
 }
 
-// 加杠请求
+// route: rmj4p.kakan 加杠请求
 message KakanRequest {
   Tile tile = 1;           // 加杠的牌
 }
 
-// 立直请求
+// route: rmj4p.riichi 立直请求
 message RiichiRequest {
   Tile tile = 1;           // 立直时打出的牌
 }
 
-// 跳过操作（不吃不碰不和）
+// route: rmj4p.skip 跳过操作（不吃不碰不和）
 message SkipRequest {}
+
+// route: rmj4p.kyuushuKyuukai 九种九牌流局宣告
+message KyuushuKyuukaiRequest {}
 
 // Debug: 创建房间请求
 message DebugCreateRoomRequest {
@@ -114,7 +117,7 @@ message DebugCreateRoomResponse {
 
 // ==================== 服务端推送 (S→C) ====================
 
-// 回合开始（每人收到不同手牌）
+// route: rmj4p.roundStart 回合开始（每人收到不同手牌）
 message RoundStartPush {
   repeated PlayerSeat seats = 1;         // 座位映射
   repeated Tile dora_indicators = 2;      // 已翻开的宝牌指示牌
@@ -123,24 +126,24 @@ message RoundStartPush {
   int32 current_turn = 5;                 // 当前出牌玩家座位
 }
 
-// 摸牌推送（仅自己可见）
+// route: rmj4p.drawTile 摸牌推送（仅自己可见）
 message DrawTilePush {
   Tile tile = 1;
   bool is_kan_draw = 2;           // 是否为岭上摸牌（杠后摸牌）
 }
 
-// 出牌广播
+// route: rmj4p.discardTile 出牌广播
 message DiscardTilePush {
   int32 seat_index = 1;
   Tile tile = 2;
 }
 
-// 立直广播
+// route: rmj4p.riichi 立直广播
 message RiichiPush {
   int32 seat_index = 1;
 }
 
-// 鸣牌广播（吃/碰/明杠）
+// route: rmj4p.meldAction 鸣牌广播（吃/碰/明杠）
 message MeldActionPush {
   string action_type = 1;  // "CHI","PENG","GANG"
   int32 seat_index = 2;
@@ -149,14 +152,14 @@ message MeldActionPush {
   Tile dora_indicator = 5;  // 杠后新翻的宝牌指示牌（仅GANG时有值）
 }
 
-// 暗杠广播
+// route: rmj4p.ankan 暗杠广播
 message AnkanPush {
   int32 seat_index = 1;
   repeated Tile tiles = 2;
   Tile dora_indicator = 3;  // 杠后新翻的宝牌指示牌
 }
 
-// 加杠广播
+// route: rmj4p.kakan 加杠广播
 message KakanPush {
   int32 seat_index = 1;
   int32 from_seat = 2;     // 原碰来源
@@ -164,20 +167,20 @@ message KakanPush {
   Tile dora_indicator = 4;  // 杠后新翻的宝牌指示牌
 }
 
-// 荣和广播（支持双响/三响：多人同时荣和发多条 RonPush）
+// route: rmj4p.ron 荣和广播（支持双响/三响：多人同时荣和发多条 RonPush）
 message RonPush {
   int32 winner_seat = 1;
   int32 loser_seat = 2;
   Tile win_tile = 3;
 }
 
-// 自摸广播
+// route: rmj4p.tsumo 自摸广播
 message TsumoPush {
   int32 winner_seat = 1;
   Tile win_tile = 2;
 }
 
-// 回合结束广播
+// route: rmj4p.roundEnd 回合结束广播
 message RoundEndPush {
   string end_type = 1;                   // "RON","TSUMO","DRAW_EXHAUSTIVE","DRAW_3RON","DRAW_4KAN"
   repeated HuClaim claims = 2;
@@ -188,28 +191,28 @@ message RoundEndPush {
   int32 next_dealer = 7;                 // 下局庄家座位（-1=游戏结束）
 }
 
-// 游戏结束广播
+// route: rmj4p.gameEnd 游戏结束广播
 message GameEndPush {
   repeated PlayerRanking rankings = 1;
 }
 
-// 玩家断线通知
+// route: rmj4p.playerDisconnect 玩家断线通知
 message PlayerDisconnectPush {
   int32 seat_index = 1;
 }
 
-// 玩家重连通知
+// route: rmj4p.playerReconnect 玩家重连通知
 message PlayerReconnectPush {
   int32 seat_index = 1;
 }
 
-// 可选操作推送（每人不同）
+// route: rmj4p.operations 可选操作推送（每人不同）
 message OperationsPush {
   repeated PlayerOperation operations = 1;
   int32 available_secs = 2;              // 操作限时秒数
 }
 
-// 游戏状态推送（重连快照）
+// route: rmj4p.gameState 游戏状态推送（重连快照）
 message GameStatePush {
   repeated PlayerSeat seats = 1;             // 座位映射
   Situation situation = 2;                   // 场况

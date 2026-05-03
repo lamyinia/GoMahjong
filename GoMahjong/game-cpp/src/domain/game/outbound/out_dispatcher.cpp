@@ -24,19 +24,19 @@ namespace domain::game::outbound {
                               const google::protobuf::Message& dto,
                               ProtocolPreference preference) {
         if (!sessionManager_) {
-            LOG_WARN("[OutDispatcher] sessionManager not set, dropping message to {}", playerId);
+            LOG_WARN("sessionManager not set, dropping message to {}", playerId);
             return;
         }
 
         auto session = sessionManager_->get_session(playerId);
         if (!session) {
-            LOG_DEBUG("[OutDispatcher] no session for player {}, dropping", playerId);
+            LOG_DEBUG("no session for player {}, dropping", playerId);
             return;
         }
 
         auto channel = selectChannel(*session, preference);
         if (!channel) {
-            LOG_DEBUG("[OutDispatcher] no active channel for player {}, dropping", playerId);
+            LOG_DEBUG("no active channel for player {}, dropping", playerId);
             return;
         }
 
@@ -90,7 +90,7 @@ namespace domain::game::outbound {
         // 1. 序列化业务 DTO → payload bytes
         std::vector<uint8_t> payload(dto.ByteSizeLong());
         if (!dto.SerializeToArray(payload.data(), static_cast<int>(payload.size()))) {
-            LOG_ERROR("[OutDispatcher] failed to serialize DTO for route {}", route);
+            LOG_ERROR("failed to serialize DTO for route {}", route);
             return;
         }
 

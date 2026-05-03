@@ -166,7 +166,7 @@ func (s *WebServer) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		PlayerIds:  req.PlayerIDs,
 	}
 
-	if err := client.SendProtoMessage("game.createRoom", createReq); err != nil {
+	if err := client.SendProtoMessage("rmj4p.debug.createRoom", createReq); err != nil {
 		http.Error(w, fmt.Sprintf("send failed: %v", err), http.StatusInternalServerError)
 		return
 	}

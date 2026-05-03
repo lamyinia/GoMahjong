@@ -59,7 +59,7 @@ func (s *WebServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// JSON Protobuf 转换
-		if constructor, ok := routeRegistry[cmd.Route]; ok {
+		if constructor, ok := requestRouteRegistry[cmd.Route]; ok {
 			msg := constructor()
 			if err := protojsonUnmarshaler.Unmarshal(cmd.Payload, msg); err != nil {
 				s.sendLog(session, "ERROR", fmt.Sprintf("JSON→Protobuf decode error for %s: %v", cmd.Route, err))
@@ -105,7 +105,7 @@ func (s *WebServer) forwardTCPMessages(session *PlayerSession) {
 			// Protobuf 转 JSON
 			var payloadForWS interface{}
 			if len(msg.Payload) > 0 {
-				if constructor, ok := routeRegistry[msg.Route]; ok {
+				if constructor, ok := pushRouteRegistry[msg.Route]; ok {
 					pbMsg := constructor()
 					if err := proto.Unmarshal(msg.Payload, pbMsg); err == nil {
 						jsonBytes, err := protojsonMarshaler.Marshal(pbMsg)

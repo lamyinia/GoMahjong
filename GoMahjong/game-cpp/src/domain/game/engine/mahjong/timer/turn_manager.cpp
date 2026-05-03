@@ -68,22 +68,23 @@ namespace domain::game::mahjong::timer {
         stopAllTickers();
         phase_ = TurnPhase::WaitReaction;
 
-        int limit = (timeLimitSec > 0) ? timeLimitSec : reactCompensation_;
+        int comp = (timeLimitSec > 0) ? timeLimitSec : reactCompensation_;
         for (int seat : eligibleSeats) {
             if (seat < 0 || seat >= playerCount_) {
                 LOG_WARN("invalid seat {} in eligibleSeats, skipping", seat);
                 continue;
             }
             auto* ticker = tickers_[seat].get();
-            if (!ticker->start(limit, [this, seat]() {
+            int allocatedTime = ticker->getAvailable() + comp;
+            ticker->setAvailable(allocatedTime);
+            if (!ticker->start(allocatedTime, [this, seat]() {
                     onTickerTimeout(seat);
                 })) {
                 LOG_WARN("failed to start ticker for seat {} in reaction phase", seat);
             }
         }
 
-        LOG_DEBUG("enterReactionPhase seats={}, timeLimit={}s, phase=WaitReaction",
-                  eligibleSeats.size(), timeLimitSec);
+        LOG_DEBUG("enterReactionPhase seats={}, comp={}s, phase=WaitReaction", eligibleSeats.size(), comp);
         return true;
     }
 
@@ -142,7 +143,6 @@ namespace domain::game::mahjong::timer {
 
     void TurnManager::onTickerTimeout(int seatIndex) {
         // 只投递 PlayerTimeout 游戏事件，不修改 ticker 状态
-        // ticker 状态由 RoomActor 线程在处理事件时通过 applyTimeout 更新，保证线程安全
         if (timeoutEventCallback_) {
             std::string playerId = (seatIndex < static_cast<int>(playerIds_.size())) ? playerIds_[seatIndex] : "";
             auto event = event::GameEvent::playerTimeout(playerId, seatIndex);
@@ -165,6 +165,17 @@ namespace domain::game::mahjong::timer {
         ticker->onTimerExpired();
         LOG_DEBUG("seat {} applied timeout", seatIndex);
         return true;
+    }
+
+    void TurnManager::stopTickerForSeat(int seatIndex) {
+        if (seatIndex < 0 || seatIndex >= playerCount_) {
+            LOG_WARN("stopTickerForSeat: invalid seat {}", seatIndex);
+            return;
+        }
+        auto* ticker = tickers_[seatIndex].get();
+        if (ticker && ticker->getState() == TickerState::Running) {
+            ticker->stop();
+        }
     }
 
 } // namespace domain::game::engine::mahjong::timer

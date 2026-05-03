@@ -2,14 +2,16 @@
 
 import { wsClient } from './ws';
 import { gameBoard } from './ui/board';
-import { tileToName } from './ui/tile';
-import type { WSMessage, LogMessage, PlayerInfo, Tile, GameStatePush, RoundStartPush, DrawTilePush } from './types';
+import { tileToChar, tileToName } from './ui/tile';
+import type { WSMessage, LogMessage, Tile, GameStatePush, RoundStartPush, DrawTilePush, DiscardTilePush, OperationsPush, PlayerOperation, MeldActionPush, AnkanPush, KakanPush } from './types';
 import { Route } from './types';
 
 // State
 let currentPlayerId: string | null = null;
 let selectedTile: Tile | null = null;
 let showPayload = true;
+let currentOperations: PlayerOperation[] = [];  // 当前可选操作
+let isMyTurn = false;  // 是否轮到自己出牌
 
 // DOM Elements
 const statusEl = document.getElementById('status')!;
@@ -17,7 +19,6 @@ const connectBtn = document.getElementById('connectBtn') as HTMLButtonElement;
 const disconnectBtn = document.getElementById('disconnectBtn') as HTMLButtonElement;
 const playerIdInput = document.getElementById('playerId') as HTMLInputElement;
 const tokenInput = document.getElementById('token') as HTMLInputElement;
-const playersListEl = document.getElementById('playersList')!;
 const logContainerEl = document.getElementById('logContainer')!;
 const showPayloadCheckbox = document.getElementById('showPayload') as HTMLInputElement;
 
@@ -49,6 +50,7 @@ function init() {
   // Set up board tile selection
   gameBoard.setOnTileSelect((tile) => {
     selectedTile = tile;
+    addLog('INFO', tile ? `SelectTile: ${tileToName(tile)} (type=${tile.type}, id=${tile.id}, char=${tileToChar(tile)})` : 'SelectTile: -');
     updateActionButtons();
   });
 
@@ -65,11 +67,13 @@ function bindEvents() {
   disconnectBtn.addEventListener('click', disconnect);
   
   // Actions
+  const actionDraw = document.getElementById('actionDraw') as HTMLButtonElement;
+  actionDraw.addEventListener('click', () => sendAction(Route.PLAY_TILE));
   actionButtons.chi.addEventListener('click', () => sendMeldAction('CHI'));
   actionButtons.pon.addEventListener('click', () => sendMeldAction('PENG'));
-  actionButtons.kan.addEventListener('click', () => sendMeldAction('GANG'));
-  actionButtons.ron.addEventListener('click', () => sendMeldAction('HU'));
-  actionButtons.tsumo.addEventListener('click', () => sendMeldAction('HU'));
+  actionButtons.kan.addEventListener('click', () => sendKanAction());
+  actionButtons.ron.addEventListener('click', () => sendHuAction('ron'));
+  actionButtons.tsumo.addEventListener('click', () => sendHuAction('tsumo'));
   actionButtons.riichi.addEventListener('click', () => sendRiichi());
   actionButtons.pass.addEventListener('click', () => sendAction(Route.SKIP));
   
@@ -81,9 +85,6 @@ function bindEvents() {
   showPayloadCheckbox.addEventListener('change', () => {
     showPayload = showPayloadCheckbox.checked;
   });
-  
-  // Add player
-  document.getElementById('addPlayerBtn')?.addEventListener('click', addPlayer);
 }
 
 async function connect() {
@@ -91,10 +92,14 @@ async function connect() {
   const token = tokenInput.value.trim();
   
   if (!playerId) {
-    alert('Please enter a Player ID');
+    addLog('ERROR', 'Player ID is required');
     return;
   }
-  
+
+  // 立即保存到全局变量
+  currentPlayerId = playerId;
+  console.log('[Debug] currentPlayerId set to:', currentPlayerId);
+
   try {
     // First, connect via HTTP API
     const response = await fetch('/api/connect', {
@@ -117,7 +122,6 @@ async function connect() {
     await wsClient.connect(playerId);
     
     updateConnectionUI(true);
-    refreshPlayers();
     
   } catch (err) {
     addLog('ERROR', `Connect failed: ${err}`);
@@ -137,7 +141,6 @@ function disconnect() {
     addLog('INFO', 'Disconnected');
     currentPlayerId = null;
     updateConnectionUI(false);
-    refreshPlayers();
   });
 }
 
@@ -146,9 +149,16 @@ function updateConnectionUI(connected: boolean) {
   disconnectBtn.disabled = !connected;
   sendCustomBtn.disabled = !connected;
   
-  Object.values(actionButtons).forEach(btn => {
-    btn.disabled = !connected;
-  });
+  // Action buttons are only enabled by OperationsPush, not by connection
+  if (connected) {
+    Object.values(actionButtons).forEach(btn => btn.disabled = true);
+    const actionDraw = document.getElementById('actionDraw') as HTMLButtonElement;
+    if (actionDraw) actionDraw.disabled = true;
+  } else {
+    Object.values(actionButtons).forEach(btn => btn.disabled = true);
+    const actionDraw = document.getElementById('actionDraw') as HTMLButtonElement;
+    if (actionDraw) actionDraw.disabled = true;
+  }
   
   statusEl.textContent = connected ? `Connected: ${currentPlayerId}` : 'Not connected';
   statusEl.className = 'status' + (connected ? ' connected' : '');
@@ -167,9 +177,13 @@ function handleMessage(msg: WSMessage) {
   switch (msg.route) {
     case Route.ROUND_START: {
       const push = msg.payload as RoundStartPush;
-      gameBoard.update({
-        handTiles: push.handTiles,
-        doraIndicators: push.doraIndicators,
+      addLog('INFO', `Round Start: seat=${getSelfSeat()}, handCount=${push.handTiles?.length || 0}`);
+      setSelfSeat(push.seats);
+      isMyTurn = (push.currentTurn === getSelfSeat());
+      
+      const updateData = {
+        handTiles: push.handTiles || [],
+        doraIndicators: push.doraIndicators || [],
         currentTurn: push.currentTurn,
         situation: push.situation,
         seats: push.seats,
@@ -177,20 +191,95 @@ function handleMessage(msg: WSMessage) {
         remainingTiles: 0,
         operations: [],
         availableSecs: 0,
-      });
+      };
+      gameBoard.update(updateData);
       addLog('INFO', `Round start: ${push.situation.roundWind}${push.situation.roundNumber} honba=${push.situation.honba}`);
+      updateActionButtons();
       break;
     }
 
     case Route.DRAW_TILE: {
       const push = msg.payload as DrawTilePush;
+      gameBoard.addHandTile(push.tile);
+      isMyTurn = true;  // 摸牌 = 轮到自己
+      updateActionButtons();
       addLog('INFO', `Draw: ${tileToName(push.tile)}${push.isKanDraw ? ' (kan)' : ''}`);
+      break;
+    }
+
+    case Route.DISCARD_TILE: {
+      const push = msg.payload as DiscardTilePush;
+      gameBoard.addDiscardTile(push.seatIndex, push.tile);
+      
+      const mySeat = getSelfSeat();
+      addLog('INFO', `Discard Debug: msgSeat=${push.seatIndex}, selfSeat=${mySeat}`);
+
+      // 只要是自己的座位，就根据消息里的 tile 信息移除手牌
+      if (Number(push.seatIndex) === Number(mySeat)) {
+        gameBoard.removeHandTile(push.tile);
+        isMyTurn = false;
+        selectedTile = null; // 确保选中状态也清理
+      }
+      
+      clearOperationsUI();
+      updateActionButtons();
+      addLog('INFO', `Discard: seat ${push.seatIndex} → ${tileToName(push.tile)}`);
+      break;
+    }
+
+    case Route.OPERATIONS: {
+      const push = msg.payload as OperationsPush;
+      currentOperations = push.operations;
+      applyOperations(push.operations, push.availableSecs);
+      addLog('INFO', `Operations: ${push.operations.map(o => o.type).join(',')} (${push.availableSecs}s)`);
+      break;
+    }
+
+    case Route.MELD_ACTION: {
+      const push = msg.payload as MeldActionPush;
+      gameBoard.addMeld(push.seatIndex, { actionType: push.actionType, seatIndex: push.seatIndex, fromSeat: push.fromSeat, tiles: push.tiles });
+      
+      if (push.seatIndex === getSelfSeat()) {
+        // 副露移除手牌逻辑：从 tiles 中去掉那张被吃/碰的牌（来自别人的弃牌）
+        // 简单处理：如果是吃/碰/明杠，tiles 里的最后一张通常是拿到的那张，或者是根据协议确定
+        // 这里我们先移除 tiles 中匹配的所有牌（除了被拿走的那张，如果能确定的话）
+        // 稳妥起见，我们假设 push.tiles 包含了所有展示出来的牌，我们需要移除其中原本在手里的部分
+        gameBoard.removeHandTiles(push.tiles); 
+        isMyTurn = true;
+      }
+      clearOperationsUI();
+      updateActionButtons();
+      addLog('INFO', `Meld: seat ${push.seatIndex} ${push.actionType}`);
+      break;
+    }
+
+    case Route.ANKAN_PUSH: {
+      const push = msg.payload as AnkanPush;
+      gameBoard.addMeld(push.seatIndex, { actionType: 'ANKAN', seatIndex: push.seatIndex, fromSeat: -1, tiles: push.tiles });
+      if (push.seatIndex === getSelfSeat()) {
+        gameBoard.removeHandTiles(push.tiles);
+      }
+      clearOperationsUI();
+      addLog('INFO', `Ankan: seat ${push.seatIndex}`);
+      break;
+    }
+
+    case Route.KAKAN_PUSH: {
+      const push = msg.payload as KakanPush;
+      gameBoard.addMeld(push.seatIndex, { actionType: 'KAKAN', seatIndex: push.seatIndex, fromSeat: push.fromSeat, tiles: push.tiles });
+      if (push.seatIndex === getSelfSeat()) {
+        gameBoard.removeHandTile(push.tiles[0]);
+      }
+      clearOperationsUI();
+      addLog('INFO', `Kakan: seat ${push.seatIndex}`);
       break;
     }
 
     case Route.GAME_STATE:
       const state = msg.payload as GameStatePush;
       gameBoard.update(state);
+      isMyTurn = (state.currentTurn === getSelfSeat());
+      updateActionButtons();
       break;
 
     case 'auth.login.response':
@@ -318,61 +407,113 @@ function sendCustomAction() {
   }
 }
 
+function applyOperations(ops: PlayerOperation[], availableSecs: number) {
+  // 先禁用所有操作按钮
+  clearOperationsUI();
+
+  // 恢复当前操作列表（clearOperationsUI 会清空）
+  currentOperations = ops;
+
+  const opTypes = new Set(ops.map(o => o.type));
+
+  // 无操作时直接返回
+  if (opTypes.size === 0) return;
+
+  const actionDraw = document.getElementById('actionDraw') as HTMLButtonElement;
+
+  actionDraw.disabled = !(selectedTile && ops.length > 0);
+  updateActionButtons();
+
+  if (opTypes.has('HU')) {
+    actionButtons.ron.disabled = false;
+    actionButtons.tsumo.disabled = false;
+  }
+  if (opTypes.has('GANG')) {
+    actionButtons.kan.disabled = false;
+  }
+  if (opTypes.has('PENG')) {
+    actionButtons.pon.disabled = false;
+  }
+  if (opTypes.has('CHI')) {
+    actionButtons.chi.disabled = false;
+  }
+
+  // 有操作时总是可以跳过
+  actionButtons.pass.disabled = false;
+  actionButtons.riichi.disabled = false;  // TODO: 根据是否可立直判断
+}
+
+function clearOperationsUI() {
+  Object.values(actionButtons).forEach(btn => btn.disabled = true);
+  currentOperations = [];
+}
+
+let selfSeat: number = -1;
+function getSelfSeat(): number {
+  return selfSeat;
+}
+function setSelfSeat(seats: { seatIndex: number; playerId: string }[]) {
+  // 如果当前没有 ID，尝试从输入框重新获取一次作为兜底
+  if (!currentPlayerId) {
+    currentPlayerId = (document.getElementById('playerId') as HTMLInputElement).value.trim();
+  }
+
+  console.log('[Debug] setSelfSeat start:', {
+    searchingFor: currentPlayerId,
+    availableSeats: seats
+  });
+
+  let matched = false;
+  for (const s of seats) {
+    const sid = String(s.playerId).trim();
+    const mid = String(currentPlayerId).trim();
+    
+    // 提取数字进行比较
+    const sidNum = sid.match(/\d+/)?.[0];
+    const midNum = mid.match(/\d+/)?.[0];
+    const numMatch = sidNum && midNum && (Number(sidNum) === Number(midNum));
+    
+    if (sid === mid || sid.includes(mid) || mid.includes(sid) || numMatch) {
+      selfSeat = Number(s.seatIndex);
+      console.log('[Debug] Identity MATCHED! My seatIndex is:', selfSeat);
+      gameBoard.setSelfSeat(selfSeat);
+      matched = true;
+      break;
+    }
+  }
+
+  if (!matched) {
+    console.error('[Debug] Identity CRITICAL FAILURE! Could not find my ID in seats list.');
+    addLog('ERROR', `Identity mismatch: MyID=${currentPlayerId}, Seats=${JSON.stringify(seats.map(s => s.playerId))}`);
+  }
+}
+
 function updateActionButtons() {
-  // Enable play button only when a tile is selected
-  // This is just an example - real logic depends on game state
+  const actionDraw = document.getElementById('actionDraw') as HTMLButtonElement;
+  if (!actionDraw) return;
+  // 打牌按钮：轮到自己 + 已选牌
+  actionDraw.disabled = !(isMyTurn && !!selectedTile);
 }
 
-async function refreshPlayers() {
-  try {
-    const response = await fetch('/api/players');
-    const players: PlayerInfo[] = await response.json();
-    
-    if (players.length === 0) {
-      playersListEl.innerHTML = '<p>No players connected</p>';
-      return;
-    }
-    
-    playersListEl.innerHTML = players.map(p => `
-      <div class="player-item">
-        <span class="player-id">${p.playerId}</span>
-        <span class="player-status">
-          ${p.tcpConnected ? 'TCP' : ''} ${p.wsConnected ? 'WS' : ''}
-        </span>
-      </div>
-    `).join('');
-    
-  } catch (err) {
-    console.error('Failed to refresh players:', err);
+function sendKanAction() {
+  if (!wsClient.isConnected()) { addLog('ERROR', 'Not connected'); return; }
+  const gangOp = currentOperations.find(o => o.type === 'GANG');
+  if (!gangOp) { addLog('ERROR', 'No GANG available'); return; }
+  // 区分暗杠和加杠：暗杠用 ankan route，加杠用 kakan route
+  // 简化：通过 meld route 发送
+  const payload = { actionType: 'GANG', tiles: gangOp.tiles };
+  if (wsClient.send(Route.MELD, payload)) {
+    addLog('SEND', Route.MELD, payload);
   }
 }
 
-async function addPlayer() {
-  const newPlayerId = (document.getElementById('newPlayerId') as HTMLInputElement).value.trim();
-  const newToken = (document.getElementById('newPlayerToken') as HTMLInputElement).value.trim();
-  
-  if (!newPlayerId) {
-    alert('Please enter a Player ID');
-    return;
-  }
-  
-  try {
-    const response = await fetch('/api/connect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId: newPlayerId, token: newToken || undefined }),
-    });
-    
-    const data = await response.json();
-    
-    if (data.error) {
-      addLog('ERROR', data.error);
-    } else {
-      addLog('INFO', `Player added: ${newPlayerId}`);
-      refreshPlayers();
-    }
-  } catch (err) {
-    addLog('ERROR', `Add player failed: ${err}`);
+function sendHuAction(kind: 'ron' | 'tsumo') {
+  if (!wsClient.isConnected()) { addLog('ERROR', 'Not connected'); return; }
+  const huOp = currentOperations.find(o => o.type === 'HU');
+  if (!huOp) { addLog('ERROR', 'No HU available'); return; }
+  const payload = { actionType: 'HU', tiles: huOp.tiles };
+  if (wsClient.send(Route.MELD, payload)) {
+    addLog('SEND', Route.MELD, payload);
   }
 }
 
