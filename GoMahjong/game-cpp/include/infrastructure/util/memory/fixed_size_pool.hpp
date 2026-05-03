@@ -1,12 +1,13 @@
 #pragma once
 
 #include <atomic>
+#include <cassert>
+#include <cstdlib>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <new>
 #include <vector>
-#include <cassert>
 
 namespace infra::util::memory {
 

@@ -55,7 +55,7 @@ public:
         event->type = eventTypeFrom<EventT>();
         
         // Construct event data in-place
-        event->data.template emplace<EventT>(std::forward<Args>(args)...);
+        event->data = EventT{std::forward<Args>(args)...};
         
         return event;
     }
@@ -69,7 +69,7 @@ public:
 
     /** Create DrawTile event */
     PooledEvent drawTile(const std::string& playerId, const Tile& tile) {
-        return acquire<DrawTileEvent>(playerId, tile);
+        return acquire<PlayTileEvent>(playerId, tile);
     }
 
     /** Create Chi event */
@@ -118,13 +118,13 @@ public:
     }
 
     /** Create RoundStart event */
-    PooledEvent roundStart(std::int32_t roundNumber, const std::string& oyaPlayerId) {
-        return acquire<RoundStartEvent>(roundNumber, oyaPlayerId);
+    PooledEvent roundStart() {
+        return acquire<RoundStartEvent>();
     }
 
     /** Create RoundEnd event */
-    PooledEvent roundEnd(std::int32_t roundNumber) {
-        return acquire<RoundEndEvent>(roundNumber);
+    PooledEvent roundEnd() {
+        return acquire<RoundEndEvent>();
     }
 
     /** Create GameStart event */
@@ -159,13 +159,16 @@ private:
     template <typename EventT>
     static constexpr EventType eventTypeFrom() {
         if constexpr (std::is_same_v<EventT, PlayTileEvent>) return EventType::PlayTile;
-        else if constexpr (std::is_same_v<EventT, DrawTileEvent>) return EventType::DrawTile;
+        else if constexpr (std::is_same_v<EventT, RiichiEvent>) return EventType::Riichi;
         else if constexpr (std::is_same_v<EventT, ChiEvent>) return EventType::Chi;
         else if constexpr (std::is_same_v<EventT, PonEvent>) return EventType::Pon;
         else if constexpr (std::is_same_v<EventT, KanEvent>) return EventType::Kan;
         else if constexpr (std::is_same_v<EventT, RonEvent>) return EventType::Ron;
         else if constexpr (std::is_same_v<EventT, TsumoEvent>) return EventType::Tsumo;
         else if constexpr (std::is_same_v<EventT, DrawEvent>) return EventType::Draw;
+        else if constexpr (std::is_same_v<EventT, SkipEvent>) return EventType::Skip;
+        else if constexpr (std::is_same_v<EventT, KyuushuKyuukaiEvent>) return EventType::KyuushuKyuukai;
+        else if constexpr (std::is_same_v<EventT, SnapshootEvent>) return EventType::Snapshoot;
         else if constexpr (std::is_same_v<EventT, PlayerTimeoutEvent>) return EventType::PlayerTimeout;
         else if constexpr (std::is_same_v<EventT, TurnStartEvent>) return EventType::TurnStart;
         else if constexpr (std::is_same_v<EventT, TurnEndEvent>) return EventType::TurnEnd;

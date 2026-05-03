@@ -1,0 +1,46 @@
+serverType: connector
+httpPort: 8082
+wsPort: 8083
+metricPort: 9093
+log:
+  level: info
+  path: ./logs
+jwt:
+  secret: YOUR-JWT-SECRET
+  exp: 7
+domain:
+  auth:
+    name: auth/v1
+    loadBalance: true
+  march:
+    name: march/v1
+    loadBalance: true
+etcd:
+  addrs: ["127.0.0.1:2379"]
+  register:
+    addr: 127.0.0.1:12000
+    domain: connector
+    version: v1
+    weight: 10
+    ttl: 30
+  rwTimeout: 3
+  dialTimeout: 3
+database:
+  mongo:
+    url: mongodb://localhost:27017
+    db: go_mahjong
+    username: ""
+    password: ""
+    minPoolSize: 10
+    maxPoolSize: 100
+  redis:
+    addr: localhost:6379
+    clusterAddrs: []
+    password: ""
+    poolSize: 100
+    minIdleConns: 10
+    host: localhost
+    port: 6379
+
+nats:
+  url: nats://127.0.0.1:4222

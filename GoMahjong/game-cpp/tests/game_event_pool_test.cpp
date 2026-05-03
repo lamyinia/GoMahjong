@@ -39,7 +39,7 @@ void test_convenience_methods() {
         assert(e1->type == EventType::PlayTile);
         
         auto e2 = pool.drawTile("p2", Tile{TileType::So3, 2});
-        assert(e2->type == EventType::DrawTile);
+        assert(e2->type == EventType::PlayTile);
         
         auto e3 = pool.chi("p3", Tile{TileType::Pin4, 0}, TileType::Pin4);
         assert(e3->type == EventType::Chi);
@@ -68,10 +68,10 @@ void test_convenience_methods() {
         auto e11 = pool.turnEnd("p1");
         assert(e11->type == EventType::TurnEnd);
         
-        auto e12 = pool.roundStart(1, "p1");
+        auto e12 = pool.roundStart();
         assert(e12->type == EventType::RoundStart);
         
-        auto e13 = pool.roundEnd(1);
+        auto e13 = pool.roundEnd();
         assert(e13->type == EventType::RoundEnd);
         
         auto e14 = pool.gameStart("room123");
@@ -189,7 +189,7 @@ void test_game_simulation() {
     // Simulate a typical game round
     {
         // Round start
-        auto roundStart = pool.roundStart(1, "player1");
+        auto roundStart = pool.roundStart();
         
         // Turn start
         auto turnStart = pool.turnStart("player1", 30);
@@ -206,7 +206,7 @@ void test_game_simulation() {
         // ... more events
         
         // Round end
-        auto roundEnd = pool.roundEnd(1);
+        auto roundEnd = pool.roundEnd();
         
         // All events auto-released when out of scope
     }

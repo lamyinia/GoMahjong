@@ -18,7 +18,7 @@ namespace gomahjong::bootstrap {
         GOOGLE_PROTOBUF_VERIFY_VERSION;
 
         try {
-            infra::config::Config::init_or_default("../config/dev/application.json");
+            infra::config::Config::init_or_default("config/dev/application.json");
             auto& cfg = infra::config::Config::instance();
             infra::log::init(cfg.server().log);
             ServerHub hub(cfg);

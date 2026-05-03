@@ -9,12 +9,6 @@
 #include <string_view>
 #include <vector>
 
-namespace etcd {
-    class Client;
-    class Watcher;
-    class KeepAlive;
-}
-
 namespace infra::discovery {
 
     enum class WatchEventType {

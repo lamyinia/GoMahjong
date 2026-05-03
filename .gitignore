@@ -1,0 +1,41 @@
+# Build output
+bin/
+build/
+*.exe
+*.o
+*.a
+
+# Go
+go.work.sum
+
+# C++ / CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake.in
+conan/
+
+# IDE
+.vscode/
+.idea/
+.clangd/
+.clangd
+CMakeUserPresets.json
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Config (contains secrets, use example.yml instead)
+*/config/dev/
+
+# Binary output directories
+*/bin/

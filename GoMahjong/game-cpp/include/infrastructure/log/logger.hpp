@@ -2,8 +2,8 @@
 
 #include <memory>
 
-#include "_deps/spdlog-src/include/spdlog/spdlog.h"
-#include "_deps/spdlog-src/include/spdlog/logger.h"
+#include <spdlog/spdlog.h>
+#include <spdlog/logger.h>
 
 namespace infra::config {
 struct LogConfig;

@@ -1,195 +1,192 @@
-# **[日麻开发文档.md](./rule/README.md)**
-- 游戏逻辑参考手册
+# GoMahjong
 
+基于微服务架构的在线日麻游戏平台。
 
-# 开发环境搭建
+- 🎮 **混合语言架构**：游戏逻辑核心 C++ 实现，业务服务 Go 构建
+- 🔗 **多元网络协议**：支持 TCP / UDP / KCP / QUIC 直连游戏服务器
+- 🏗️ **云原生设计**：etcd 服务发现 + NATS 消息总线 + Docker Compose 一键部署
 
-## 系统要求
+> 📖 游戏规则与牌理逻辑参考：[日麻开发文档](./rule/README.md)
 
-- **OS**: Linux (Ubuntu 22.04+ / 其他发行版) / macOS / WSL2
-- **Git**: 2.x+
-
-## 语言与构建工具
-
-### Go
-
-- **版本**: 1.24.0+（项目使用 `go.work` 多模块工作区，需 Go 1.24+）
-- **安装**: https://go.dev/dl/
-
-```bash
-go version  # 确认 >= 1.24
-```
-
-项目使用 Go Workspace 管理多模块，顶层 `go.work` 包含以下模块：
+## 架构概览
 
 ```
-common/    connector/    core/    game/    gate/
-hall/      march/        runtime/ user/    test/webtest
+                              ┌──────────┐
+                         gRPC │   auth   │
+                    ┌────────►└──────────┘
+                    │         ┌──────────┐
+              gRPC  │    NATS │   gate   │
+                    │    ┌───►└──────────┘
+                    │    │    ┌──────────┐
+                    │    │    │  march   │
+                    │    │    └────┬─────┘
+                    │    │         │ gRPC
+┌─────────┐  WS  ┌──┴────┴──┐    │
+│  Client  ├────►│ connector │    │
+└────┬─────┘     └───────────┘    │
+     │                             │
+     └── TCP/UDP/KCP/QUIC ────────┤
+                                   ▼
+                          ┌──────────────────┐
+                          │   game-cpp (C++)  │
+                          │  游戏逻辑核心引擎  │
+                          └────────┬─────────┘
+                                   │
+                          etcd / MongoDB / Redis
 ```
 
-### C++
-
-- **C++ 标准**: C++20
-- **CMake**: 3.20+
-- **编译器**: GCC 12+ / Clang 15+ (需支持 C++20)
-
-```bash
-cmake --version   # 确认 >= 3.20
-g++ --version     # 确认 >= 12
-```
-
-### Protobuf
-
-- **protoc**: 3.x+（Go 和 C++ 共用）
-- **protoc-gen-go**: Go Protobuf 插件
-- **protoc-gen-go-grpc**: Go gRPC 插件（部分服务需要）
-
-```bash
-protoc --version                    # 确认可用
-go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-```
-
-## C++ 第三方依赖
-
-`game-cpp` 通过 CMake `FetchContent` 自动拉取的依赖（无需手动安装）：
-
-| 依赖 | 版本 | 用途 |
+| 服务 | 语言 | 用途 |
 |---|---|---|
-| spdlog | v1.14.1 | 日志 |
-| nlohmann_json | v3.11.3 | JSON 解析 |
+| `auth` | Go | 认证 / JWT 签发 |
+| `connector` | Go | WebSocket 连接器，维护客户端长连接 |
+| `gate` | Go | HTTP API 网关 |
+| `march` | Go | 匹配服务（排队 / 分房） |
+| `game-cpp` | C++ | 游戏逻辑核心（牌局状态机、AI、胡牌判定） |
+| `test/webtest` | Go | 集成测试工具 |
 
-需系统安装的依赖：
+## 快速开始
 
-| 依赖 | 用途 | Ubuntu 安装 |
+### 环境要求
+
+| 工具 | 版本 | 说明 |
 |---|---|---|
-| Boost | 网络/asio 等 | `sudo apt install libboost-all-dev` |
-| protobuf | Protobuf 运行时 | `sudo apt install libprotobuf-dev protobuf-compiler` |
-| gRPC + grpc_cpp_plugin | gRPC 框架 | 从源码编译或使用 vcpkg/conan |
-| etcd-cpp-apiv3 | etcd C++ 客户端 | 从源码编译 |
-| mongocxx | MongoDB C++ 驱动 | `sudo apt install libmongocxx-dev` |
+| Go | ≥ 1.24 | 项目使用 `go.work` 多模块工作区 |
+| GCC / Clang | ≥ 12 / ≥ 15 | 需支持 C++20 |
+| CMake | ≥ 3.20 | C++ 构建系统 |
+| Conan | 2.x | C++ 依赖管理 |
+| Docker + Compose | 最新 | 基础设施服务 |
+| protoc | ≥ 3.x | Go 和 C++ 共用 |
 
-> **注意**: gRPC C++ 和 etcd-cpp-apiv3 的安装较为复杂，建议参考各自官方文档。后续会提供一键安装脚本。
-
-## 基础设施服务
-
-开发环境需要以下服务运行：
-
-| 服务 | 用途 | 默认端口 | 安装方式 |
-|---|---|---|---|
-| **etcd** | 服务注册/发现 | 2379 | `sudo apt install etcd` 或 Docker |
-| **Redis** | 缓存/会话 | 6379 | `sudo apt install redis-server` |
-| **MongoDB** | 数据持久化 | 27017 | `sudo apt install mongosh mongodb-server` |
-| **NATS** | 消息中间件 | 4222 | 从 https://nats.io 下载或 Docker |
-
-### 快速启动基础设施（Docker 方式）
+### 1. 启动基础设施
 
 ```bash
-docker run -d --name etcd -p 2379:2379 quay.io/coreos/etcd:v3.5 \
-  etcd -advertise-client-urls=http://0.0.0.0:2379 \
-       -listen-client-urls=http://0.0.0.0:2379
-
-docker run -d --name redis -p 6379:6379 redis:7-alpine
-
-docker run -d --name mongo -p 27017:27017 \
-  -e MONGO_INITDB_ROOT_USERNAME=admin \
-  -e MONGO_INITDB_ROOT_PASSWORD=admin123 \
-  mongo:7
-
-docker run -d --name nats -p 4222:4222 nats:2-alpine
+cd GoMahjong
+docker compose up -d
+docker compose ps   # 确认 etcd/Redis/MongoDB/NATS 均运行
 ```
 
-### 本地安装（Ubuntu 24.04 示例）
+| 服务 | 端口 | 用途 |
+|---|---|---|
+| etcd | 2379 | 服务注册与发现 |
+| Redis | 6379 | 缓存 / 会话 |
+| MongoDB | 27017 | 数据持久化 |
+| NATS | 4222 | 消息中间件 |
+
+### 2. 构建 Go 服务
 
 ```bash
-# etcd
-sudo apt install etcd-server etcd-client
-sudo systemctl start etcd
+cd GoMahjong
+go work sync
 
-# Redis
-sudo apt install redis-server
-sudo systemctl start redis-server
-
-# MongoDB
-sudo apt install mongodb-server mongosh
-sudo systemctl start mongodb
-
-# NATS（需手动下载）
-curl -L https://github.com/nats-io/nats-server/releases/download/v2.10.24/nats-server-v2.10.24-linux-amd64.tar.gz | tar xz
-sudo mv nats-server-v2.10.24-linux-amd64/nats-server /usr/local/bin/
-nats-server &
-
-# 验证
-etcdctl endpoint health
-redis-cli ping          # 应返回 PONG
-mongosh --eval "db.runCommand({ping:1})"
-```
-
-## Node.js（可选）
-
-`test/webtest` 的前端 UI 需要 Node.js 构建：
-
-- **Node.js**: 18+
-- **npm**: 9+
-
-```bash
-node --version   # 确认 >= 18
-cd test/webtest/webui && npm install && npm run build
-```
-
-## 构建项目
-
-### Go 服务
-
-```bash
-# 在项目根目录
-go work sync       # 同步工作区依赖
-
-# 构建单个服务
-go build -o bin/gate ./gate
-go build -o bin/connector ./connector
-go build -o bin/hall ./hall
-go build -o bin/march ./march
-go build -o bin/user ./user
-go build -o bin/game ./game
-
-# 或构建全部
-for svc in gate connector hall march user game; do
-  go build -o bin/$svc ./$svc
+# 构建全部
+for svc in auth connector gate march; do
+  go build -o $svc/bin/$svc ./$svc
 done
 ```
 
-### C++ 游戏服务器
+### 3. 构建 C++ 游戏服务器
 
 ```bash
-cd game-cpp
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
+cd GoMahjong/game-cpp
 
-# 产出可执行文件: gomahjong_server
+# Conan 拉取依赖（首次）
+conan install . --build=missing -s build_type=Release
+
+# CMake 配置 & 构建
+cmake --preset conan-release
+cmake --build build/Release -j$(nproc)
+
+# 产出: build/Release/gomahjong_server
 ```
 
-### 测试工具
+C++ 依赖通过 Conan 管理（`conanfile.txt`），主要包括：
+
+| 依赖 | 用途 |
+|---|---|
+| gRPC + protobuf | RPC 通信 |
+| Boost | Asio 网络 / 容器 |
+| spdlog | 日志 |
+| nlohmann_json | JSON 解析 |
+| mongocxx | MongoDB 驱动 |
+
+> 项目使用纯 gRPC 客户端直连 etcd v3 API（proto 定义见 `proto/etcd/`），无需 `etcd-cpp-apiv3`。
+
+### 4. 运行
 
 ```bash
-cd test/webtest
-go build -o bin/webtest .
-# 前端构建
-cd webui && npm install && npm run build
+# Go 服务（各服务需要 --configFile 指定配置）
+./auth/bin/auth --configFile auth/config/dev/auth.yml
+./connector/bin/connector --configFile connector/config/dev/connector.yml
+./march/bin/march --configFile march/config/dev/march.yml
+./gate/bin/gate --configFile gate/config/dev/gate.yml
+
+# C++ 游戏服务器
+cd game-cpp && ./build/Release/gomahjong_server
+```
+
+## 开发指南
+
+### Protobuf 代码生成
+
+项目包含 Go 和 C++ 共用的 proto 定义：
+
+```bash
+# Go 插件
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+# C++ 由 CMake 自动生成（见 CMakeLists.txt 中 etcd / game_service codegen）
+```
+
+### 国内网络加速
+
+```bash
+# Go 模块代理
+go env -w GOPROXY=https://goproxy.cn,direct
+
+# Git SSH 重定向（GitHub）
+git config --global url."git@github.com:".insteadOf "https://github.com/"
+```
+
+### 本地安装基础设施（Ubuntu 24.04）
+
+如果不使用 Docker，可本地安装：
+
+```bash
+# etcd
+sudo apt install etcd-server etcd-client && sudo systemctl start etcd
+
+# Redis
+sudo apt install redis-server && sudo systemctl start redis-server
+
+# MongoDB
+sudo apt install mongodb-server mongosh && sudo systemctl start mongodb
+
+# NATS
+curl -L https://github.com/nats-io/nats-server/releases/latest/download/nats-server-linux-amd64.tar.gz | tar xz
+sudo mv nats-server /usr/local/bin/ && nats-server &
+
+# 验证
+etcdctl endpoint health && redis-cli ping && mongosh --eval "db.runCommand({ping:1})"
+```
+
+### Node.js（可选）
+
+`test/webtest` 的前端 UI 需要 Node.js 18+：
+
+```bash
+cd GoMahjong/test/webtest/webui && npm install && npm run build
 ```
 
 ## 环境验证清单
 
-启动所有服务前，确认以下条件满足：
-
-- [ ] Go >= 1.24 已安装
-- [ ] CMake >= 3.20 + C++20 编译器已安装
+- [ ] Go ≥ 1.24 已安装
+- [ ] CMake ≥ 3.20 + C++20 编译器已安装
+- [ ] Conan 2.x 已安装
 - [ ] protoc 已安装且版本兼容
 - [ ] etcd 运行在 2379 端口
 - [ ] Redis 运行在 6379 端口
 - [ ] MongoDB 运行在 27017 端口
 - [ ] NATS 运行在 4222 端口
-- [ ] C++ 第三方依赖已安装（Boost、gRPC、etcd-cpp-api、mongocxx）
 - [ ] `game-cpp` 构建成功产出 `gomahjong_server`
 - [ ] Go 各服务构建成功
